@@ -1,5 +1,29 @@
+type ViteEnv = ImportMeta & {
+  env: {
+    VITE_API_URL?: string;
+    BASE_URL?: string;
+  };
+};
+
 export function apiBase(): string {
-  return (import.meta as ImportMeta & { env: { VITE_API_URL?: string } }).env.VITE_API_URL || '';
+  const env = (import.meta as ViteEnv).env;
+  const explicit = env.VITE_API_URL?.replace(/\/$/, '');
+  if (explicit) return explicit;
+  return '';
+}
+
+/** Các URL thử khi POST auth bị 404/405 (Vercel rút path hoặc proxy thiếu). */
+function authPostPaths(path: string): string[] | null {
+  if (path.includes('/auth/patient/login')) {
+    return ['/api/auth/patient/login', '/api/auth/login', '/auth/patient/login'];
+  }
+  if (path.includes('/auth/expert/login')) {
+    return ['/api/auth/expert/login', '/api/auth/login', '/auth/expert/login'];
+  }
+  if (path.includes('register')) {
+    return ['/api/auth/register', '/api/register'];
+  }
+  return null;
 }
 
 async function parseErrorResponse(res: Response, path: string) {
@@ -7,7 +31,7 @@ async function parseErrorResponse(res: Response, path: string) {
   if (res.status === 405) {
     throw new Error(
       err.error ||
-        'Máy chủ từ chối phương thức (405). Chạy `npm run dev:all` (API + Vite). Đăng ký cần POST /api/auth/register.',
+        'Máy chủ từ chối phương thức (405). Chạy `npm run dev:all` (API + Vite). Đăng nhập cần POST /api/auth/patient/login.',
     );
   }
   if (res.status === 404 && path.includes('register')) {
@@ -36,10 +60,7 @@ export async function apiFetch<T = unknown>(
   }
 
   const method = (init.method || 'GET').toUpperCase();
-  const pathsToTry =
-    method === 'POST' && path.includes('register')
-      ? ['/api/auth/register', '/api/register']
-      : [path];
+  const pathsToTry = method === 'POST' ? authPostPaths(path) ?? [path] : [path];
 
   let lastRes: Response | null = null;
 

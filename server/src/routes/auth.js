@@ -83,7 +83,11 @@ function loginHandler(requiredRole) {
   };
 }
 
+export const legacyLoginHandler = loginHandler();
+export const patientLoginHandler = loginHandler('user');
+export const expertLoginHandler = loginHandler('expert');
+
 authRouter.post('/register', registerLimiter, registerHandler);
-authRouter.post('/login', loginHandler());
-authRouter.post('/patient/login', loginHandler('user'));
-authRouter.post('/expert/login', loginHandler('expert'));
+authRouter.post('/login', legacyLoginHandler);
+authRouter.post('/patient/login', patientLoginHandler);
+authRouter.post('/expert/login', expertLoginHandler);

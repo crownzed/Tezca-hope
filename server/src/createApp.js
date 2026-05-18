@@ -10,7 +10,13 @@ loadEnv();
 assertProductionSecrets();
 
 import { publicApiRouter } from './routes/public.js';
-import { authRouter, registerHandler } from './routes/auth.js';
+import {
+  authRouter,
+  registerHandler,
+  patientLoginHandler,
+  expertLoginHandler,
+  legacyLoginHandler,
+} from './routes/auth.js';
 import { registerLimiter } from './rateLimit.js';
 import { userRouter } from './routes/user.js';
 import { expertRouter } from './routes/expert.js';
@@ -46,15 +52,26 @@ export function createApp() {
   const authOpt = (_req, res) => res.sendStatus(204);
   app.options('/api/auth/register', authOpt);
   app.options('/api/auth/patient/login', authOpt);
+  app.options('/api/auth/expert/login', authOpt);
   app.options('/api/auth/login', authOpt);
   app.options('/api/register', authOpt);
+  app.options(/^\/api\/auth\/.+/, authOpt);
+
+  /** POST trực tiếp — tránh 404/405 khi Vercel rút path về /api */
+  app.post('/api/auth/patient/login', patientLoginHandler);
+  app.post('/api/auth/expert/login', expertLoginHandler);
+  app.post('/api/auth/login', legacyLoginHandler);
+  app.post('/api/auth/register', registerLimiter, registerHandler);
 
   app.use('/api/auth', authRouter);
   app.use('/auth', authRouter);
 
-  /** Alias đăng ký — tránh 404/405 khi path bị rút hoặc client gọi /api/register */
+  /** Alias — path bị rút hoặc client gọi URL ngắn */
   app.post('/api/register', registerLimiter, registerHandler);
   app.post('/register', registerLimiter, registerHandler);
+  app.post('/auth/patient/login', patientLoginHandler);
+  app.post('/auth/expert/login', expertLoginHandler);
+  app.post('/auth/login', legacyLoginHandler);
 
   app.use('/api', publicApiRouter);
   app.use('/api', userRouter);
