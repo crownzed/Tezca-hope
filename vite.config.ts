@@ -36,9 +36,14 @@ const apiProxy = {
   },
 };
 
+const apiProxyPort = String(process.env.VITE_API_PROXY_PORT || process.env.PORT || 3001);
+
 export default defineConfig({
   /** Đặt VITE_BASE_PATH=/tezca/ khi phục vụ tại http://localhost/tezca/ (không dùng virtual host). */
   base: process.env.VITE_BASE_PATH || '/',
+  define: {
+    'import.meta.env.VITE_API_PROXY_PORT': JSON.stringify(apiProxyPort),
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,

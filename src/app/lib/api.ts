@@ -1,9 +1,13 @@
 type ViteEnv = ImportMeta & {
   env: {
     VITE_API_URL?: string;
+    VITE_API_PROXY_PORT?: string;
+    DEV: boolean;
     BASE_URL?: string;
   };
 };
+
+export type AuthGatewayOp = 'patient-login' | 'expert-login' | 'register' | 'login';
 
 export function apiBase(): string {
   const env = (import.meta as ViteEnv).env;
@@ -12,18 +16,40 @@ export function apiBase(): string {
   return '';
 }
 
-/** Các URL thử khi POST auth bị 404/405 (Vercel rút path hoặc proxy thiếu). */
-function authPostPaths(path: string): string[] | null {
-  if (path.includes('/auth/patient/login')) {
-    return ['/api/auth/patient/login', '/api/auth/login', '/auth/patient/login'];
-  }
-  if (path.includes('/auth/expert/login')) {
-    return ['/api/auth/expert/login', '/api/auth/login', '/auth/expert/login'];
-  }
-  if (path.includes('register')) {
-    return ['/api/auth/register', '/api/register'];
-  }
+function authOpForPath(path: string): AuthGatewayOp | null {
+  if (path.includes('patient/login')) return 'patient-login';
+  if (path.includes('expert/login')) return 'expert-login';
+  if (path.includes('register')) return 'register';
+  if (path.includes('/auth/login')) return 'login';
   return null;
+}
+
+/** Thứ tự thử: REST đầy đủ → gateway (path bị rút) */
+function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
+  const op = authOpForPath(path);
+  if (!op) return [{ url: path }];
+
+  const targets: { url: string; gateway?: boolean }[] = [];
+
+  if (op === 'patient-login') {
+    targets.push({ url: '/api/auth/patient/login' }, { url: '/api/auth/login' });
+  } else if (op === 'expert-login') {
+    targets.push({ url: '/api/auth/expert/login' }, { url: '/api/auth/login' });
+  } else if (op === 'register') {
+    targets.push({ url: '/api/auth/register' }, { url: '/api/register' });
+  } else if (op === 'login') {
+    targets.push({ url: '/api/auth/login' });
+  }
+
+  targets.push({ url: '/api/auth/gateway', gateway: true });
+  return targets;
+}
+
+function devDirectApiBases(): string[] {
+  const env = (import.meta as ViteEnv).env;
+  if (!env.DEV || apiBase()) return [];
+  const port = env.VITE_API_PROXY_PORT || '3001';
+  return [`http://127.0.0.1:${port}`];
 }
 
 async function parseErrorResponse(res: Response, path: string) {
@@ -31,17 +57,34 @@ async function parseErrorResponse(res: Response, path: string) {
   if (res.status === 405) {
     throw new Error(
       err.error ||
-        'Máy chủ từ chối phương thức (405). Chạy `npm run dev:all` (API + Vite). Đăng nhập cần POST /api/auth/patient/login.',
+        'Máy chủ từ chối POST (405). Chạy `npm run dev:all` để bật API, hoặc kiểm tra proxy /api trên hosting.',
     );
   }
-  if (res.status === 404 && path.includes('register')) {
+  if (res.status === 404 && (path.includes('register') || path.includes('auth'))) {
     throw new Error(
-      err.error ||
-        err.hint ||
-        'Không tìm thấy API đăng ký. Chạy `npm run dev:all` và thử lại.',
+      err.error || err.hint || 'Không tìm thấy API. Chạy `npm run dev:all` và thử lại.',
     );
   }
   throw new Error(err.error || `${res.status} ${res.statusText}`);
+}
+
+async function doFetch(
+  base: string,
+  target: { url: string; gateway?: boolean },
+  init: RequestInit,
+  headers: Headers,
+  op: AuthGatewayOp | null,
+): Promise<Response> {
+  let body = init.body;
+  if (target.gateway && op && typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      body = JSON.stringify({ op, ...parsed });
+    } catch {
+      body = JSON.stringify({ op });
+    }
+  }
+  return fetch(`${base}${target.url}`, { ...init, headers, body });
 }
 
 export async function apiFetch<T = unknown>(
@@ -60,35 +103,45 @@ export async function apiFetch<T = unknown>(
   }
 
   const method = (init.method || 'GET').toUpperCase();
-  const pathsToTry = method === 'POST' ? authPostPaths(path) ?? [path] : [path];
+  const isAuthPost = method === 'POST' && Boolean(authOpForPath(path));
+  const targets = isAuthPost ? authPostTargets(path) : [{ url: path }];
+  const op = authOpForPath(path);
+
+  const bases = [apiBase(), ...devDirectApiBases()].filter(
+    (b, i, arr) => b !== undefined && arr.indexOf(b) === i,
+  );
+  if (bases.length === 0) bases.push('');
 
   let lastRes: Response | null = null;
 
-  for (let i = 0; i < pathsToTry.length; i++) {
-    const p = pathsToTry[i];
-    let res: Response;
-    try {
-      res = await fetch(`${apiBase()}${p}`, { ...init, headers });
-    } catch (e) {
-      const base = apiBase();
-      const hint = base
-        ? ` Không mở được ${base} (kiểm tra API đã chạy và CORS).`
-        : ' Hãy chạy `npm run dev:all` (API cổng 3001 + Vite 5173), rồi tải lại trang.';
-      if (e instanceof TypeError) {
-        throw new Error(`Không kết nối được tới máy chủ.${hint}`);
+  for (const base of bases) {
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i]!;
+      let res: Response;
+      try {
+        res = await doFetch(base, target, init, headers, op);
+      } catch (e) {
+        const hint = apiBase()
+          ? ` Không mở được ${apiBase()} (kiểm tra API đã chạy và CORS).`
+          : ' Hãy chạy `npm run dev:all` (API + Vite), rồi tải lại trang.';
+        if (e instanceof TypeError) {
+          throw new Error(`Không kết nối được tới máy chủ.${hint}`);
+        }
+        throw e;
       }
-      throw e;
-    }
 
-    if (res.ok) {
-      return res.json() as Promise<T>;
-    }
+      if (res.ok) {
+        return res.json() as Promise<T>;
+      }
 
-    lastRes = res;
-    const retry =
-      i < pathsToTry.length - 1 && (res.status === 404 || res.status === 405);
-    if (!retry) {
-      await parseErrorResponse(res, p);
+      lastRes = res;
+      const hasMoreTargets = i < targets.length - 1;
+      const hasMoreBases = base !== bases[bases.length - 1];
+      const retry =
+        (hasMoreTargets || hasMoreBases) && (res.status === 404 || res.status === 405);
+      if (!retry) {
+        await parseErrorResponse(res, target.url);
+      }
     }
   }
 

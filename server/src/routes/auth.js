@@ -87,6 +87,34 @@ export const legacyLoginHandler = loginHandler();
 export const patientLoginHandler = loginHandler('user');
 export const expertLoginHandler = loginHandler('expert');
 
+/** POST /api/auth/gateway — một endpoint khi path REST bị rút (Vercel/static). Body: { op, email, password, name? } */
+export function authGatewayHandler(req, res, next) {
+  const op = String(req.body?.op || '').trim();
+  switch (op) {
+    case 'patient-login':
+      return patientLoginHandler(req, res);
+    case 'expert-login':
+      return expertLoginHandler(req, res);
+    case 'register':
+      return registerHandler(req, res, next);
+    case 'login':
+      return legacyLoginHandler(req, res);
+    default:
+      res.status(400).json({
+        error: 'Thiếu hoặc sai op',
+        hint: 'op: patient-login | expert-login | register | login',
+      });
+  }
+}
+
+export function authGatewayWithLimits(req, res, next) {
+  if (req.body?.op === 'register') {
+    return registerLimiter(req, res, () => authGatewayHandler(req, res, next));
+  }
+  return authGatewayHandler(req, res, next);
+}
+
+authRouter.post('/gateway', authGatewayWithLimits);
 authRouter.post('/register', registerLimiter, registerHandler);
 authRouter.post('/login', legacyLoginHandler);
 authRouter.post('/patient/login', patientLoginHandler);

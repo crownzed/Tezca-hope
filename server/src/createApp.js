@@ -16,6 +16,7 @@ import {
   patientLoginHandler,
   expertLoginHandler,
   legacyLoginHandler,
+  authGatewayWithLimits,
 } from './routes/auth.js';
 import { registerLimiter } from './rateLimit.js';
 import { userRouter } from './routes/user.js';
@@ -55,9 +56,11 @@ export function createApp() {
   app.options('/api/auth/expert/login', authOpt);
   app.options('/api/auth/login', authOpt);
   app.options('/api/register', authOpt);
+  app.options('/api/auth/gateway', authOpt);
   app.options(/^\/api\/auth\/.+/, authOpt);
 
   /** POST trực tiếp — tránh 404/405 khi Vercel rút path về /api */
+  app.post('/api/auth/gateway', authGatewayWithLimits);
   app.post('/api/auth/patient/login', patientLoginHandler);
   app.post('/api/auth/expert/login', expertLoginHandler);
   app.post('/api/auth/login', legacyLoginHandler);
@@ -76,6 +79,9 @@ export function createApp() {
   app.use('/api', publicApiRouter);
   app.use('/api', userRouter);
   app.use('/api/expert', expertRouter);
+
+  /** POST /api + body.op — khi rewrite chỉ còn /api (không còn segment) */
+  app.post('/api', authGatewayWithLimits);
 
   app.use('/api', (req, res) => {
     res.status(404).json({
