@@ -4,7 +4,6 @@ import { ROUTES } from '../../routes';
 import {
   loadBmiEntries,
   loadMoodEntries,
-  loadAiChat,
   bmiCategory,
 } from '../../lib/healthStorage';
 import { deriveGamificationState } from '../../lib/gamification';
@@ -17,20 +16,24 @@ type CareExpert = { id: string; name: string; email: string };
 export function AppHome() {
   const { token } = usePatientAuth();
   const [careExperts, setCareExperts] = useState<CareExpert[]>([]);
+  const [chatCount, setChatCount] = useState(0);
 
   useEffect(() => {
     if (!token) {
       setCareExperts([]);
+      setChatCount(0);
       return;
     }
     apiFetch<{ experts: CareExpert[] }>('/api/me/care-team', { token })
       .then((r) => setCareExperts(r.experts || []))
       .catch(() => setCareExperts([]));
+    apiFetch<{ messages: { id: string }[] }>('/api/me/bot-messages', { token })
+      .then((r) => setChatCount(Array.isArray(r.messages) ? r.messages.length : 0))
+      .catch(() => setChatCount(0));
   }, [token]);
 
   const bmiList = loadBmiEntries().sort((a, b) => b.date.localeCompare(a.date));
   const moodList = loadMoodEntries().sort((a, b) => b.date.localeCompare(a.date));
-  const chat = loadAiChat();
   const latestBmi = bmiList[0];
   const latestMood = moodList[0];
   const gam = deriveGamificationState();
@@ -59,10 +62,11 @@ export function AppHome() {
     {
       to: ROUTES.app.chat,
       title: 'Tezca AI',
-      desc:
-        chat.length > 0
-          ? `${chat.length} tin nhắn đã lưu trên máy. Đăng nhập để dùng ChatGPT khi server bật.`
-          : 'Gợi ý sức khỏe: demo cục bộ khi chưa đăng nhập; ChatGPT khi đã đăng nhập + API.',
+      desc: token
+        ? chatCount > 0
+          ? `${chatCount} tin trong lịch sử Tezca AI (đồng bộ tài khoản).`
+          : 'Hỏi Tezca AI — hội thoại được lưu trên tài khoản của bạn.'
+        : 'Hỏi thử không cần đăng nhập (không lưu lịch sử). Đăng nhập để Gemini + lưu chat.',
       icon: MessageCircle,
     },
     {

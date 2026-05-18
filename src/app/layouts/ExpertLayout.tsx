@@ -9,18 +9,18 @@ export function ExpertLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const loginTarget = { pathname: ROUTES.auth.hub, hash: '#chuyen-gia' } as const;
+  const loginTarget = ROUTES.expert.login;
 
   useEffect(() => {
     if (sessionReady && token && !user) logout();
   }, [sessionReady, token, user, logout]);
 
   if (!token) {
-    return <Navigate to={loginTarget} replace />;
+    return <Navigate to={loginTarget} replace state={{ from: pathname }} />;
   }
 
   if (sessionReady && !user) {
-    return <Navigate to={loginTarget} replace />;
+    return <Navigate to={loginTarget} replace state={{ from: pathname }} />;
   }
 
   if (!sessionReady || !user) {

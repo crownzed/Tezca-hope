@@ -82,7 +82,7 @@ export function FloatingChatBubble() {
             <div className="text-sm" style={{ color: '#1A202C' }}>
               <p className="mb-2 font-medium m-0">Xin chào!</p>
               <p className="opacity-70 m-0 leading-relaxed">
-                Tezca AI hỗ trợ gợi ý sức khỏe chung (không phải tư vấn y khoa). Chọn chủ đề hoặc mở chat đầy đủ.
+                Tezca AI hỗ trợ gợi ý sức khỏe chung (không phải tư vấn y khoa). Chưa đăng nhập: hỏi được nhưng không lưu lịch sử.
               </p>
             </div>
 

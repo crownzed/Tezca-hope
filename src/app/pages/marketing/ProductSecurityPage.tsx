@@ -12,7 +12,7 @@ export function ProductSecurityPage() {
       <h2>Lưu trữ</h2>
       <p>
         Dữ liệu vận hành được lưu trong cơ sở dữ liệu do máy chủ quản lý (SQLite trong môi trường triển khai mặc định).
-        Không đặt khóa OpenAI hay bí mật JWT trên trình duyệt người dùng.
+        Không đặt khóa Gemini hay bí mật JWT trên trình duyệt người dùng.
       </p>
       <h2>Gợi ý triển khai production</h2>
       <ul>

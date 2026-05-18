@@ -10,29 +10,31 @@ import {
   getExpertsForPatient,
 } from '../db.js';
 import { authMiddleware } from '../auth.js';
-import { openaiChat, isOpenAiConfigured } from '../openai.js';
+import { aiChat, isAiConfigured } from '../ai.js';
+import { aiChatLimiter, aiPlanLimiter } from '../rateLimit.js';
+import { sanitizeClientError } from '../secrets.js';
 
 export const userRouter = Router();
-userRouter.use(authMiddleware('user'));
+const requireUser = authMiddleware('user');
 
-userRouter.get('/me', (req, res) => {
+userRouter.get('/me', requireUser, (req, res) => {
   res.json({
     user: { id: req.user.sub, email: req.user.email, name: req.user.name, role: req.user.role },
   });
 });
 
 /** Chuyên gia được gán (để BN biết ai đồng hành + bật chat) */
-userRouter.get('/me/care-team', (req, res) => {
+userRouter.get('/me/care-team', requireUser, (req, res) => {
   const experts = getExpertsForPatient(req.user.sub);
   res.json({ experts, primary: experts[0] || null });
 });
 
-userRouter.get('/me/bmi', (req, res) => {
+userRouter.get('/me/bmi', requireUser, (req, res) => {
   const list = listBmiForUser(req.user.sub);
   res.json({ entries: list });
 });
 
-userRouter.post('/me/bmi', (req, res) => {
+userRouter.post('/me/bmi', requireUser, (req, res) => {
   const { date, heightCm, weightKg, bmi } = req.body || {};
   if (!date || heightCm == null || weightKg == null || bmi == null) {
     res.status(400).json({ error: 'Thiếu trường bắt buộc' });
@@ -50,12 +52,12 @@ userRouter.post('/me/bmi', (req, res) => {
   res.status(201).json({ entry: row });
 });
 
-userRouter.get('/me/moods', (req, res) => {
+userRouter.get('/me/moods', requireUser, (req, res) => {
   const list = listMoodsForUser(req.user.sub);
   res.json({ entries: list });
 });
 
-userRouter.post('/me/moods', (req, res) => {
+userRouter.post('/me/moods', requireUser, (req, res) => {
   const { date, moodLabel, moodScore, note } = req.body || {};
   if (!date || moodLabel == null || moodScore == null) {
     res.status(400).json({ error: 'Thiếu trường bắt buộc' });
@@ -73,12 +75,12 @@ userRouter.post('/me/moods', (req, res) => {
   res.status(201).json({ entry: row });
 });
 
-userRouter.get('/me/bot-messages', (req, res) => {
+userRouter.get('/me/bot-messages', requireUser, (req, res) => {
   const list = listBotMessagesForUser(req.user.sub);
   res.json({ messages: list });
 });
 
-userRouter.put('/me/bot-messages', (req, res) => {
+userRouter.put('/me/bot-messages', requireUser, (req, res) => {
   const { messages } = req.body || {};
   if (!Array.isArray(messages)) {
     res.status(400).json({ error: 'messages phải là mảng' });
@@ -88,7 +90,7 @@ userRouter.put('/me/bot-messages', (req, res) => {
   res.json({ ok: true });
 });
 
-userRouter.get('/me/live-messages', (req, res) => {
+userRouter.get('/me/live-messages', requireUser, (req, res) => {
   const list = listLiveMessagesForPatient(req.user.sub);
   res.json({ messages: list });
 });
@@ -100,9 +102,11 @@ Không đưa ra kết luận y khoa, bệnh danh hay kê đơn; không thay đ�
 Khẩn cấp / ý định tự hại / đau ngực khó thở / co giật / yếu nửa người đột ngột → yêu cầu gọi 115 hoặc đến cấp cứu ngay.
 Luôn nhắc thông tin chỉ mang tính tham khảo khi đưa gợi ý cụ thể.`;
 
-userRouter.post('/me/ai-chat', async (req, res) => {
-  if (!isOpenAiConfigured()) {
-    res.status(503).json({ error: 'AI chưa được cấu hình (OPENAI_API_KEY).' });
+userRouter.post('/me/ai-chat', requireUser, aiChatLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
     return;
   }
   const { messages } = req.body || {};
@@ -115,7 +119,7 @@ userRouter.post('/me/ai-chat', async (req, res) => {
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map((m) => ({
       role: m.role,
-      content: String(m.content).slice(0, 8000),
+      content: String(m.content).slice(0, 4000),
     }));
   if (trimmed.length === 0) {
     res.status(400).json({ error: 'Không có tin nhắn hợp lệ' });
@@ -123,17 +127,19 @@ userRouter.post('/me/ai-chat', async (req, res) => {
   }
   try {
     const payload = [{ role: 'system', content: CHAT_SYSTEM }, ...trimmed];
-    const reply = await openaiChat(payload, { max_tokens: 900, temperature: 0.55 });
+    const reply = await aiChat(payload, { max_tokens: 900, temperature: 0.55 });
     res.json({ content: reply });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Lỗi AI';
-    res.status(502).json({ error: msg });
+    const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
+    res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
   }
 });
 
-userRouter.post('/me/plan-ai', async (req, res) => {
-  if (!isOpenAiConfigured()) {
-    res.status(503).json({ error: 'AI chưa được cấu hình (OPENAI_API_KEY).' });
+userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
     return;
   }
   const { age, goal, activity, dietNote } = req.body || {};
@@ -178,7 +184,7 @@ Phân biệt người trưởng thành khỏe mạnh vs người có ràng buộ
 Viết Markdown rõ ràng; không lặp ý; không chèn disclaimer sau mỗi câu — một khối cuối hoặc xen nhẹ hợp lý.`;
 
   try {
-    const plan = await openaiChat(
+    const plan = await aiChat(
       [
         { role: 'system', content: PLAN_SYSTEM },
         { role: 'user', content: userPrompt },
@@ -187,7 +193,7 @@ Viết Markdown rõ ràng; không lặp ý; không chèn disclaimer sau mỗi c�
     );
     res.json({ plan });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Lỗi AI';
-    res.status(502).json({ error: msg });
+    const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
+    res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
   }
 });

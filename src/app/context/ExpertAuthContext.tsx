@@ -69,7 +69,8 @@ export function ExpertAuthProvider({ children }: { children: React.ReactNode }) 
           msg.includes('Token') ||
           msg.includes('quyền') ||
           msg.includes('Unauthorized') ||
-          msg.includes('Forbidden')
+          msg.includes('Forbidden') ||
+          msg.includes('Sai email')
         ) {
           persist(null, null);
         }
@@ -80,13 +81,14 @@ export function ExpertAuthProvider({ children }: { children: React.ReactNode }) 
   }, [token, persist]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const r = await apiFetch<{ token: string; user: ExpertUser }>('/api/auth/login', {
+    const r = await apiFetch<{ token: string; user: ExpertUser }>('/api/auth/expert/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: email.trim(), password }),
     });
     if (r.user.role !== 'expert') throw new Error('Tài khoản không phải chuyên gia');
-    setSessionReady(true);
+    tokenRef.current = r.token;
     persist(r.token, r.user);
+    setSessionReady(true);
   }, [persist]);
 
   const logout = useCallback(() => {

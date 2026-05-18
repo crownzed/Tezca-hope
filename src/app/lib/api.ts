@@ -30,7 +30,20 @@ export async function apiFetch<T = unknown>(
     throw e;
   }
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    const err = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
+    if (res.status === 405) {
+      throw new Error(
+        err.error ||
+          'Máy chủ từ chối phương thức (405). Chạy API: npm run dev:all — đăng ký qua POST /api/auth/register.',
+      );
+    }
+    if (res.status === 404 && path.includes('register')) {
+      throw new Error(
+        err.error ||
+          err.hint ||
+          'Không tìm thấy API đăng ký. Kiểm tra API đã chạy và URL /api/auth/register.',
+      );
+    }
     throw new Error(err.error || `${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;

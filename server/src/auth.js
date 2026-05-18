@@ -1,18 +1,17 @@
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'tezca-dev-secret-change-in-production';
+import { getJwtSecret } from './secrets.js';
 
 export function signToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, email: user.email, name: user.name },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '7d' },
   );
 }
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getJwtSecret());
   } catch {
     return null;
   }

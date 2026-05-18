@@ -75,7 +75,7 @@ export function PlansPage() {
         </h1>
         <p className="mt-2 opacity-70" style={{ color: '#1A202C' }}>
           {token ? (
-            'Đã đăng nhập: kế hoạch do ChatGPT (OpenAI) soạn qua server Tezca. Nếu API lỗi hoặc chưa cấu hình key, hệ thống dùng bản gợi ý cố định.'
+            'Đã đăng nhập: kế hoạch do Gemini soạn qua server Tezca. Nếu API lỗi hoặc chưa cấu hình key, hệ thống dùng bản gợi ý cố định.'
           ) : (
             <>
               Chưa đăng nhập: chỉ có bản gợi ý cố định trên máy.{' '}
@@ -181,7 +181,7 @@ export function PlansPage() {
         >
           {planSource && (
             <p className="text-xs opacity-60 mb-4 m-0">
-              Nguồn: {planSource === 'ai' ? 'OpenAI (ChatGPT) qua API' : 'Gợi ý cố định trên máy'}
+              Nguồn: {planSource === 'ai' ? 'Gemini qua API' : 'Gợi ý cố định trên máy'}
             </p>
           )}
           <pre className="whitespace-pre-wrap font-sans m-0">{plan}</pre>

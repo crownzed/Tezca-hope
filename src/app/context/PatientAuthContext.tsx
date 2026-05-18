@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '../lib/api';
 
 const STORAGE = 'tezca_patient_token';
@@ -9,7 +9,8 @@ export type PatientUser = { id: string; email: string; name: string; role: strin
 type Ctx = {
   token: string | null;
   user: PatientUser | null;
-  loading: boolean;
+  /** true sau khi không có token, hoặc đã xong GET /api/me (thành công / lỗi mạng). */
+  sessionReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => void;
@@ -28,11 +29,14 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       return null;
     }
   });
-  const [loading, setLoading] = useState(false);
+  const [sessionReady, setSessionReady] = useState(() => !localStorage.getItem(STORAGE));
+  const tokenRef = useRef<string | null>(token);
+  tokenRef.current = token;
 
   const persist = useCallback((t: string | null, u: PatientUser | null) => {
     setToken(t);
     setUser(u);
+    tokenRef.current = t;
     if (t) localStorage.setItem(STORAGE, t);
     else localStorage.removeItem(STORAGE);
     if (u) localStorage.setItem(USER_STORAGE, JSON.stringify(u));
@@ -40,24 +44,49 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (!token) return;
-    setLoading(true);
+    if (!token) {
+      setSessionReady(true);
+      return;
+    }
+    setSessionReady(false);
+    const requestedToken = token;
     apiFetch<{ user: PatientUser }>('/api/me', { token })
-      .then((r) => persist(token, r.user))
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : '';
-        if (msg.includes('401') || msg.includes('Token') || msg.includes('quyền')) persist(null, null);
+      .then((r) => {
+        if (tokenRef.current !== requestedToken) return;
+        if (!r.user || r.user.role !== 'user') {
+          persist(null, null);
+          return;
+        }
+        persist(requestedToken, r.user);
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (tokenRef.current !== requestedToken) return;
+        const msg = err instanceof Error ? err.message : '';
+        if (
+          msg.includes('401') ||
+          msg.includes('403') ||
+          msg.includes('Token') ||
+          msg.includes('quyền') ||
+          msg.includes('Unauthorized') ||
+          msg.includes('Forbidden')
+        ) {
+          persist(null, null);
+        }
+      })
+      .finally(() => {
+        if (tokenRef.current === requestedToken) setSessionReady(true);
+      });
   }, [token, persist]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const r = await apiFetch<{ token: string; user: PatientUser }>('/api/auth/login', {
+    const r = await apiFetch<{ token: string; user: PatientUser }>('/api/auth/patient/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: email.trim(), password }),
     });
     if (r.user.role !== 'user') throw new Error('Tài khoản không phải bệnh nhân');
+    tokenRef.current = r.token;
     persist(r.token, r.user);
+    setSessionReady(true);
   }, [persist]);
 
   const register = useCallback(async (email: string, password: string, name?: string) => {
@@ -65,14 +94,19 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     });
+    tokenRef.current = r.token;
     persist(r.token, r.user);
+    setSessionReady(true);
   }, [persist]);
 
-  const logout = useCallback(() => persist(null, null), [persist]);
+  const logout = useCallback(() => {
+    setSessionReady(true);
+    persist(null, null);
+  }, [persist]);
 
   const value = useMemo(
-    () => ({ token, user, loading, login, register, logout }),
-    [token, user, loading, login, register, logout],
+    () => ({ token, user, sessionReady, login, register, logout }),
+    [token, user, sessionReady, login, register, logout],
   );
 
   return <PatientAuthContext.Provider value={value}>{children}</PatientAuthContext.Provider>;

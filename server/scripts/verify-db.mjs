@@ -52,6 +52,7 @@ try {
     'bot_messages',
     'live_messages',
     'mood_entries',
+    'schema_migrations',
     'users',
   ];
   const missing = expected.filter((t) => !tables.includes(t));

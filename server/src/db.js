@@ -3,9 +3,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
+import { normalizeEmail } from './validate.js';
+import { DbError, mapSqliteError } from './dbErrors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const dataDir =
+  process.env.DATA_DIR ||
+  (process.env.VERCEL ? '/tmp/tezca-data' : path.join(__dirname, '..', 'data'));
 export const DB_FILE = path.join(dataDir, 'tezca.sqlite');
 
 /** @type {Database.Database | null} */
@@ -16,7 +20,9 @@ export function getDb() {
   fs.mkdirSync(dataDir, { recursive: true });
   dbInstance = new Database(DB_FILE);
   dbInstance.pragma('journal_mode = WAL');
-  migrate(dbInstance);
+  dbInstance.pragma('foreign_keys = ON');
+  dbInstance.pragma('busy_timeout = 5000');
+  runMigrations(dbInstance);
   const { c } = dbInstance.prepare('SELECT COUNT(*) AS c FROM users').get();
   if (c === 0) seedDatabase(dbInstance);
   return dbInstance;
@@ -27,14 +33,65 @@ export function initDb() {
   getDb();
 }
 
-function migrate(db) {
+function tableHasColumn(db, table, column) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  return cols.some((c) => c.name === column);
+}
+
+function runMigrations(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at INTEGER NOT NULL
+    );
+  `);
+
+  const applied = new Set(
+    db.prepare('SELECT version FROM schema_migrations').all().map((r) => r.version),
+  );
+
+  const migrations = [
+    {
+      version: 1,
+      name: 'initial_schema',
+      up() {
+        migrateV1Schema(db);
+      },
+    },
+    {
+      version: 2,
+      name: 'users_created_at',
+      up() {
+        if (!tableHasColumn(db, 'users', 'created_at')) {
+          db.exec(`ALTER TABLE users ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0`);
+          db.prepare(`UPDATE users SET created_at = ? WHERE created_at = 0`).run(Date.now());
+        }
+      },
+    },
+  ];
+
+  for (const m of migrations) {
+    if (applied.has(m.version)) continue;
+    const tx = db.transaction(() => {
+      m.up();
+      db.prepare(
+        `INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
+      ).run(m.version, m.name, Date.now());
+    });
+    tx();
+  }
+}
+
+function migrateV1Schema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('user', 'expert')),
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS assignments (
@@ -100,7 +157,40 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_mood_user ON mood_entries(user_id);
     CREATE INDEX IF NOT EXISTS idx_bot_user ON bot_messages(user_id);
     CREATE INDEX IF NOT EXISTS idx_live_patient ON live_messages(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
   `);
+}
+
+/** Thông tin DB cho /api/health/db và debug */
+export function getDatabaseInfo() {
+  const db = getDb();
+  const tables = db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+    )
+    .all()
+    .map((r) => r.name);
+
+  const rowCounts = {};
+  for (const name of tables) {
+    rowCounts[name] = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get().c;
+  }
+
+  const migrations = db
+    .prepare(`SELECT version, name, applied_at AS appliedAt FROM schema_migrations ORDER BY version`)
+    .all();
+
+  return {
+    file: DB_FILE,
+    exists: fs.existsSync(DB_FILE),
+    sizeBytes: fs.existsSync(DB_FILE) ? fs.statSync(DB_FILE).size : 0,
+    journalMode: db.pragma('journal_mode', { simple: true }),
+    foreignKeysOn: db.pragma('foreign_keys', { simple: true }) === 1,
+    tables,
+    rowCounts,
+    migrations,
+  };
 }
 
 function seedDatabase(db) {
@@ -109,8 +199,9 @@ function seedDatabase(db) {
   const patientId = crypto.randomUUID();
   const today = new Date().toISOString().slice(0, 10);
 
+  const now = Date.now();
   const insUser = db.prepare(
-    `INSERT INTO users (id, email, password_hash, role, name) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, email, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
   );
   const insAssign = db.prepare(`INSERT INTO assignments (expert_id, patient_id) VALUES (?, ?)`);
   const insBmi = db.prepare(
@@ -124,8 +215,8 @@ function seedDatabase(db) {
   );
 
   const tx = db.transaction(() => {
-    insUser.run(expertId, 'expert@tezca.vn', hash, 'expert', 'BS. Minh Anh');
-    insUser.run(patientId, 'patient@tezca.vn', hash, 'user', 'Nguyễn Minh Khang');
+    insUser.run(expertId, 'expert@tezca.vn', hash, 'expert', 'BS. Minh Anh', now);
+    insUser.run(patientId, 'patient@tezca.vn', hash, 'user', 'Nguyễn Minh Khang', now);
     insAssign.run(expertId, patientId);
 
     const bmis = [
@@ -170,11 +261,14 @@ function round1(n) {
 }
 
 export function findUserByEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
   const row = getDb()
     .prepare(
-      `SELECT id, email, password_hash AS passwordHash, role, name FROM users WHERE email = ? COLLATE NOCASE`,
+      `SELECT id, email, password_hash AS passwordHash, role, name, created_at AS createdAt
+       FROM users WHERE email = ? COLLATE NOCASE`,
     )
-    .get(String(email).trim());
+    .get(normalized);
   return row || null;
 }
 
@@ -186,9 +280,18 @@ export function findUserById(id) {
 }
 
 export function insertUser(user) {
-  getDb()
-    .prepare(`INSERT INTO users (id, email, password_hash, role, name) VALUES (?, ?, ?, ?, ?)`)
-    .run(user.id, user.email, user.passwordHash, user.role, user.name);
+  const email = normalizeEmail(user.email);
+  if (!email) throw new DbError('INVALID_EMAIL', 'Email không hợp lệ', 400);
+  const now = Date.now();
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO users (id, email, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(user.id, email, user.passwordHash, user.role, user.name, user.createdAt ?? now);
+  } catch (err) {
+    throw mapSqliteError(err);
+  }
 }
 
 export function canExpertAccessPatient(expertId, patientId) {

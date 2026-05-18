@@ -20,7 +20,7 @@ import { PlansPage } from './pages/app/PlansPage';
 import { RewardsPage } from './pages/app/RewardsPage';
 import { PatientExpertChatPage } from './pages/app/PatientExpertChatPage';
 import { ExpertLayout } from './layouts/ExpertLayout';
-import { DualLoginPage } from './pages/DualLoginPage';
+import { LoginHubPage, PatientLoginPage, ExpertLoginPage } from './pages/DualLoginPage';
 import { ExpertPatientListPage } from './pages/expert/ExpertPatientListPage';
 import { ExpertPatientWorkspacePage } from './pages/expert/ExpertPatientWorkspacePage';
 import { DoctorDashboardPage } from './pages/expert/DoctorDashboardPage';
@@ -52,7 +52,9 @@ export default function App() {
           <Route path="/phap-ly/cookie" element={<CookiePolicyPage />} />
           <Route path="/phap-ly/gdpr" element={<GdprNoticePage />} />
         </Route>
-        <Route path={ROUTES.auth.hub} element={<DualLoginPage />} />
+        <Route path={ROUTES.auth.hub} element={<LoginHubPage />} />
+        <Route path={ROUTES.auth.patientLogin} element={<PatientLoginPage />} />
+        <Route path={ROUTES.auth.expertLogin} element={<ExpertLoginPage />} />
         <Route path="/login" element={<Navigate to={ROUTES.auth.hub} replace />} />
         <Route path="/app/login" element={<Navigate to={ROUTES.app.login} replace />} />
         <Route path="/expert/login" element={<Navigate to={ROUTES.expert.login} replace />} />

@@ -15,9 +15,9 @@ import {
 import { authMiddleware } from '../auth.js';
 
 export const expertRouter = Router();
-expertRouter.use(authMiddleware('expert'));
+const requireExpert = authMiddleware('expert');
 
-expertRouter.get('/me', (req, res) => {
+expertRouter.get('/me', requireExpert, (req, res) => {
   res.json({
     user: {
       id: req.user.sub,
@@ -28,7 +28,7 @@ expertRouter.get('/me', (req, res) => {
   });
 });
 
-expertRouter.get('/patients', (req, res) => {
+expertRouter.get('/patients', requireExpert, (req, res) => {
   const expertId = req.user.sub;
   const patientIds = getPatientIdsForExpert(expertId);
   const list = patientIds.map((pid) => {
@@ -48,7 +48,7 @@ expertRouter.get('/patients', (req, res) => {
 });
 
 /** Đặt TRƯỚC GET /patients/:patientId để không khớp nhầm patientId = "assign" */
-expertRouter.post('/patients/assign', (req, res) => {
+expertRouter.post('/patients/assign', requireExpert, (req, res) => {
   const expertId = req.user.sub;
   const email = String((req.body || {}).email || '').trim();
   if (!email) {
@@ -69,7 +69,7 @@ expertRouter.post('/patients/assign', (req, res) => {
   res.status(201).json({ patient: { id: u.id, email: u.email, name: u.name } });
 });
 
-expertRouter.delete('/patients/:patientId/assignment', (req, res) => {
+expertRouter.delete('/patients/:patientId/assignment', requireExpert, (req, res) => {
   const expertId = req.user.sub;
   const { patientId } = req.params;
   if (!canExpertAccessPatient(expertId, patientId)) {
@@ -81,7 +81,7 @@ expertRouter.delete('/patients/:patientId/assignment', (req, res) => {
   res.json({ ok: true });
 });
 
-expertRouter.get('/patients/:patientId', (req, res) => {
+expertRouter.get('/patients/:patientId', requireExpert, (req, res) => {
   const expertId = req.user.sub;
   const { patientId } = req.params;
   if (!canExpertAccessPatient(expertId, patientId)) {
