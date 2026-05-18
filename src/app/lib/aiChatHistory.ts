@@ -1,9 +1,23 @@
 import type { ChatMessage } from './healthStorage';
 
+export type ChatTurn = {
+  /** id tin user mở đầu đoạn (hoặc tin assistant nếu mồ côi) */
+  id: string;
+  user: ChatMessage;
+  replies: ChatMessage[];
+  ts: number;
+};
+
 export type ChatDayGroup = {
   dateKey: string;
   label: string;
   messages: ChatMessage[];
+};
+
+export type ChatDayTurnGroup = {
+  dateKey: string;
+  label: string;
+  turns: ChatTurn[];
 };
 
 function dayKey(ts: number): string {
@@ -52,4 +66,60 @@ export function previewChatLine(content: string, max = 56): string {
   const one = content.replace(/\s+/g, ' ').trim();
   if (one.length <= max) return one;
   return `${one.slice(0, max - 1)}…`;
+}
+
+/** Một đoạn = câu hỏi user + (các) phản hồi assistant liền sau cho đến user tiếp theo */
+export function groupChatByTurn(messages: ChatMessage[]): ChatTurn[] {
+  const sorted = [...messages].sort((a, b) => a.ts - b.ts);
+  const turns: ChatTurn[] = [];
+  let current: ChatTurn | null = null;
+
+  for (const m of sorted) {
+    if (m.role === 'user') {
+      if (current) turns.push(current);
+      current = { id: m.id, user: m, replies: [], ts: m.ts };
+    } else if (current) {
+      current.replies.push(m);
+    } else {
+      turns.push({ id: m.id, user: m, replies: [], ts: m.ts });
+    }
+  }
+  if (current) turns.push(current);
+  return turns;
+}
+
+export function groupTurnsByDay(turns: ChatTurn[]): ChatDayTurnGroup[] {
+  const map = new Map<string, ChatTurn[]>();
+  for (const t of turns) {
+    const key = dayKey(t.ts);
+    const list = map.get(key) ?? [];
+    list.push(t);
+    map.set(key, list);
+  }
+  return [...map.entries()].map(([dateKey, dayTurns]) => ({
+    dateKey,
+    label: dayLabel(dayTurns[0]!.ts),
+    turns: dayTurns,
+  }));
+}
+
+export function turnPreview(turn: ChatTurn, max = 56): string {
+  const base = turn.user.role === 'user' ? turn.user.content : turn.replies[0]?.content ?? turn.user.content;
+  return previewChatLine(base, max);
+}
+
+export function turnMessageIds(turn: ChatTurn): string[] {
+  return [turn.user.id, ...turn.replies.map((r) => r.id)];
+}
+
+export function removeMessageById(messages: ChatMessage[], messageId: string): ChatMessage[] {
+  return messages.filter((m) => m.id !== messageId);
+}
+
+/** Xóa cả đoạn hội thoại (user + phản hồi AI liền kề) */
+export function removeTurnById(messages: ChatMessage[], turnId: string): ChatMessage[] {
+  const turn = groupChatByTurn(messages).find((t) => t.id === turnId);
+  if (!turn) return messages;
+  const drop = new Set(turnMessageIds(turn));
+  return messages.filter((m) => !drop.has(m.id));
 }

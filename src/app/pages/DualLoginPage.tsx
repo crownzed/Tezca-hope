@@ -199,6 +199,7 @@ function PatientLoginPanel() {
             type="password"
             required
             minLength={mode === 'register' ? 8 : undefined}
+            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"

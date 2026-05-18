@@ -11,6 +11,7 @@ assertProductionSecrets();
 
 import { publicApiRouter } from './routes/public.js';
 import { authRouter, registerHandler } from './routes/auth.js';
+import { registerLimiter } from './rateLimit.js';
 import { userRouter } from './routes/user.js';
 import { expertRouter } from './routes/expert.js';
 
@@ -41,16 +42,19 @@ export function createApp() {
 
   app.use(vercelApiPathPrefix());
 
-  app.use('/api/auth', authRouter);
-  if (onVercel) {
-    app.use('/auth', authRouter);
-  }
+  /** OPTIONS — tránh 405 trên preflight CORS (đăng ký / đăng nhập) */
+  const authOpt = (_req, res) => res.sendStatus(204);
+  app.options('/api/auth/register', authOpt);
+  app.options('/api/auth/patient/login', authOpt);
+  app.options('/api/auth/login', authOpt);
+  app.options('/api/register', authOpt);
 
-  /** Alias đăng ký — tránh 404/405 khi client gọi nhầm /api/register hoặc path bị rút trên serverless */
-  app.post('/api/register', registerHandler);
-  if (onVercel) {
-    app.post('/register', registerHandler);
-  }
+  app.use('/api/auth', authRouter);
+  app.use('/auth', authRouter);
+
+  /** Alias đăng ký — tránh 404/405 khi path bị rút hoặc client gọi /api/register */
+  app.post('/api/register', registerLimiter, registerHandler);
+  app.post('/register', registerLimiter, registerHandler);
 
   app.use('/api', publicApiRouter);
   app.use('/api', userRouter);

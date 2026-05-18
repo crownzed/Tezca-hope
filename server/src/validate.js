@@ -14,7 +14,7 @@ export function isValidEmail(email) {
 /** Mật khẩu tối thiểu 8 ký tự — tránh hash vô nghĩa */
 export function validatePassword(password) {
   const p = String(password || '');
-  if (p.length < 8) return 'Mật khẩu cần ít nhất 8 ký tự';
+  if (p.trim().length < 8) return 'Mật khẩu cần ít nhất 8 ký tự (không chỉ khoảng trắng)';
   if (p.length > 128) return 'Mật khẩu quá dài (tối đa 128 ký tự)';
   return null;
 }

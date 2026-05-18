@@ -1,5 +1,10 @@
 import { createApp } from '../server/src/createApp.js';
+import { repairApiPath } from '../server/src/vercelPath.js';
 
-/** Vercel Serverless: xử lý /api/* (đăng nhập, BMI, expert, …) */
 const app = createApp();
-export default app;
+
+/** Vercel Serverless — khôi phục path gốc trước khi vào Express */
+export default function handler(req, res) {
+  repairApiPath(req);
+  return app(req, res);
+}

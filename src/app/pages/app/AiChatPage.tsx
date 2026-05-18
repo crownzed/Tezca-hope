@@ -10,8 +10,8 @@ import {
   Cpu,
   User,
   History,
-  ChevronRight,
   CloudOff,
+  Lock,
 } from 'lucide-react';
 import {
   loadAiChatForUser,
@@ -19,11 +19,17 @@ import {
   migrateLegacyAiChat,
   type ChatMessage,
 } from '../../lib/healthStorage';
-import { groupChatByDay, previewChatLine } from '../../lib/aiChatHistory';
+import {
+  groupChatByTurn,
+  groupTurnsByDay,
+  removeMessageById,
+  removeTurnById,
+} from '../../lib/aiChatHistory';
 import { mockAiReply } from '../../lib/mockAi';
 import { apiFetch } from '../../lib/api';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { ROUTES } from '../../routes';
+import { ChatHistoryPanel } from '../../components/ChatHistoryPanel';
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -128,14 +134,37 @@ export function AiChatPage() {
     messageRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const applyMessages = useCallback(
+    (list: ChatMessage[]) => {
+      setMessages(list);
+      if (canPersist) persistMessages(list);
+    },
+    [canPersist, persistMessages],
+  );
+
   const clearChat = () => {
     if (!messages.length) return;
     const msg = canPersist
       ? 'Xóa toàn bộ lịch sử chat trên tài khoản? Hành động này đồng bộ lên server.'
       : 'Xóa tin nhắn trong phiên này? (Chưa đăng nhập — không có lịch sử lưu trữ.)';
     if (!window.confirm(msg)) return;
-    setMessages([]);
-    if (canPersist) persistMessages([]);
+    applyMessages([]);
+  };
+
+  const deleteTurn = (turnId: string) => {
+    if (
+      !window.confirm(
+        'Xóa đoạn hội thoại này khỏi lịch sử tài khoản? (Câu hỏi và phản hồi AI liên quan sẽ bị xóa.)',
+      )
+    ) {
+      return;
+    }
+    applyMessages(removeTurnById(messages, turnId));
+  };
+
+  const deleteMessage = (messageId: string) => {
+    if (!window.confirm('Xóa tin nhắn này khỏi lịch sử tài khoản?')) return;
+    applyMessages(removeMessageById(messages, messageId));
   };
 
   const send = async (overrideText?: string) => {
@@ -201,87 +230,28 @@ export function AiChatPage() {
   };
 
   const liveMode = canPersist;
-  const dayGroups = liveMode ? groupChatByDay(messages) : [];
+  const dayTurnGroups = liveMode ? groupTurnsByDay(groupChatByTurn(messages)) : [];
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col lg:flex-row gap-4" style={{ minHeight: 'calc(100vh - 8rem)' }}>
+    <div className={`mx-auto flex flex-col lg:flex-row gap-4 ${liveMode ? 'max-w-5xl' : 'max-w-4xl'}`} style={{ minHeight: 'calc(100vh - 8rem)' }}>
       {liveMode && (
         <aside
-          className="lg:w-72 shrink-0 rounded-2xl border overflow-hidden flex flex-col max-h-[min(56vh,520px)] lg:max-h-[calc(100vh-10rem)]"
+          className="hidden lg:flex lg:w-72 shrink-0 rounded-2xl border overflow-hidden flex-col max-h-[calc(100vh-10rem)]"
           style={{
             borderColor: 'rgba(26, 32, 44, 0.08)',
             backgroundColor: 'white',
             boxShadow: '0 8px 32px -12px rgba(26, 32, 44, 0.1)',
           }}
         >
-          <div
-            className="px-4 py-3 border-b flex items-center gap-2 shrink-0"
-            style={{ borderColor: 'rgba(26, 32, 44, 0.06)', backgroundColor: 'rgba(45, 212, 191, 0.08)' }}
-          >
-            <History size={18} style={{ color: '#0F766E' }} />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold m-0" style={{ color: '#1A202C' }}>
-                Lịch sử chat
-              </p>
-              <p className="text-[11px] opacity-60 m-0 truncate" style={{ color: '#1A202C' }}>
-                {user?.name} · đồng bộ tài khoản
-              </p>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2">
-            {historyLoading ? (
-              <p className="text-xs text-center py-6 opacity-50 m-0" style={{ color: '#1A202C' }}>
-                Đang tải lịch sử…
-              </p>
-            ) : messages.length === 0 ? (
-              <p className="text-xs text-center py-6 opacity-50 m-0 px-2 leading-relaxed" style={{ color: '#1A202C' }}>
-                Chưa có tin nhắn đã lưu. Bắt đầu hội thoại — mọi tin sẽ được lưu trên tài khoản.
-              </p>
-            ) : (
-              <ul className="m-0 p-0 list-none space-y-3">
-                {dayGroups.map((group) => (
-                  <li key={group.dateKey}>
-                    <p
-                      className="text-[10px] font-semibold uppercase tracking-wider px-2 mb-1.5 m-0 opacity-45"
-                      style={{ color: '#1A202C' }}
-                    >
-                      {group.label}
-                    </p>
-                    <ul className="m-0 p-0 list-none space-y-0.5">
-                      {group.messages.map((m) => (
-                        <li key={m.id}>
-                          <button
-                            type="button"
-                            onClick={() => scrollToMessage(m.id)}
-                            className="w-full text-left rounded-xl px-2.5 py-2 text-xs border-0 cursor-pointer transition-colors hover:bg-teal-50/80 flex items-start gap-1.5"
-                            style={{ color: '#1A202C', backgroundColor: 'transparent' }}
-                          >
-                            <ChevronRight size={14} className="shrink-0 mt-0.5 opacity-35" />
-                            <span className="min-w-0 flex-1">
-                              <span
-                                className="font-semibold block opacity-70"
-                                style={{ color: m.role === 'user' ? '#0F766E' : '#475569' }}
-                              >
-                                {m.role === 'user' ? 'Bạn' : 'Tezca AI'} · {formatTime(m.ts)}
-                              </span>
-                              <span className="block opacity-80 leading-snug mt-0.5">
-                                {previewChatLine(m.content)}
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <p className="text-[10px] text-center px-3 py-2 m-0 border-t opacity-45" style={{ borderColor: 'rgba(26,32,44,0.06)', color: '#64748B' }}>
-            {messages.length} tin · chạm để cuộn tới tin trong hội thoại
-          </p>
+          <ChatHistoryPanel
+            dayTurnGroups={dayTurnGroups}
+            historyLoading={historyLoading}
+            messageCount={messages.length}
+            userName={user?.name}
+            userEmail={user?.email}
+            onScrollTo={scrollToMessage}
+            onDeleteTurn={deleteTurn}
+          />
         </aside>
       )}
 
@@ -328,9 +298,15 @@ export function AiChatPage() {
               </div>
               <p className="text-sm opacity-75 mt-2 m-0 leading-relaxed" style={{ color: '#1A202C' }}>
                 {liveMode
-                  ? 'Hội thoại được lưu trên tài khoản và đồng bộ server — xem lịch sử bên trái (màn hình lớn) hoặc cuộn trong khung chat.'
+                  ? `Lịch sử riêng của ${user?.name || 'bạn'} — đồng bộ server, không chia sẻ tài khoản khác. Xóa từng đoạn ở panel lịch sử hoặc từng tin trong khung chat.`
                   : 'Bạn có thể hỏi ngay không cần đăng nhập. Tin nhắn chỉ tồn tại trong phiên này — đóng trang hoặc tải lại sẽ mất.'}
               </p>
+              {liveMode && (
+                <p className="text-xs mt-2 m-0 flex items-center gap-1.5 opacity-70" style={{ color: '#0F766E' }}>
+                  <Lock size={12} />
+                  Chỉ bạn ({user?.email}) xem được lịch sử này
+                </p>
+              )}
               {!liveMode && (
                 <Link
                   to={ROUTES.app.login}
@@ -427,7 +403,7 @@ export function AiChatPage() {
                 ref={(el) => {
                   messageRefs.current[m.id] = el;
                 }}
-                className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                className={`group flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
               >
                 <div
                   className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center text-xs font-bold"
@@ -443,7 +419,20 @@ export function AiChatPage() {
                 >
                   {m.role === 'user' ? <User size={18} strokeWidth={2} /> : <Sparkles size={18} strokeWidth={2} />}
                 </div>
-                <div className={`min-w-0 max-w-[88%] ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
+                <div className={`relative min-w-0 max-w-[88%] ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
+                  {liveMode && (
+                    <button
+                      type="button"
+                      onClick={() => deleteMessage(m.id)}
+                      disabled={pending}
+                      title="Xóa tin nhắn này"
+                      className={`absolute -top-1 ${m.role === 'user' ? 'left-0' : 'right-0'} p-1 rounded-lg border-0 cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-30 hover:bg-red-50`}
+                      style={{ color: '#B91C1C' }}
+                      aria-label="Xóa tin nhắn"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                   <div
                     className="inline-block rounded-2xl px-4 py-3 text-sm leading-relaxed text-left whitespace-pre-wrap break-words"
                     style={
@@ -537,33 +526,26 @@ export function AiChatPage() {
           </div>
         </div>
 
-        {liveMode && messages.length > 0 && (
-          <details className="lg:hidden rounded-2xl border overflow-hidden" style={{ borderColor: 'rgba(26,32,44,0.08)' }}>
+        {liveMode && (
+          <details className="lg:hidden rounded-2xl border overflow-hidden flex flex-col" style={{ borderColor: 'rgba(26,32,44,0.08)' }}>
             <summary
               className="px-4 py-3 text-sm font-semibold cursor-pointer list-none flex items-center gap-2"
               style={{ color: '#1A202C', backgroundColor: 'rgba(45,212,191,0.08)' }}
             >
               <History size={16} style={{ color: '#0F766E' }} />
-              Lịch sử chat ({messages.length} tin)
+              Lịch sử riêng tư ({messages.length} tin)
             </summary>
-            <div className="max-h-48 overflow-y-auto p-2 border-t" style={{ borderColor: 'rgba(26,32,44,0.06)' }}>
-              {dayGroups.map((group) => (
-                <div key={group.dateKey} className="mb-3 last:mb-0">
-                  <p className="text-[10px] font-semibold uppercase opacity-45 px-2 m-0 mb-1">{group.label}</p>
-                  {group.messages.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => scrollToMessage(m.id)}
-                      className="w-full text-left text-xs px-2 py-1.5 rounded-lg border-0 bg-transparent"
-                      style={{ color: '#1A202C' }}
-                    >
-                      <span className="font-medium opacity-60">{m.role === 'user' ? 'Bạn' : 'AI'} · </span>
-                      {previewChatLine(m.content, 48)}
-                    </button>
-                  ))}
-                </div>
-              ))}
+            <div className="max-h-56 overflow-hidden flex flex-col border-t" style={{ borderColor: 'rgba(26,32,44,0.06)' }}>
+              <ChatHistoryPanel
+                compact
+                dayTurnGroups={dayTurnGroups}
+                historyLoading={historyLoading}
+                messageCount={messages.length}
+                userName={user?.name}
+                userEmail={user?.email}
+                onScrollTo={scrollToMessage}
+                onDeleteTurn={deleteTurn}
+              />
             </div>
           </details>
         )}

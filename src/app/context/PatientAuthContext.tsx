@@ -92,8 +92,13 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   const register = useCallback(async (email: string, password: string, name?: string) => {
     const r = await apiFetch<{ token: string; user: PatientUser }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({
+        email: email.trim(),
+        password,
+        name: name?.trim() || undefined,
+      }),
     });
+    if (r.user.role !== 'user') throw new Error('Tài khoản không phải bệnh nhân');
     tokenRef.current = r.token;
     persist(r.token, r.user);
     setSessionReady(true);
