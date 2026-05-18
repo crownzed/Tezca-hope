@@ -63,7 +63,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
             className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-medium border transition-colors"
             style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
           >
-            Vào ứng dụng
+            Trung tâm Kỷ luật
           </Link>
           {showExpertPortal && (
             <Link
@@ -118,7 +118,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
               style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
               onClick={() => setOpen(false)}
             >
-              Vào ứng dụng
+              Trung tâm Kỷ luật
             </Link>
             {showExpertPortal && (
               <Link

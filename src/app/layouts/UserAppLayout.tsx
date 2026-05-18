@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { ROUTES } from '../routes';
 import {
-  LayoutDashboard,
+  Flame,
   Scale,
   Heart,
   MessageCircle,
@@ -16,7 +16,7 @@ import {
 import { usePatientAuth } from '../context/PatientAuthContext';
 
 const nav = [
-  { to: ROUTES.app.root, end: true, label: 'Tổng quan', icon: LayoutDashboard },
+  { to: ROUTES.app.root, end: true, label: 'Trung tâm Kỷ luật', icon: Flame },
   { to: ROUTES.app.bmi, label: 'Chỉ số BMI', icon: Scale },
   { to: ROUTES.app.mood, label: 'Nhật ký cảm xúc', icon: Heart },
   { to: ROUTES.app.chat, label: 'Tezca AI', icon: MessageCircle },
