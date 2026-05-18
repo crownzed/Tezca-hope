@@ -16,13 +16,19 @@ type LiveMessage = {
 
 type CareExpert = { id: string; name: string; email: string };
 
+function formatClock(ts: number) {
+  return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 export function PatientExpertChatPage() {
   const { token, user } = usePatientAuth();
   const [liveMsgs, setLiveMsgs] = useState<LiveMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [wsReady, setWsReady] = useState(false);
   const [experts, setExperts] = useState<CareExpert[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const wsRef = useRef<WebSocket | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!token || !user) return;
@@ -33,9 +39,11 @@ export function PatientExpertChatPage() {
 
   useEffect(() => {
     if (!token || !user) return;
+    setLoadingHistory(true);
     apiFetch<{ messages: LiveMessage[] }>('/api/me/live-messages', { token })
-      .then((r) => setLiveMsgs(r.messages))
-      .catch(() => setLiveMsgs([]));
+      .then((r) => setLiveMsgs(r.messages || []))
+      .catch(() => setLiveMsgs([]))
+      .finally(() => setLoadingHistory(false));
   }, [token, user]);
 
   useEffect(() => {
@@ -63,6 +71,10 @@ export function PatientExpertChatPage() {
       wsRef.current = null;
     };
   }, [token, user]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [liveMsgs.length]);
 
   const send = () => {
     const text = draft.trim();
@@ -109,7 +121,7 @@ export function PatientExpertChatPage() {
           <Stethoscope size={16} className="shrink-0 text-teal-700 mt-0.5" />
           <span>
             <strong>Chuyên gia đồng hành:</strong>{' '}
-            {experts.map((e) => e.name).join(', ')}. Tin nhắn tới đây họ có thể xem trên dashboard.
+            {experts.map((e) => e.name).join(', ')}. Tin nhắn tới đây họ có thể xem trên Doctor Desk.
           </span>
         </div>
       ) : (
@@ -126,6 +138,16 @@ export function PatientExpertChatPage() {
         className="flex-1 rounded-2xl border p-4 overflow-y-auto space-y-3 mb-4 min-h-[280px] max-h-[50vh]"
         style={{ backgroundColor: 'white', borderColor: 'rgba(26, 32, 44, 0.08)' }}
       >
+        {loadingHistory && (
+          <p className="text-sm text-center opacity-50 m-0 py-8" style={{ color: '#1A202C' }}>
+            Đang tải lịch sử chat…
+          </p>
+        )}
+        {!loadingHistory && liveMsgs.length === 0 && (
+          <p className="text-sm text-center opacity-60 m-0 py-8" style={{ color: '#1A202C' }}>
+            Chưa có tin nhắn. Hãy chào chuyên gia — họ sẽ phản hồi trên Doctor Desk.
+          </p>
+        )}
         {liveMsgs.map((m) => {
           const mine = m.senderRole === 'patient';
           return (
@@ -138,25 +160,29 @@ export function PatientExpertChatPage() {
                     : { backgroundColor: 'rgba(26, 32, 44, 0.06)', color: '#1A202C' }
                 }
               >
-                {m.content}
+                <p className="m-0 leading-relaxed">{m.content}</p>
+                <p className={`text-[10px] mt-1 m-0 ${mine ? 'text-white/70' : 'opacity-50'}`}>{formatClock(m.ts)}</p>
               </div>
             </div>
           );
         })}
+        <div ref={chatEndRef} />
       </div>
       <div className="flex gap-2">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
-          className="flex-1 rounded-full border px-5 py-3 text-sm"
+          disabled={!wsReady}
+          className="flex-1 rounded-full border px-5 py-3 text-sm disabled:opacity-50"
           style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
-          placeholder="Nhắn cho chuyên gia…"
+          placeholder={wsReady ? 'Nhắn cho chuyên gia…' : 'Đang kết nối…'}
         />
         <button
           type="button"
           onClick={send}
-          className="rounded-full px-5 py-3 text-white"
+          disabled={!wsReady || !draft.trim()}
+          className="rounded-full px-5 py-3 text-white disabled:opacity-40"
           style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
           aria-label="Gửi"
         >

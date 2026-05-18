@@ -11,6 +11,8 @@ type PatientRow = {
   name: string;
   lastBmi: { date: string; bmi: number } | null;
   lastMood: { date: string; moodLabel: string; moodScore?: number } | null;
+  lastLiveMessage?: { content: string; ts: number; senderRole: 'expert' | 'patient' } | null;
+  needsReply?: boolean;
 };
 
 export function ExpertPatientListPage() {
@@ -145,6 +147,12 @@ export function ExpertPatientListPage() {
                   {p.lastBmi ? `BMI gần nhất: ${p.lastBmi.bmi} (${p.lastBmi.date})` : 'Chưa có BMI'}
                   {p.lastMood ? ` · Cảm xúc: ${p.lastMood.moodLabel}` : ''}
                 </p>
+                {p.lastLiveMessage && (
+                  <p className={`text-xs mt-1 truncate m-0 ${p.needsReply ? 'text-amber-300' : 'text-slate-500'}`}>
+                    {p.lastLiveMessage.senderRole === 'patient' ? '💬 ' : 'Bạn: '}
+                    {p.lastLiveMessage.content}
+                  </p>
+                )}
               </div>
               <ChevronRight className="text-slate-500 shrink-0" size={20} />
             </Link>

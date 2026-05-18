@@ -9,6 +9,7 @@ import {
   listMoodsForUser,
   listBotMessagesForUser,
   listLiveMessagesForPatient,
+  getLastLiveMessageMap,
   assignExpertToPatient,
   removeExpertPatientAssignment,
 } from '../db.js';
@@ -31,17 +32,27 @@ expertRouter.get('/me', requireExpert, (req, res) => {
 expertRouter.get('/patients', requireExpert, (req, res) => {
   const expertId = req.user.sub;
   const patientIds = getPatientIdsForExpert(expertId);
+  const lastLiveByPatient = getLastLiveMessageMap(patientIds);
   const list = patientIds.map((pid) => {
     const u = findUserById(pid);
     const bmis = listBmiForUser(pid);
     const moods = listMoodsForUser(pid);
+    const lastLiveMessage = lastLiveByPatient.get(pid) || null;
     return {
       id: pid,
       email: u?.email,
       name: u?.name,
       lastBmi: bmis[0] || null,
       lastMood: moods[0] || null,
+      lastLiveMessage,
+      needsReply: lastLiveMessage?.senderRole === 'patient',
     };
+  });
+  list.sort((a, b) => {
+    const ta = a.lastLiveMessage?.ts ?? 0;
+    const tb = b.lastLiveMessage?.ts ?? 0;
+    if (tb !== ta) return tb - ta;
+    return (a.name || '').localeCompare(b.name || '', 'vi');
   });
   pushAudit({ actorId: expertId, role: 'expert', action: 'list_patients' });
   res.json({ patients: list });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Heart, Stethoscope, ArrowRight, Flame } from 'lucide-react';
+import { Heart, Stethoscope, ArrowRight } from 'lucide-react';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useExpertAuth } from '../context/ExpertAuthContext';
 import { ROUTES } from '../routes';
@@ -36,14 +36,9 @@ export function LoginHubPage() {
             Đăng nhập
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <Link
-            to={ROUTES.app.root}
-            className="text-sm font-semibold inline-flex items-center gap-1 px-3 py-1.5 rounded-full border whitespace-nowrap"
-            style={{ borderColor: 'rgba(234,179,8,0.45)', color: '#1A202C', backgroundColor: 'rgba(234,179,8,0.1)' }}
-          >
-            <Flame size={14} className="text-yellow-600" />
-            Trung tâm Kỷ luật
+        <div className="flex flex-wrap items-center gap-3 shrink-0 justify-end">
+          <Link to={ROUTES.expert.login} className="text-sm font-medium whitespace-nowrap" style={{ color: '#0F766E' }}>
+            Chuyên gia →
           </Link>
           <Link
             to={ROUTES.home}
@@ -57,34 +52,22 @@ export function LoginHubPage() {
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-12">
         <h1 className="text-2xl md:text-3xl font-bold m-0 mb-2 text-center">Chọn cổng đăng nhập</h1>
-        <p className="text-sm opacity-70 m-0 mb-10 text-center max-w-md">
-          Bệnh nhân dùng <strong>Trung tâm Kỷ luật</strong> — giao diện tập luyện & dinh dưỡng mới.
-        </p>
+        <p className="text-sm opacity-70 m-0 mb-10 text-center max-w-md">Bệnh nhân và chuyên gia có giao diện riêng.</p>
         <div className="grid sm:grid-cols-2 gap-4 w-full max-w-2xl">
-          <div className="rounded-2xl border p-6 bg-white flex flex-col shadow-sm hover:shadow-lg transition-shadow" style={{ borderColor: 'rgba(26,32,44,0.1)', color: '#1A202C' }}>
-            <span className="inline-flex p-2 rounded-xl mb-3 w-fit" style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: '#0F766E' }}>
+          <Link
+            to={ROUTES.app.login}
+            className="rounded-2xl border p-6 no-underline hover:shadow-lg bg-white"
+            style={{ borderColor: 'rgba(26,32,44,0.1)', color: '#1A202C' }}
+          >
+            <span className="inline-flex p-2 rounded-xl mb-3" style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: '#0F766E' }}>
               <Heart size={24} />
             </span>
             <h2 className="text-lg font-bold m-0 mb-1">Bệnh nhân</h2>
-            <p className="text-sm opacity-70 m-0 mb-4">
-              Trung tâm Kỷ luật: theo dõi cơ thể, bài tập, dinh dưỡng — cùng BMI, nhật ký & Tezca AI.
-            </p>
-            <Link
-              to={ROUTES.app.login}
-              className="inline-flex items-center justify-center gap-1 rounded-full py-2.5 px-4 text-sm font-semibold text-white no-underline mb-2"
-              style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
-            >
-              Đăng nhập bệnh nhân <ArrowRight size={16} />
-            </Link>
-            <Link
-              to={ROUTES.app.root}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full py-2.5 px-4 text-sm font-semibold border no-underline hover:bg-gray-50"
-              style={{ borderColor: 'rgba(234,179,8,0.5)', color: '#1A202C', backgroundColor: 'rgba(234,179,8,0.08)' }}
-            >
-              <Flame size={16} className="text-yellow-600" />
-              Vào Trung tâm Kỷ luật
-            </Link>
-          </div>
+            <p className="text-sm opacity-70 m-0 mb-3">BMI, nhật ký, Tezca AI và ứng dụng sức khỏe.</p>
+            <span className="text-sm font-semibold inline-flex items-center gap-1" style={{ color: '#0F766E' }}>
+              Đăng nhập <ArrowRight size={16} />
+            </span>
+          </Link>
           <Link to={ROUTES.expert.login} className="rounded-2xl border border-slate-700 bg-slate-900 p-6 no-underline text-slate-200 hover:border-teal-600/50">
             <span className="inline-flex p-2 rounded-xl bg-slate-800 text-teal-400 border border-slate-700 mb-3"><Stethoscope size={24} /></span>
             <h2 className="text-lg font-bold m-0 mb-1 text-white">Chuyên gia</h2>
@@ -112,14 +95,6 @@ export function PatientLoginPage() {
           <h1 className="text-base sm:text-lg font-semibold m-0 truncate">Bệnh nhân</h1>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0 justify-end">
-          <Link
-            to={ROUTES.app.root}
-            className="text-sm font-semibold inline-flex items-center gap-1 px-3 py-1.5 rounded-full border"
-            style={{ borderColor: 'rgba(234,179,8,0.45)', color: '#1A202C', backgroundColor: 'rgba(234,179,8,0.1)' }}
-          >
-            <Flame size={14} className="text-yellow-600" />
-            Trung tâm Kỷ luật
-          </Link>
           <Link to={ROUTES.expert.login} className="text-sm font-medium" style={{ color: '#0F766E' }}>
             Chuyên gia →
           </Link>
@@ -137,11 +112,7 @@ export function PatientLoginPage() {
             <h1 className="text-2xl font-bold m-0">Người dùng & bệnh nhân</h1>
           </div>
           <p className="text-sm opacity-75 m-0 mb-6">
-            Sau đăng nhập bạn vào <strong>Trung tâm Kỷ luật</strong> — dashboard tập luyện & dinh dưỡng. Có thể{' '}
-            <Link to={ROUTES.app.root} className="font-semibold no-underline" style={{ color: '#0F766E' }}>
-              xem trước giao diện
-            </Link>{' '}
-            (không cần tài khoản).
+            BMI, nhật ký, Tezca AI và chat với chuyên gia được gán. Sau đăng nhập bạn vào ứng dụng bệnh nhân.
           </p>
           <PatientLoginPanel />
         </div>
@@ -176,11 +147,10 @@ function PatientLoginPanel() {
         <div className="flex flex-col sm:flex-row gap-2">
           <Link
             to={ROUTES.app.root}
-            className="inline-flex justify-center items-center gap-2 rounded-full py-3 px-4 font-semibold text-white text-center no-underline"
-            style={{ background: 'linear-gradient(135deg, #EAB308 0%, #CA8A04 100%)', color: '#1A202C' }}
+            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold text-white text-center no-underline"
+            style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
           >
-            <Flame size={18} />
-            Vào Trung tâm Kỷ luật
+            Vào ứng dụng
           </Link>
           <button
             type="button"
@@ -278,21 +248,6 @@ function PatientLoginPanel() {
       >
         {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
       </button>
-      <Link
-        to={ROUTES.app.root}
-        className="mt-4 flex items-center justify-center gap-2 rounded-xl border py-3 px-4 text-sm font-semibold no-underline hover:shadow-md transition-shadow"
-        style={{
-          borderColor: 'rgba(234,179,8,0.45)',
-          backgroundColor: 'rgba(234,179,8,0.1)',
-          color: '#1A202C',
-        }}
-      >
-        <Flame size={18} className="text-yellow-600 shrink-0" />
-        Vào Trung tâm Kỷ luật (xem giao diện mới)
-      </Link>
-      <p className="text-xs text-center mt-2 opacity-50 m-0" style={{ color: '#1A202C' }}>
-        Chưa đăng nhập — dữ liệu chỉ lưu trên thiết bị cho đến khi bạn đăng nhập.
-      </p>
       <p className="text-xs text-center mt-5 opacity-50 leading-relaxed m-0" style={{ color: '#1A202C' }}>
         Tiếp tục nghĩa là bạn đã xem{' '}
         <Link to={ROUTES.legal.terms} className="underline underline-offset-2" style={{ color: '#0F766E' }}>

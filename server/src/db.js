@@ -431,6 +431,23 @@ export function listLiveMessagesForPatient(patientId) {
     .all(patientId);
 }
 
+/** Tin nhắn live mới nhất theo từng bệnh nhân (cho danh sách chat chuyên gia). */
+export function getLastLiveMessageMap(patientIds) {
+  const map = new Map();
+  if (!patientIds?.length) return map;
+  const stmt = getDb().prepare(
+    `SELECT id, patient_id AS patientId, sender_user_id AS senderUserId,
+            sender_role AS senderRole, content, ts
+     FROM live_messages WHERE patient_id = ?
+     ORDER BY ts DESC LIMIT 1`,
+  );
+  for (const pid of patientIds) {
+    const row = stmt.get(pid);
+    if (row) map.set(pid, row);
+  }
+  return map;
+}
+
 export function insertLiveMessage({ patientId, senderUserId, senderRole, content }) {
   const id = crypto.randomUUID();
   const ts = Date.now();

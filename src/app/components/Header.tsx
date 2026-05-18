@@ -52,6 +52,13 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
 
         <div className="flex items-center gap-2">
           <Link
+            to={ROUTES.expert.login}
+            className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-medium border transition-colors hover:opacity-90"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
+          >
+            Chuyên gia
+          </Link>
+          <Link
             to={ROUTES.auth.hub}
             className="hidden sm:inline-flex px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)', color: '#1A202C' }}
@@ -105,8 +112,16 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
               </Link>
             ))}
             <Link
+              to={ROUTES.expert.login}
+              className="mt-2 py-3 text-center rounded-full text-sm font-semibold border"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
+              onClick={() => setOpen(false)}
+            >
+              Chuyên gia
+            </Link>
+            <Link
               to={ROUTES.auth.hub}
-              className="mt-2 py-3 text-center rounded-full text-sm font-semibold"
+              className="mt-1 py-3 text-center rounded-full text-sm font-semibold"
               style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)', color: '#1A202C' }}
               onClick={() => setOpen(false)}
             >
@@ -139,6 +154,9 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
           className="md:hidden mt-4 pb-2 border-t pt-4 -mx-6 px-6 flex flex-col gap-2"
           style={{ borderColor: 'rgba(26, 32, 44, 0.08)' }}
         >
+          <Link to={ROUTES.expert.login} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: '#1A202C' }}>
+            Chuyên gia
+          </Link>
           <Link to={ROUTES.auth.hub} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: '#0F766E' }}>
             Đăng nhập
           </Link>
