@@ -1,0 +1,26 @@
+services:
+  tezca-api:
+    build: ./server
+    container_name: tezca-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      JWT_SECRET: ${JWT_SECRET:-tezca-change-me-in-production}
+      DATA_DIR: /app/data
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - tezca-api-data:/app/data
+
+  tezca-web:
+    build: .
+    container_name: tezca-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - tezca-api
+
+volumes:
+  tezca-api-data:
