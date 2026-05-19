@@ -3,9 +3,16 @@ type ViteEnv = ImportMeta & {
     VITE_API_URL?: string;
     VITE_API_PROXY_PORT?: string;
     DEV: boolean;
+    PROD: boolean;
     BASE_URL?: string;
   };
 };
+
+function isLocalDevHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1';
+}
 
 export type AuthGatewayOp = 'patient-login' | 'expert-login' | 'register' | 'login';
 
@@ -24,19 +31,23 @@ function authOpForPath(path: string): AuthGatewayOp | null {
   return null;
 }
 
+const GATEWAY_TARGETS: { url: string; gateway?: boolean }[] = [
+  { url: '/api/auth/gateway', gateway: true },
+  { url: '/api', gateway: true },
+];
+
 /**
- * Thứ tự thử auth POST:
- * 1–2) Gateway (Vercel hay rút path về /api — tránh 405 từ static)
- * 3+) REST đầy đủ (local Express)
+ * Trên host (Vercel / Apache): chỉ gateway — tránh POST REST rơi vào static → 405.
+ * Local dev: thử REST trước rồi gateway.
  */
 function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
   const op = authOpForPath(path);
   if (!op) return [{ url: path }];
 
-  const targets: { url: string; gateway?: boolean }[] = [
-    { url: '/api/auth/gateway', gateway: true },
-    { url: '/api', gateway: true },
-  ];
+  const hosted = (import.meta as ViteEnv).env.PROD && !isLocalDevHost();
+  if (hosted) return [...GATEWAY_TARGETS];
+
+  const targets: { url: string; gateway?: boolean }[] = [...GATEWAY_TARGETS];
 
   if (op === 'patient-login') {
     targets.push({ url: '/api/auth/patient/login' }, { url: '/api/auth/login' });
@@ -63,7 +74,7 @@ async function parseErrorResponse(res: Response, path: string) {
   if (res.status === 405) {
     throw new Error(
       err.error ||
-        'Máy chủ từ chối POST (405). Chạy `npm run dev:all` để bật API, hoặc kiểm tra proxy /api trên hosting.',
+        'Máy chủ từ chối POST (405). Trên host cần proxy /api → Node (xem deploy/website/apache-snippet.conf). Local: chạy `npm run dev`.',
     );
   }
   if (res.status === 404 && (path.includes('register') || path.includes('auth'))) {

@@ -3,14 +3,11 @@
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
-    "api/index.js": {
-      "maxDuration": 30,
-      "includeFiles": "server/src/**"
-    }
+    "api/index.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
+    "api/[...path].js": { "maxDuration": 30, "includeFiles": "server/src/**" },
+    "api/auth/**/*.js": { "maxDuration": 30, "includeFiles": "server/src/**" }
   },
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api?path=:path*" },
-    { "source": "/api", "destination": "/api" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
 }

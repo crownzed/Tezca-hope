@@ -1,10 +1,4 @@
-import { createApp } from '../server/src/createApp.js';
-import { repairApiPath } from '../server/src/vercelPath.js';
+import { createApiHandler } from './_lib/shared.js';
 
-const app = createApp();
-
-/** Vercel Serverless — khôi phục path gốc trước khi vào Express */
-export default function handler(req, res) {
-  repairApiPath(req);
-  return app(req, res);
-}
+/** POST /api (gateway body.op) và fallback khi rewrite về /api */
+export default createApiHandler('/api');

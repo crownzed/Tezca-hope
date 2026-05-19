@@ -5,6 +5,8 @@
   RewriteEngine On
   RewriteBase /tezca/
   RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_METHOD} GET [OR]
+  RewriteCond %{REQUEST_METHOD} HEAD
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /tezca/index.html [L]
