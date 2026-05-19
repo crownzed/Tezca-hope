@@ -45,7 +45,15 @@ function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
   if (!op) return [{ url: path }];
 
   const hosted = (import.meta as ViteEnv).env.PROD && !isLocalDevHost();
-  if (hosted) return [...GATEWAY_TARGETS];
+  if (hosted) {
+    const hostedTargets: { url: string; gateway?: boolean }[] = [...GATEWAY_TARGETS];
+    if (op === 'expert-login') {
+      hostedTargets.push({ url: '/api/auth/expert/login' });
+    } else if (op === 'patient-login') {
+      hostedTargets.push({ url: '/api/auth/patient/login' });
+    }
+    return hostedTargets;
+  }
 
   const targets: { url: string; gateway?: boolean }[] = [...GATEWAY_TARGETS];
 

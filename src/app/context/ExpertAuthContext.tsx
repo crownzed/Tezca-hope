@@ -62,15 +62,16 @@ export function ExpertAuthProvider({ children }: { children: React.ReactNode }) 
       .catch((err) => {
         if (tokenRef.current !== requestedToken) return;
         const msg = err instanceof Error ? err.message : '';
+        // Không xóa phiên khi 404 routing (API chưa deploy) — chỉ khi lỗi xác thực thật
         if (
           msg.includes('401') ||
           msg.includes('403') ||
-          msg.includes('404') ||
           msg.includes('Token') ||
           msg.includes('quyền') ||
           msg.includes('Unauthorized') ||
           msg.includes('Forbidden') ||
-          msg.includes('Sai email')
+          msg.includes('Sai email') ||
+          msg.includes('Không đủ quyền')
         ) {
           persist(null, null);
         }
