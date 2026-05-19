@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, useLocation, useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import {
   Activity,
   Bell,
   Bot,
-  LayoutDashboard,
   Loader2,
   MessageSquare,
   ChevronLeft,
   Send,
-  Settings,
   Stethoscope,
   UtensilsCrossed,
   Wind,
@@ -283,39 +281,7 @@ export function DoctorDashboardPage() {
           Danh sách
         </Link>
       </div>
-      <div className="flex flex-1 min-h-0">
-        <aside className="hidden lg:flex w-[15%] min-w-[200px] max-w-[260px] shrink-0 flex-col bg-[#0c1929] text-slate-200 border-r border-slate-800/80">
-          <div className="p-5 border-b border-slate-700/80 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center text-[#0c1929] font-bold text-sm shrink-0">
-              Tz
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-teal-300/90 uppercase tracking-wide m-0">Tezca</p>
-              <p className="text-sm font-semibold text-white truncate m-0">Doctor Desk</p>
-            </div>
-          </div>
-          <nav className="flex-1 p-3 space-y-1">
-            <SidebarLink to={ROUTES.expert.root} end icon={LayoutDashboard} label="Danh sách BN" />
-            <SidebarLink
-              to={ROUTES.expert.doctorDesk}
-              icon={MessageSquare}
-              label="Doctor Desk"
-              badge={emergencyCount}
-              matchPrefix="/expert/doctor-desk"
-            />
-            <SidebarLink
-              to={ROUTES.expert.settings}
-              icon={Settings}
-              label="Cài đặt"
-              matchPrefix="/expert/settings"
-            />
-          </nav>
-          <div className="p-4 text-[10px] text-slate-500 leading-snug border-t border-slate-700/60">
-            Dữ liệu BMI / cảm xúc / chat đồng bộ từ server khi đã chọn bệnh nhân.
-          </div>
-        </aside>
-
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex flex-1 min-h-0 flex-col min-w-0">
           <header className="h-16 shrink-0 flex items-center gap-3 md:gap-4 px-3 md:px-6 bg-white border-b border-slate-200/90 shadow-sm">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-800 m-0 truncate">Live chat · Doctor Desk</p>
@@ -605,7 +571,6 @@ export function DoctorDashboardPage() {
             </section>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
@@ -631,43 +596,5 @@ function VitalCard({
       </div>
       {sub ? <p className="text-xs text-slate-500 m-0 mt-1 tabular-nums">{sub}</p> : null}
     </div>
-  );
-}
-
-function SidebarLink({
-  to,
-  icon: Icon,
-  label,
-  badge,
-  end,
-  matchPrefix,
-}: {
-  to: string;
-  icon: typeof LayoutDashboard;
-  label: string;
-  badge?: number;
-  end?: boolean;
-  matchPrefix?: string;
-}) {
-  const { pathname } = useLocation();
-  return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) => {
-        const active = matchPrefix ? pathname.startsWith(matchPrefix) : isActive;
-        return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-          active ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
-        }`;
-      }}
-    >
-      <Icon className="w-4 h-4 shrink-0 opacity-90" />
-      <span className="flex-1 truncate">{label}</span>
-      {badge != null && badge > 0 ? (
-        <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-rose-600 text-white text-[11px] font-semibold flex items-center justify-center">
-          {badge > 9 ? '9+' : badge}
-        </span>
-      ) : null}
-    </NavLink>
   );
 }

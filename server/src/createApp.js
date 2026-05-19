@@ -4,7 +4,7 @@ import cors from 'cors';
 import { initDb } from './db.js';
 import { assertProductionSecrets } from './secrets.js';
 import { securityHeaders, corsOriginCallback, errorHandler } from './security.js';
-import { vercelApiPathPrefix } from './vercelPath.js';
+import { vercelApiPathPrefix, inferAuthOpFromPath } from './vercelPath.js';
 
 loadEnv();
 assertProductionSecrets();
@@ -48,6 +48,10 @@ export function createApp() {
   app.use(express.json({ limit: '512kb' }));
 
   app.use(vercelApiPathPrefix());
+  app.use((req, _res, next) => {
+    inferAuthOpFromPath(req);
+    next();
+  });
 
   /** OPTIONS — tránh 405 trên preflight CORS (đăng ký / đăng nhập) */
   const authOpt = (_req, res) => res.sendStatus(204);
@@ -57,6 +61,8 @@ export function createApp() {
   app.options('/api/auth/login', authOpt);
   app.options('/api/register', authOpt);
   app.options('/api/auth/gateway', authOpt);
+  app.options('/api', authOpt);
+  app.options(/^\/api(\/.*)?$/, authOpt);
   app.options(/^\/api\/auth\/.+/, authOpt);
 
   /** POST trực tiếp — tránh 404/405 khi Vercel rút path về /api */

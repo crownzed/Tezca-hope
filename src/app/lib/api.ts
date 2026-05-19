@@ -24,12 +24,19 @@ function authOpForPath(path: string): AuthGatewayOp | null {
   return null;
 }
 
-/** Thứ tự thử: REST đầy đủ → gateway (path bị rút) */
+/**
+ * Thứ tự thử auth POST:
+ * 1–2) Gateway (Vercel hay rút path về /api — tránh 405 từ static)
+ * 3+) REST đầy đủ (local Express)
+ */
 function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
   const op = authOpForPath(path);
   if (!op) return [{ url: path }];
 
-  const targets: { url: string; gateway?: boolean }[] = [];
+  const targets: { url: string; gateway?: boolean }[] = [
+    { url: '/api/auth/gateway', gateway: true },
+    { url: '/api', gateway: true },
+  ];
 
   if (op === 'patient-login') {
     targets.push({ url: '/api/auth/patient/login' }, { url: '/api/auth/login' });
@@ -41,7 +48,6 @@ function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
     targets.push({ url: '/api/auth/login' });
   }
 
-  targets.push({ url: '/api/auth/gateway', gateway: true });
   return targets;
 }
 

@@ -40,6 +40,22 @@ function pickHeaderPath(req) {
   return null;
 }
 
+/** Gán op khi POST /api hoặc /api/auth/* nhưng body chưa có op (sau rewrite Vercel). */
+export function inferAuthOpFromPath(req) {
+  if (req.method !== 'POST' || !req.body || typeof req.body !== 'object') return;
+  if (req.body.op) return;
+  const pathOnly = (req.url || '/').split('?')[0];
+  if (pathOnly.endsWith('/auth/patient/login') || pathOnly.endsWith('/patient/login')) {
+    req.body.op = 'patient-login';
+  } else if (pathOnly.endsWith('/auth/expert/login') || pathOnly.endsWith('/expert/login')) {
+    req.body.op = 'expert-login';
+  } else if (pathOnly.endsWith('/auth/register') || pathOnly === '/api/register' || pathOnly === '/register') {
+    req.body.op = 'register';
+  } else if (pathOnly.endsWith('/auth/login')) {
+    req.body.op = 'login';
+  }
+}
+
 export function repairApiPath(req) {
   const rawUrl = req.url || '/';
 
