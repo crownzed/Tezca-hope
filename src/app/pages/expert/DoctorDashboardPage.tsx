@@ -21,19 +21,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { apiFetch, wsUrl } from '../../lib/api';
+import { apiFetch } from '../../lib/api';
+import { useLiveChat, type LiveMessage } from '../../lib/liveChat';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES } from '../../routes';
 import { ExpertCustomerList, type ExpertPatientInboxRow } from '../../components/expert/ExpertCustomerList';
-
-type LiveMessage = {
-  id: string;
-  patientId: string;
-  senderUserId: string;
-  senderRole: 'expert' | 'patient';
-  content: string;
-  ts: number;
-};
 
 type PatientDetail = {
   patient: { id: string; email: string; name: string };
@@ -139,12 +131,19 @@ export function DoctorDashboardPage() {
   const [detail, setDetail] = useState<PatientDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [liveMsgs, setLiveMsgs] = useState<LiveMessage[]>([]);
   const [showAiContext, setShowAiContext] = useState(false);
   const [draft, setDraft] = useState('');
-  const [wsReady, setWsReady] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const live = useLiveChat({
+    token,
+    patientId,
+    historyUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
+    sendUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
+    senderRole: 'expert',
+    enabled: Boolean(token && patientId),
+    onIncoming: (m) => setPatientList((prev) => bumpPatientPreview(prev, m)),
+  });
   const [patientList, setPatientList] = useState<PatientRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -153,20 +152,17 @@ export function DoctorDashboardPage() {
     if (!token || !patientId) {
       setDetail(null);
       setLoadError('');
-      setLiveMsgs([]);
       return;
     }
     setLoading(true);
     apiFetch<PatientDetail>(`/api/expert/patients/${patientId}`, { token })
       .then((d) => {
         setDetail(d);
-        setLiveMsgs(d.liveMessages);
         setLoadError('');
       })
       .catch((e) => {
         setDetail(null);
         setLoadError(e instanceof Error ? e.message : 'Không tải được hồ sơ');
-        setLiveMsgs([]);
       })
       .finally(() => setLoading(false));
   }, [token, patientId]);
@@ -189,40 +185,20 @@ export function DoctorDashboardPage() {
   }, [loadPatientList]);
 
   useEffect(() => {
-    if (!token || !patientId) {
-      wsRef.current?.close();
-      wsRef.current = null;
-      setWsReady(false);
-      return;
-    }
-    const ws = new WebSocket(wsUrl(token));
-    wsRef.current = ws;
-    ws.onopen = () => {
-      setWsReady(true);
-      ws.send(JSON.stringify({ type: 'join', patientId }));
+    if (!token) return;
+    const refreshList = () => {
+      if (document.visibilityState === 'hidden') return;
+      apiFetch<{ patients: PatientRow[] }>('/api/expert/patients', { token })
+        .then((r) => setPatientList(r.patients || []))
+        .catch(() => {});
     };
-    ws.onmessage = (ev) => {
-      try {
-        const d = JSON.parse(ev.data as string) as { type: string; message?: LiveMessage };
-        if (d.type === 'live_message' && d.message) {
-          const lm = d.message;
-          setLiveMsgs((prev) => (prev.some((m) => m.id === lm.id) ? prev : [...prev, lm]));
-          setPatientList((prev) => bumpPatientPreview(prev, lm));
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    ws.onclose = () => setWsReady(false);
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [token, patientId]);
+    const id = window.setInterval(refreshList, 15000);
+    return () => clearInterval(id);
+  }, [token]);
 
   const emergencyCount = useMemo(() => countUrgentPatients(patientList), [patientList]);
 
-  const messages = useMemo(() => liveMsgs.map(liveToChatMsg), [liveMsgs]);
+  const messages = useMemo(() => live.messages.map(liveToChatMsg), [live.messages]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -260,17 +236,16 @@ export function DoctorDashboardPage() {
   const liveMode = Boolean(patientId && detail);
   const patientLabel = detail?.patient.name ?? (patientId ? `BN ${patientId.slice(0, 8)}…` : 'Chưa chọn khách hàng');
 
-  const sendDoctor = () => {
+  const sendDoctor = async () => {
     const t = draft.trim();
-    if (!t || !patientId || !liveMode || wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: 'message', patientId, text: t }));
-    setDraft('');
+    if (!t || !liveMode || !live.ready) return;
+    const ok = await live.send(t);
+    if (ok) setDraft('');
   };
 
-  const quickReply = (text: string) => {
-    if (!patientId || !liveMode || wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: 'message', patientId, text }));
-    setDraft('');
+  const quickReply = async (text: string) => {
+    if (!liveMode || !live.ready) return;
+    await live.send(text);
   };
 
   return (
@@ -286,7 +261,7 @@ export function DoctorDashboardPage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-800 m-0 truncate">Live chat · Doctor Desk</p>
               <p className="text-[11px] text-slate-500 m-0 truncate hidden sm:block">
-                Danh sách khách hàng bên trái · tin nhắn đồng bộ qua WebSocket
+                Danh sách khách hàng · {live.transportLabel}
               </p>
             </div>
             <button
@@ -356,11 +331,11 @@ export function DoctorDashboardPage() {
                   <p className="text-xs text-slate-500 m-0 mt-0.5">
                     {liveMode ? (
                       <>
-                        WebSocket:{' '}
-                        {wsReady ? (
-                          <span className="text-emerald-600 font-medium">đã kết nối</span>
+                        {live.transportLabel}
+                        {live.ready ? (
+                          <span className="text-emerald-600 font-medium"> · sẵn sàng</span>
                         ) : (
-                          <span className="text-amber-600">đang kết nối…</span>
+                          <span className="text-amber-600"> · đang tải…</span>
                         )}
                       </>
                     ) : (
@@ -438,12 +413,13 @@ export function DoctorDashboardPage() {
               </div>
 
               <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
+                {live.sendError && <p className="text-xs text-rose-600 mb-2 m-0">{live.sendError}</p>}
                 <div className="flex flex-wrap gap-2 mb-2">
                   <button
                     type="button"
                     onClick={() => quickReply('Bác sĩ gửi thực đơn mẫu trong ngày — em xem và phản hồi nhé.')}
                     className="text-xs font-medium px-3 py-1.5 rounded-full border border-teal-200 bg-white text-teal-800 hover:bg-teal-50 inline-flex items-center gap-1.5 disabled:opacity-40"
-                    disabled={!liveMode || !wsReady}
+                    disabled={!liveMode || !live.ready || live.sending}
                   >
                     <UtensilsCrossed className="w-3.5 h-3.5" />
                     Gửi thực đơn
@@ -452,7 +428,7 @@ export function DoctorDashboardPage() {
                     type="button"
                     onClick={() => quickReply('Nhắc bài tập thở 4-7-8 (4 phút) — làm tối nay trước khi ngủ.')}
                     className="text-xs font-medium px-3 py-1.5 rounded-full border border-teal-200 bg-white text-teal-800 hover:bg-teal-50 inline-flex items-center gap-1.5 disabled:opacity-40"
-                    disabled={!liveMode || !wsReady}
+                    disabled={!liveMode || !live.ready || live.sending}
                   >
                     <Wind className="w-3.5 h-3.5" />
                     Bài tập thở
@@ -465,14 +441,14 @@ export function DoctorDashboardPage() {
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendDoctor())}
                     placeholder={liveMode ? 'Nhắn cho bệnh nhân…' : 'Chọn khách hàng để nhắn…'}
                     className="flex-1 min-w-0 h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/25 bg-white disabled:bg-slate-100"
-                    disabled={!liveMode || !wsReady}
+                    disabled={!liveMode || !live.ready || live.sending}
                   />
                   <button
                     type="button"
                     onClick={sendDoctor}
                     className="h-11 w-11 shrink-0 rounded-xl bg-[#0c1929] text-white flex items-center justify-center hover:bg-slate-800 disabled:opacity-40"
                     aria-label="Gửi"
-                    disabled={!liveMode || !wsReady}
+                    disabled={!liveMode || !live.ready || live.sending}
                   >
                     <Send className="w-4 h-4" />
                   </button>

@@ -7,8 +7,10 @@ import {
   listBotMessagesForUser,
   replaceBotMessagesForUser,
   listLiveMessagesForPatient,
+  listLiveMessagesForPatientSince,
   getExpertsForPatient,
 } from '../db.js';
+import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { authMiddleware } from '../auth.js';
 import { aiChat, isAiConfigured } from '../ai.js';
 import { aiChatLimiter, aiPlanLimiter } from '../rateLimit.js';
@@ -91,8 +93,31 @@ userRouter.put('/me/bot-messages', requireUser, (req, res) => {
 });
 
 userRouter.get('/me/live-messages', requireUser, (req, res) => {
-  const list = listLiveMessagesForPatient(req.user.sub);
+  const since = req.query.since;
+  const list =
+    since != null && since !== ''
+      ? listLiveMessagesForPatientSince(req.user.sub, since)
+      : listLiveMessagesForPatient(req.user.sub);
   res.json({ messages: list });
+});
+
+userRouter.post('/me/live-messages', requireUser, (req, res) => {
+  const text = String((req.body || {}).text || '').trim();
+  if (!text) {
+    res.status(400).json({ error: 'Tin nhắn trống' });
+    return;
+  }
+  const msg = sendLiveChatMessage({
+    patientId: req.user.sub,
+    senderUserId: req.user.sub,
+    senderRole: 'patient',
+    content: text,
+  });
+  if (!msg) {
+    res.status(400).json({ error: 'Không gửi được' });
+    return;
+  }
+  res.status(201).json({ message: msg });
 });
 
 const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca.

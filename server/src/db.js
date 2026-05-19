@@ -431,6 +431,18 @@ export function listLiveMessagesForPatient(patientId) {
     .all(patientId);
 }
 
+/** Tin nhắn mới hơn `sinceTs` (ms) — dùng polling khi không có WebSocket. */
+export function listLiveMessagesForPatientSince(patientId, sinceTs) {
+  const since = Number(sinceTs) || 0;
+  return getDb()
+    .prepare(
+      `SELECT id, patient_id AS patientId, sender_user_id AS senderUserId,
+              sender_role AS senderRole, content, ts
+       FROM live_messages WHERE patient_id = ? AND ts > ? ORDER BY ts ASC`,
+    )
+    .all(patientId, since);
+}
+
 /** Tin nhắn live mới nhất theo từng bệnh nhân (cho danh sách chat chuyên gia). */
 export function getLastLiveMessageMap(patientIds) {
   const map = new Map();

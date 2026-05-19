@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { ROUTES } from '../routes';
-import { LogOut, LayoutGrid, MessageSquare, SlidersHorizontal } from 'lucide-react';
+import { LogOut, LayoutGrid, MessageSquare, SlidersHorizontal, CalendarRange } from 'lucide-react';
 import { useExpertAuth } from '../context/ExpertAuthContext';
 
 export function ExpertLayout() {
@@ -65,6 +65,17 @@ export function ExpertLayout() {
             >
               <MessageSquare size={14} />
               Doctor Desk
+            </Link>
+            <Link
+              to={ROUTES.expert.weeklyReport}
+              className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 ${
+                pathname.startsWith(ROUTES.expert.weeklyReport)
+                  ? 'text-white bg-slate-800'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+              }`}
+            >
+              <CalendarRange size={14} />
+              Báo cáo tuần
             </Link>
             <Link
               to={ROUTES.expert.settings}

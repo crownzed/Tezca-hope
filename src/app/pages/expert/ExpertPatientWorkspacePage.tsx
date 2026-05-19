@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
   LineChart,
@@ -12,18 +12,10 @@ import {
   Bar,
 } from 'recharts';
 import { ArrowLeft, Send } from 'lucide-react';
-import { apiFetch, wsUrl } from '../../lib/api';
+import { apiFetch } from '../../lib/api';
+import { useLiveChat } from '../../lib/liveChat';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES } from '../../routes';
-
-type LiveMessage = {
-  id: string;
-  patientId: string;
-  senderUserId: string;
-  senderRole: 'expert' | 'patient';
-  content: string;
-  ts: number;
-};
 
 type PatientDetail = {
   patient: { id: string; email: string; name: string };
@@ -38,17 +30,22 @@ export function ExpertPatientWorkspacePage() {
   const { token, user } = useExpertAuth();
   const [detail, setDetail] = useState<PatientDetail | null>(null);
   const [error, setError] = useState('');
-  const [liveMsgs, setLiveMsgs] = useState<LiveMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [wsReady, setWsReady] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+
+  const live = useLiveChat({
+    token,
+    patientId,
+    historyUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
+    sendUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
+    senderRole: 'expert',
+    enabled: Boolean(token && patientId),
+  });
 
   const load = useCallback(() => {
     if (!token || !patientId) return;
     apiFetch<PatientDetail>(`/api/expert/patients/${patientId}`, { token })
       .then((d) => {
         setDetail(d);
-        setLiveMsgs(d.liveMessages);
         setError('');
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Không tải được hồ sơ'));
@@ -57,31 +54,6 @@ export function ExpertPatientWorkspacePage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  useEffect(() => {
-    if (!token || !patientId) return;
-    const ws = new WebSocket(wsUrl(token));
-    wsRef.current = ws;
-    ws.onopen = () => {
-      setWsReady(true);
-      ws.send(JSON.stringify({ type: 'join', patientId }));
-    };
-    ws.onmessage = (ev) => {
-      try {
-        const d = JSON.parse(ev.data as string) as { type: string; message?: LiveMessage };
-        if (d.type === 'live_message' && d.message) {
-          setLiveMsgs((prev) => (prev.some((m) => m.id === d.message!.id) ? prev : [...prev, d.message!]));
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    ws.onclose = () => setWsReady(false);
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
-  }, [token, patientId]);
 
   const bmiChart = useMemo(
     () => [...(detail?.bmi ?? [])].sort((a, b) => a.date.localeCompare(b.date)).map((e) => ({ date: e.date, bmi: e.bmi })),
@@ -96,11 +68,11 @@ export function ExpertPatientWorkspacePage() {
     [detail?.moods],
   );
 
-  const sendLive = () => {
+  const sendLive = async () => {
     const text = draft.trim();
-    if (!text || !patientId || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: 'message', patientId, text }));
-    setDraft('');
+    if (!text || !live.ready) return;
+    const ok = await live.send(text);
+    if (ok) setDraft('');
   };
 
   if (!patientId) return null;
@@ -129,7 +101,8 @@ export function ExpertPatientWorkspacePage() {
             Mở Doctor Desk
           </Link>
           <span>
-            Chat: {wsReady ? <span className="text-teal-400">đã kết nối</span> : 'đang kết nối…'}
+            {live.transportLabel}
+            {live.ready ? <span className="text-teal-400"> · sẵn sàng</span> : ' · đang tải…'}
           </span>
         </span>
       </div>
@@ -140,10 +113,13 @@ export function ExpertPatientWorkspacePage() {
         <section className="xl:col-span-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 flex flex-col min-h-[380px]">
           <h2 className="text-sm font-semibold text-teal-400 mb-3">Trò chuyện trực tiếp</h2>
           <div className="flex-1 overflow-y-auto space-y-2 mb-3 rounded-xl bg-slate-950/50 p-3 max-h-[320px]">
-            {liveMsgs.length === 0 && (
+            {live.sendError && (
+              <p className="text-xs text-rose-400 text-center py-2 m-0">{live.sendError}</p>
+            )}
+            {!live.loading && live.messages.length === 0 && (
               <p className="text-xs text-slate-500 text-center py-8">Chưa có tin nhắn. Hãy nhắn để bệnh nhân thấy trên app.</p>
             )}
-            {liveMsgs.map((m) => {
+            {live.messages.map((m) => {
               const mine = m.senderRole === 'expert' && user && m.senderUserId === user.id;
               return (
                 <div
@@ -161,14 +137,16 @@ export function ExpertPatientWorkspacePage() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendLive()}
-              placeholder="Nhắn cho bệnh nhân…"
-              className="flex-1 rounded-xl bg-slate-950 border border-slate-600 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void sendLive())}
+              placeholder={live.ready ? 'Nhắn cho bệnh nhân…' : 'Đang kết nối…'}
+              disabled={!live.ready || live.sending}
+              className="flex-1 rounded-xl bg-slate-950 border border-slate-600 px-4 py-2 text-sm text-white placeholder:text-slate-500 disabled:opacity-50"
             />
             <button
               type="button"
               onClick={sendLive}
-              className="rounded-xl bg-teal-500 px-4 py-2 text-slate-950 hover:bg-teal-400"
+              disabled={!live.ready || live.sending || !draft.trim()}
+              className="rounded-xl bg-teal-500 px-4 py-2 text-slate-950 hover:bg-teal-400 disabled:opacity-40"
               aria-label="Gửi"
             >
               <Send size={18} />

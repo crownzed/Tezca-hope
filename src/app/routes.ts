@@ -32,6 +32,7 @@ export const ROUTES = {
     login: '/dang-nhap/chuyen-gia',
     root: '/expert',
     doctorDesk: '/expert/doctor-desk',
+    weeklyReport: '/expert/bao-cao-tuan',
     settings: '/expert/settings',
   },
 } as const;

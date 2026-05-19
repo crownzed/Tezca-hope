@@ -25,6 +25,7 @@ import { ExpertPatientListPage } from './pages/expert/ExpertPatientListPage';
 import { ExpertPatientWorkspacePage } from './pages/expert/ExpertPatientWorkspacePage';
 import { DoctorDashboardPage } from './pages/expert/DoctorDashboardPage';
 import { ExpertSettingsPage } from './pages/expert/ExpertSettingsPage';
+import { ExpertWeeklyReportPage } from './pages/expert/ExpertWeeklyReportPage';
 
 export default function App() {
   return (
@@ -72,6 +73,7 @@ export default function App() {
           <Route index element={<ExpertPatientListPage />} />
           <Route path="doctor-desk" element={<DoctorDashboardPage />} />
           <Route path="doctor-desk/:patientId" element={<DoctorDashboardPage />} />
+          <Route path="bao-cao-tuan" element={<ExpertWeeklyReportPage />} />
           <Route path="settings" element={<ExpertSettingsPage />} />
           <Route path="patients/:patientId" element={<ExpertPatientWorkspacePage />} />
           <Route path="*" element={<Navigate to={ROUTES.expert.root} replace />} />

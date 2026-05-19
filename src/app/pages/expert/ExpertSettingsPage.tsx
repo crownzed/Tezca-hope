@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { ArrowLeft, LayoutGrid, MessageSquare, Shield } from 'lucide-react';
+import { ArrowLeft, CalendarRange, LayoutGrid, MessageSquare, Shield } from 'lucide-react';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES } from '../../routes';
 
@@ -30,6 +30,14 @@ export function ExpertSettingsPage() {
       </div>
 
       <nav className="rounded-2xl border border-slate-800 bg-slate-900/60 divide-y divide-slate-800 overflow-hidden">
+        <Link
+          to={ROUTES.expert.weeklyReport}
+          className="flex items-center gap-3 px-4 py-3.5 text-slate-200 hover:bg-slate-800/80 transition-colors"
+        >
+          <CalendarRange className="w-5 h-5 text-teal-400 shrink-0" />
+          <span className="font-medium">Báo cáo theo tuần</span>
+          <span className="text-xs text-slate-500 ml-auto">Tổng hợp hoạt động</span>
+        </Link>
         <Link
           to={ROUTES.expert.doctorDesk}
           className="flex items-center gap-3 px-4 py-3.5 text-slate-200 hover:bg-slate-800/80 transition-colors"

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { ChevronRight, UserPlus, UserMinus } from 'lucide-react';
+import { CalendarRange, ChevronRight, UserPlus, UserMinus } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES, expertPatientPath } from '../../routes';
@@ -80,6 +80,13 @@ export function ExpertPatientListPage() {
           <span className="text-teal-400/90">không thay cho khám trực tiếp hay kết luận y khoa.</span>
         </p>
         <div className="flex flex-wrap gap-2 mt-4">
+          <Link
+            to={ROUTES.expert.weeklyReport}
+            className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 bg-slate-800 text-teal-300 border border-teal-500/30 hover:bg-slate-800/90 transition-colors"
+          >
+            <CalendarRange size={16} />
+            Báo cáo tuần
+          </Link>
           <Link
             to={ROUTES.expert.doctorDesk}
             className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30 transition-colors"

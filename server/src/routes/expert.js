@@ -9,14 +9,26 @@ import {
   listMoodsForUser,
   listBotMessagesForUser,
   listLiveMessagesForPatient,
+  listLiveMessagesForPatientSince,
   getLastLiveMessageMap,
   assignExpertToPatient,
   removeExpertPatientAssignment,
 } from '../db.js';
 import { authMiddleware } from '../auth.js';
+import { buildWeeklyReport } from '../weeklyReport.js';
+import { sendLiveChatMessage } from '../liveChatDelivery.js';
 
 export const expertRouter = Router();
 const requireExpert = authMiddleware('expert');
+
+/** Báo cáo tuần — ?weekStart=YYYY-MM-DD (thứ Hai), mặc định tuần hiện tại */
+expertRouter.get('/reports/weekly', requireExpert, (req, res) => {
+  const expertId = req.user.sub;
+  const weekStart = String(req.query.weekStart || '').trim() || undefined;
+  const report = buildWeeklyReport(expertId, weekStart);
+  pushAudit({ actorId: expertId, role: 'expert', action: 'weekly_report', meta: { from: report.period.from } });
+  res.json(report);
+});
 
 expertRouter.get('/me', requireExpert, (req, res) => {
   res.json({
@@ -78,6 +90,47 @@ expertRouter.post('/patients/assign', requireExpert, (req, res) => {
   }
   pushAudit({ actorId: expertId, role: 'expert', action: 'assign_patient', patientId: u.id, meta: { email } });
   res.status(201).json({ patient: { id: u.id, email: u.email, name: u.name } });
+});
+
+expertRouter.get('/patients/:patientId/live-messages', requireExpert, (req, res) => {
+  const expertId = req.user.sub;
+  const { patientId } = req.params;
+  if (!canExpertAccessPatient(expertId, patientId)) {
+    res.status(403).json({ error: 'Không được truy cập' });
+    return;
+  }
+  const since = req.query.since;
+  const messages =
+    since != null && since !== ''
+      ? listLiveMessagesForPatientSince(patientId, since)
+      : listLiveMessagesForPatient(patientId);
+  res.json({ messages });
+});
+
+expertRouter.post('/patients/:patientId/live-messages', requireExpert, (req, res) => {
+  const expertId = req.user.sub;
+  const { patientId } = req.params;
+  if (!canExpertAccessPatient(expertId, patientId)) {
+    res.status(403).json({ error: 'Không được truy cập' });
+    return;
+  }
+  const text = String((req.body || {}).text || '').trim();
+  if (!text) {
+    res.status(400).json({ error: 'Tin nhắn trống' });
+    return;
+  }
+  const msg = sendLiveChatMessage({
+    patientId,
+    senderUserId: expertId,
+    senderRole: 'expert',
+    content: text,
+  });
+  if (!msg) {
+    res.status(400).json({ error: 'Không gửi được' });
+    return;
+  }
+  pushAudit({ actorId: expertId, role: 'expert', action: 'live_message', patientId });
+  res.status(201).json({ message: msg });
 });
 
 expertRouter.delete('/patients/:patientId/assignment', requireExpert, (req, res) => {

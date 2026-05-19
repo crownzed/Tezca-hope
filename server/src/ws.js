@@ -1,5 +1,6 @@
 import { verifyToken } from './auth.js';
-import { canExpertAccessPatient, insertLiveMessage } from './db.js';
+import { canExpertAccessPatient } from './db.js';
+import { registerLiveRoomBroadcast, sendLiveChatMessage } from './liveChatDelivery.js';
 
 /** @type {Map<string, Set<import('ws').WebSocket>>} */
 const rooms = new Map();
@@ -27,6 +28,8 @@ function broadcast(patientId, payload, exceptWs) {
     if (client !== exceptWs && client.readyState === 1) client.send(raw);
   }
 }
+
+registerLiveRoomBroadcast(broadcast);
 
 export function attachWebSocketServer(wss) {
   wss.on('connection', (ws, req) => {
@@ -68,15 +71,18 @@ export function attachWebSocketServer(wss) {
         if (role === 'expert' && !canExpertAccessPatient(userId, patientId)) return;
 
         const senderRole = role === 'expert' ? 'expert' : 'patient';
-        const msg = insertLiveMessage({
-          patientId,
-          senderUserId: userId,
-          senderRole,
-          content: text.trim().slice(0, 4000),
-        });
-        const out = { type: 'live_message', message: msg };
-        ws.send(JSON.stringify(out));
-        broadcast(patientId, out, ws);
+        const msg = sendLiveChatMessage(
+          {
+            patientId,
+            senderUserId: userId,
+            senderRole,
+            content: text,
+          },
+          ws,
+        );
+        if (msg) {
+          ws.send(JSON.stringify({ type: 'live_message', message: msg }));
+        }
         return;
       }
     });
