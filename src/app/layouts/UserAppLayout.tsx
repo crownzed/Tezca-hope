@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router';
 import { ROUTES } from '../routes';
@@ -13,7 +14,7 @@ import {
   Trophy,
   Lock,
 } from 'lucide-react';
-import { usePatientAuth } from '../context/PatientAuthContext';
+import { usePatientSession } from '../lib/patientSessionGate';
 import { tezcaTheme } from '../lib/tezcaTheme';
 
 const nav = [
@@ -66,7 +67,11 @@ function userInitials(name: string): string {
 }
 
 export function UserAppLayout() {
-  const { user, token, sessionReady, logout } = usePatientAuth();
+  const { user, token, sessionReady, isAuthenticated, isVerifying, logout } = usePatientSession();
+
+  useEffect(() => {
+    if (sessionReady && token && !user) logout();
+  }, [sessionReady, token, user, logout]);
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: tezcaTheme.bg }}>
@@ -91,11 +96,11 @@ export function UserAppLayout() {
           ))}
         </nav>
         <div className="mt-6 pt-4 border-t px-2 space-y-2" style={{ borderColor: 'rgba(26, 32, 44, 0.08)' }}>
-          {!sessionReady && token ? (
+          {isVerifying ? (
             <p className="text-xs opacity-50 m-0 px-1" style={{ color: '#1A202C' }}>
               Đang xác thực tài khoản…
             </p>
-          ) : user ? (
+          ) : isAuthenticated && user ? (
             <div
               className="rounded-xl p-3 space-y-2"
               style={{ backgroundColor: 'rgba(45, 212, 191, 0.1)', border: '1px solid rgba(45, 212, 191, 0.25)' }}

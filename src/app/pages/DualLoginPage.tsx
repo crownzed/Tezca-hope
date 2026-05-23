@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { resolvePatientPostLoginPath } from '../lib/patientSessionGate';
 import { Heart, Stethoscope, ArrowRight } from 'lucide-react';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useExpertAuth } from '../context/ExpertAuthContext';
@@ -135,6 +136,7 @@ export function PatientLoginPage() {
 
 function PatientLoginPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login, register, logout } = usePatientAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -187,7 +189,8 @@ function PatientLoginPanel() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name || undefined);
-      navigate(ROUTES.app.root, { replace: true });
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(resolvePatientPostLoginPath(from), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi');
     } finally {
@@ -325,6 +328,7 @@ export function ExpertLoginPage() {
 
 function ExpertLoginPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login, logout } = useExpertAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -372,7 +376,12 @@ function ExpertLoginPanel() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate(ROUTES.expert.doctorDesk, { replace: true });
+      const from = (location.state as { from?: string } | null)?.from;
+      const target =
+        typeof from === 'string' && from.startsWith('/expert') && !from.startsWith('//')
+          ? from
+          : ROUTES.expert.doctorDesk;
+      navigate(target, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi');
     } finally {

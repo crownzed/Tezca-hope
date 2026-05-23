@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Activity,
@@ -8,38 +8,35 @@ import {
   Plus,
   Quote,
   TrendingDown,
+  Trash2,
   Trophy,
   UtensilsCrossed,
 } from 'lucide-react';
-import { usePatientAuth } from '../../context/PatientAuthContext';
+import { usePatientSession } from '../../lib/patientSessionGate';
 import { deriveGamificationState } from '../../lib/gamification';
 import { loadBmiEntries } from '../../lib/healthStorage';
+import { MeatCatalogReference, MeatTypePicker } from '../../components/MeatNutritionPanel';
 import {
-  estimateMacrosFromInput,
-  getTargetNutrition,
-  loadDashboardExercises,
-  loadDailyProgressLocal,
-  loadFoodLog,
-  saveDailyProgressLocal,
-  saveDashboardExercises,
-  saveFoodLog,
+  analyzeFoodInput,
+  estimateFromMeatId,
+  foodLogForDay,
+  nutritionProgressPct,
+  resolveDailyNutritionTargets,
   sumNutrition,
+  todayIsoLocal,
   type DashboardExercise,
+  type FoodEstimateResult,
   type FoodLogItem,
 } from '../../lib/dashboardStorage';
+import { useDisciplineDataScope } from '../../lib/disciplineDataScope';
 import { ROUTES } from '../../routes';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
-import { apiFetch } from '../../lib/api';
-import type { TrainingPlanResponse } from '../../lib/trainingPlan';
-import { syncTrainingProgressToServer } from '../../lib/syncTrainingProgress';
 import {
   applyDayProgress,
   buildWeekDaysWithIso,
   countDayDone,
   extractDayProgress,
   isoDateForWeekDayId,
-  normalizeDailyProgressFromApi,
-  type DailyProgressMap,
 } from '../../lib/trainingDayProgress';
 
 const MOTIVATIONAL_QUOTES = [
@@ -91,21 +88,28 @@ const DASHBOARD_STYLES = `
 `;
 
 export function PatientDashboardPage() {
-  const { user, token, sessionReady } = usePatientAuth();
-  const userId = user?.id ?? null;
-  const isLoggedIn = Boolean(token && user);
+  const { user, token, isAuthenticated, isAnonymous, isVerifying } = usePatientSession();
 
-  const [baseExercises, setBaseExercises] = useState<DashboardExercise[]>(() => loadDashboardExercises(userId));
-  const [dailyProgress, setDailyProgress] = useState<DailyProgressMap>(() => loadDailyProgressLocal(userId));
-  const [foodLog, setFoodLog] = useState<FoodLogItem[]>(() => loadFoodLog(userId));
+  const discipline = useDisciplineDataScope({ userId: user?.id ?? null, token });
+  const {
+    canSync,
+    baseExercises,
+    dailyProgress,
+    setDailyProgress,
+    foodLog,
+    setFoodLog,
+    trainingStatus,
+    expertTrainingNote,
+    syncState,
+    pushProgress,
+  } = discipline;
+
   const [foodInput, setFoodInput] = useState('');
+  const [meatPick, setMeatPick] = useState<Extract<FoodEstimateResult, { kind: 'pick_meat' }> | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [quote, setQuote] = useState(MOTIVATIONAL_QUOTES[0]!);
   const weekDays = useMemo(() => buildWeekDaysWithIso(), []);
   const [activeDay, setActiveDay] = useState(() => weekDays.find((d) => d.isToday)?.id ?? 1);
-  const [trainingStatus, setTrainingStatus] = useState<'pending_review' | 'approved' | null>(null);
-  const [expertTrainingNote, setExpertTrainingNote] = useState('');
-  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle');
 
   const activeIso = useMemo(
     () => isoDateForWeekDayId(activeDay, weekDays),
@@ -116,78 +120,22 @@ export function PatientDashboardPage() {
     () => applyDayProgress(baseExercises, dailyProgress[activeIso]),
     [baseExercises, dailyProgress, activeIso],
   );
-  const targetNutrition = getTargetNutrition();
-  const nutrition = useMemo(() => sumNutrition(foodLog), [foodLog]);
-  const gam = deriveGamificationState();
-  const streak = gam.stats.moodStreak;
-
   const bmiList = useMemo(() => loadBmiEntries().sort((a, b) => b.date.localeCompare(a.date)), []);
   const latestBmi = bmiList[0];
   const weightDelta = weightDeltaText(bmiList);
 
-  useEffect(() => {
-    setBaseExercises(loadDashboardExercises(userId));
-    setDailyProgress(loadDailyProgressLocal(userId));
-    setFoodLog(loadFoodLog(userId));
-    setTrainingStatus(null);
-    setExpertTrainingNote('');
-    setSyncState('idle');
-  }, [userId]);
-
-  useEffect(() => {
-    if (!token) return;
-    apiFetch<TrainingPlanResponse>('/api/me/training-plan', { token })
-      .then((r) => {
-        if (!r.plan?.exercises?.length) return;
-        setTrainingStatus(r.plan.status);
-        setExpertTrainingNote(r.plan.expertNote || '');
-        setBaseExercises(r.plan.exercises);
-        const serverDaily = normalizeDailyProgressFromApi(r.plan.dailyProgress);
-        setDailyProgress((prev) => {
-          const merged = { ...prev, ...serverDaily };
-          saveDailyProgressLocal(userId, merged);
-          return merged;
-        });
-        saveDashboardExercises(userId, r.plan.exercises);
-      })
-      .catch(() => {
-        /* giữ bản local */
-      });
-  }, [token, userId]);
-
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const pushProgressToServer = useCallback(
-    (dayExercises: DashboardExercise[], immediate = false) => {
-      if (!token) return;
-      const run = () => {
-        setSyncState('syncing');
-        void syncTrainingProgressToServer(token, activeIso, dayExercises, baseExercises).then((ok) => {
-          setSyncState(ok ? 'idle' : 'error');
-        });
-      };
-      if (immediate) {
-        if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-        run();
-        return;
-      }
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-      syncTimerRef.current = setTimeout(run, 500);
-    },
-    [token, activeIso, baseExercises],
+  const todayFoodIso = todayIsoLocal();
+  const todayFoodLog = useMemo(
+    () => foodLogForDay(foodLog, todayFoodIso),
+    [foodLog, todayFoodIso],
   );
-
-  useEffect(() => {
-    saveDashboardExercises(userId, baseExercises);
-  }, [baseExercises, userId]);
-
-  useEffect(() => {
-    saveDailyProgressLocal(userId, dailyProgress);
-  }, [dailyProgress, userId]);
-
-  useEffect(() => {
-    saveFoodLog(userId, foodLog);
-  }, [foodLog, userId]);
+  const targetNutrition = useMemo(
+    () => resolveDailyNutritionTargets(latestBmi),
+    [latestBmi],
+  );
+  const nutrition = useMemo(() => sumNutrition(todayFoodLog), [todayFoodLog]);
+  const gam = deriveGamificationState();
+  const streak = gam.stats.moodStreak;
 
   const completedCount = exercises.filter((ex) => ex.completed).length;
   const isAllDone = exercises.length > 0 && completedCount === exercises.length;
@@ -204,31 +152,59 @@ export function PatientDashboardPage() {
     setShowCelebration(false);
   }, [isAllDone, exercises.length]);
 
+  const appendFoodLog = (item: Omit<FoodLogItem, 'id' | 'dateIso'>) => {
+    setFoodLog((prev) => [
+      { ...item, id: Date.now(), dateIso: todayFoodIso },
+      ...prev,
+    ]);
+  };
+
   const handleAddFood = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!foodInput.trim()) return;
-    const est = estimateMacrosFromInput(foodInput);
-    const newFood: FoodLogItem = {
-      id: Date.now(),
-      name: foodInput.trim(),
-      pro: est.pro,
-      carb: est.carb,
-      cal: est.cal,
-    };
-    setFoodLog((prev) => [newFood, ...prev]);
+    const raw = foodInput.trim();
+    if (!raw) return;
+
+    const analysis = analyzeFoodInput(raw);
+    if (analysis.kind === 'pick_meat') {
+      setMeatPick(analysis);
+      return;
+    }
+
+    appendFoodLog({
+      name: analysis.displayName || raw,
+      pro: analysis.macros.pro,
+      carb: analysis.macros.carb,
+      cal: analysis.macros.cal,
+    });
     setFoodInput('');
+    setMeatPick(null);
+  };
+
+  const confirmMeatPick = (meatId: string) => {
+    if (!meatPick) return;
+    const result = estimateFromMeatId(meatPick.input, meatId);
+    if (result.kind !== 'ready') return;
+    appendFoodLog({
+      name: result.displayName,
+      pro: result.macros.pro,
+      carb: result.macros.carb,
+      cal: result.macros.cal,
+    });
+    setFoodInput('');
+    setMeatPick(null);
+  };
+
+  const removeFood = (id: number) => {
+    setFoodLog((prev) => prev.filter((f) => f.id !== id));
   };
 
   const updateDayExercises = useCallback(
     (nextDayList: DashboardExercise[], immediate: boolean) => {
       const dayPatch = extractDayProgress(nextDayList);
-      setDailyProgress((prev) => {
-        const next = { ...prev, [activeIso]: dayPatch };
-        return next;
-      });
-      pushProgressToServer(nextDayList, immediate);
+      setDailyProgress((prev) => ({ ...prev, [activeIso]: dayPatch }));
+      pushProgress(activeIso, nextDayList, immediate);
     },
-    [activeIso, pushProgressToServer],
+    [activeIso, pushProgress, setDailyProgress],
   );
 
   const toggleExercise = useCallback(
@@ -258,11 +234,7 @@ export function PatientDashboardPage() {
       <style dangerouslySetInnerHTML={{ __html: DASHBOARD_STYLES }} />
 
       <div className="p-4 md:p-8 flex flex-col items-center min-h-full">
-        {!sessionReady && token ? (
-          <p className="text-sm mb-4 opacity-70 m-0">Đang tải tài khoản…</p>
-        ) : null}
-
-        {!isLoggedIn && sessionReady && (
+        {isAnonymous && !isVerifying && (
           <div
             className="w-full max-w-6xl mb-6 rounded-2xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3"
             style={{
@@ -286,7 +258,7 @@ export function PatientDashboardPage() {
         <header className="w-full max-w-6xl mb-6 md:mb-8 flex flex-wrap justify-between items-end gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest m-0 mb-1" style={{ color: tezcaTheme.accentDark }}>
-              {isLoggedIn && firstName ? `Xin chào, ${firstName}` : 'Tezca'}
+              {isAuthenticated && firstName ? `Xin chào, ${firstName}` : 'Tezca'}
             </p>
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter m-0">
               TRUNG TÂM <span style={{ color: tezcaTheme.accent }}>KỶ LUẬT</span>
@@ -357,10 +329,18 @@ export function PatientDashboardPage() {
               </div>
 
               <div className="mb-6 flex-1 flex flex-col min-h-0">
-                <div className="flex items-center gap-2 mb-4">
-                  <UtensilsCrossed className="text-emerald-600" size={20} />
-                  <h3 className="text-sm font-bold uppercase tracking-wider m-0 opacity-80">Trạm Nạp Năng Lượng</h3>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2">
+                    <UtensilsCrossed className="text-emerald-600" size={20} />
+                    <h3 className="text-sm font-bold uppercase tracking-wider m-0 opacity-80">Trạm Nạp Năng Lượng</h3>
+                  </div>
+                  <span className="text-[10px] font-medium opacity-50 uppercase tracking-wide">Hôm nay</span>
                 </div>
+                {latestBmi && (
+                  <p className="text-[11px] m-0 mb-3 opacity-60">
+                    Mục tiêu theo cân nặng {latestBmi.weightKg.toFixed(1)} kg · BMI {latestBmi.bmi.toFixed(1)}
+                  </p>
+                )}
 
                 <div className="mb-5 space-y-3">
                   <div>
@@ -373,7 +353,7 @@ export function PatientDashboardPage() {
                     <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                       <div
                         className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min((nutrition.cal / targetNutrition.cal) * 100, 100)}%` }}
+                        style={{ width: `${nutritionProgressPct(nutrition.cal, targetNutrition.cal)}%` }}
                       />
                     </div>
                   </div>
@@ -386,7 +366,7 @@ export function PatientDashboardPage() {
                       <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                         <div
                           className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min((nutrition.pro / targetNutrition.pro) * 100, 100)}%` }}
+                          style={{ width: `${nutritionProgressPct(nutrition.pro, targetNutrition.pro)}%` }}
                         />
                       </div>
                     </div>
@@ -398,17 +378,29 @@ export function PatientDashboardPage() {
                       <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                         <div
                           className="bg-orange-500 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min((nutrition.carb / targetNutrition.carb) * 100, 100)}%` }}
+                          style={{ width: `${nutritionProgressPct(nutrition.carb, targetNutrition.carb)}%` }}
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
+                <MeatCatalogReference />
+
+                {meatPick && (
+                  <MeatTypePicker
+                    input={meatPick.input}
+                    grams={meatPick.grams}
+                    options={meatPick.options}
+                    onSelect={confirmMeatPick}
+                    onCancel={() => setMeatPick(null)}
+                  />
+                )}
+
                 <form onSubmit={handleAddFood} className="flex gap-2 mb-4">
                   <input
                     type="text"
-                    placeholder="Nhập món (VD: 200g ức gà...)"
+                    placeholder="VD: 200g ức gà · 150g heo nạc · gà (chọn loại)"
                     value={foodInput}
                     onChange={(e) => setFoodInput(e.target.value)}
                     className="flex-1 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors border"
@@ -423,20 +415,34 @@ export function PatientDashboardPage() {
                   </button>
                 </form>
 
-                <div className="flex-1 overflow-y-auto space-y-2 pr-2 tezca-dash-scrollbar min-h-[100px] max-h-[120px]">
-                  {foodLog.map((food) => (
-                    <div
-                      key={food.id}
-                      className="flex justify-between items-center p-2.5 rounded-lg border text-sm tezca-animate-fade-in"
-                      style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
-                    >
-                      <span className="font-medium truncate pr-2">{food.name}</span>
-                      <div className="flex gap-3 text-xs shrink-0">
-                        <span className="text-blue-600">{food.pro}g P</span>
-                        <span className="text-emerald-600 font-bold">{food.cal} cal</span>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2 tezca-dash-scrollbar min-h-[100px] max-h-[140px]">
+                  {todayFoodLog.length === 0 ? (
+                    <p className="text-xs opacity-50 m-0 px-1">Chưa ghi món hôm nay.</p>
+                  ) : (
+                    todayFoodLog.map((food) => (
+                      <div
+                        key={food.id}
+                        className="flex justify-between items-center gap-2 p-2.5 rounded-lg border text-sm tezca-animate-fade-in"
+                        style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
+                      >
+                        <span className="font-medium truncate min-w-0 flex-1">{food.name}</span>
+                        <div className="flex items-center gap-2 text-xs shrink-0">
+                          <span className="text-blue-600">{food.pro}g P</span>
+                          <span className="text-orange-600">{food.carb}g C</span>
+                          <span className="text-emerald-600 font-bold">{food.cal}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFood(food.id)}
+                            className="p-1 rounded-md border-0 cursor-pointer opacity-50 hover:opacity-100"
+                            style={{ color: tezcaTheme.text }}
+                            aria-label={`Xóa ${food.name}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -483,10 +489,10 @@ export function PatientDashboardPage() {
                         {expertTrainingNote}
                       </span>
                     )}
-                    {token && syncState === 'syncing' && (
+                    {canSync && syncState === 'syncing' && (
                       <span className="block text-xs mt-1 opacity-50">Đang lưu tiến độ…</span>
                     )}
-                    {token && syncState === 'error' && (
+                    {canSync && syncState === 'error' && (
                       <span className="block text-rose-600 text-xs mt-1">Không lưu được tiến độ — thử lại sau</span>
                     )}
                   </p>

@@ -29,7 +29,7 @@ import { mockAiReply } from '../../lib/mockAi';
 import { apiFetch } from '../../lib/api';
 import { polishAiText } from '../../lib/polishAiText';
 import { simulateTextStream, streamAiChat } from '../../lib/streamAiChat';
-import { usePatientAuth } from '../../context/PatientAuthContext';
+import { usePatientSession } from '../../lib/patientSessionGate';
 import { ROUTES } from '../../routes';
 import { ChatHistoryPanel } from '../../components/ChatHistoryPanel';
 
@@ -54,9 +54,9 @@ const SUGGESTIONS = [
 ];
 
 export function AiChatPage() {
-  const { token, user, sessionReady } = usePatientAuth();
+  const { token, user, sessionReady, isAuthenticated } = usePatientSession();
   const userId = user?.id ?? null;
-  const canPersist = Boolean(token && userId);
+  const canPersist = isAuthenticated;
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);

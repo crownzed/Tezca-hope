@@ -6,7 +6,8 @@ import { recordPlanGenerated } from '../../lib/gamification';
 import { apiFetch } from '../../lib/api';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { parseExercisesFromPlanMarkdown } from '../../lib/planToExercises';
-import { loadDashboardExercises, saveDashboardExercises } from '../../lib/dashboardStorage';
+import { saveDashboardExercises } from '../../lib/dashboardStorage';
+import { adoptGuestDisciplineDataIntoAccount } from '../../lib/disciplineDataScope';
 import { simulateTextStream } from '../../lib/streamAiChat';
 
 export function PlansPage() {
@@ -92,7 +93,9 @@ export function PlansPage() {
           body: JSON.stringify({ plan }),
         },
       );
-      saveDashboardExercises(user?.id ?? null, r.plan.exercises);
+      const scopeId = user?.id ?? null;
+      if (scopeId) adoptGuestDisciplineDataIntoAccount(scopeId);
+      saveDashboardExercises(scopeId, r.plan.exercises);
       setIntegrateMsg('Đã tích hợp vào Chiến dịch tập luyện. Chuyên gia có thể xem và chỉnh sửa trước khi duyệt.');
     } catch (e) {
       setIntegrateMsg(e instanceof Error ? e.message : 'Không tích hợp được');

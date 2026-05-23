@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
-import { ROUTES } from '../../routes';
 import { Send, Stethoscope } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useLiveChat } from '../../lib/liveChat';
-import { usePatientAuth } from '../../context/PatientAuthContext';
+import { usePatientSession } from '../../lib/patientSessionGate';
 
 type CareExpert = { id: string; name: string; email: string };
 
@@ -13,7 +11,7 @@ function formatClock(ts: number) {
 }
 
 export function PatientExpertChatPage() {
-  const { token, user } = usePatientAuth();
+  const { token, user } = usePatientSession();
   const [draft, setDraft] = useState('');
   const [experts, setExperts] = useState<CareExpert[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -45,23 +43,6 @@ export function PatientExpertChatPage() {
     const ok = await live.send(text);
     if (ok) setDraft('');
   };
-
-  if (!user || !token) {
-    return (
-      <div className="max-w-lg mx-auto py-12 text-center space-y-4">
-        <p className="opacity-80" style={{ color: '#1A202C' }}>
-          Đăng nhập để trò chuyện với chuyên gia qua server.
-        </p>
-        <Link
-          to={ROUTES.app.login}
-          className="inline-block rounded-full px-8 py-3 font-semibold text-white"
-          style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
-        >
-          Đăng nhập
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-xl mx-auto flex flex-col" style={{ minHeight: 'calc(100vh - 8rem)' }}>

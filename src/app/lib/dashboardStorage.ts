@@ -1,4 +1,27 @@
 import type { DailyProgressMap } from './trainingDayProgress';
+import {
+  defaultFoodLogSeed,
+  normalizeFoodLog,
+  type FoodLogItem,
+  type NutritionTotals,
+} from './nutritionEngine';
+
+export type { FoodLogItem, NutritionTotals } from './nutritionEngine';
+export {
+  analyzeFoodInput,
+  estimateFromMeatId,
+  estimateMacrosFromInput,
+  foodLogForDay,
+  MEAT_CATALOG,
+  MEAT_CATALOG_GROUPS,
+  resolveDailyNutritionTargets,
+  sumNutrition,
+  todayIsoLocal,
+  nutritionProgressPct,
+  type FoodEstimateResult,
+  type MeatPickOption,
+  type MeatCatalogGroup,
+} from './nutritionEngine';
 
 export type DashboardExercise = {
   id: number;
@@ -8,20 +31,6 @@ export type DashboardExercise = {
   isPTLocked: boolean;
   completed: boolean;
   actualWeight: string;
-};
-
-export type FoodLogItem = {
-  id: number;
-  name: string;
-  pro: number;
-  carb: number;
-  cal: number;
-};
-
-export type NutritionTotals = {
-  pro: number;
-  carb: number;
-  cal: number;
 };
 
 const DEFAULT_EXERCISES: DashboardExercise[] = [
@@ -38,8 +47,6 @@ const DEFAULT_EXERCISES: DashboardExercise[] = [
     actualWeight: 'Bodyweight',
   },
 ];
-
-const TARGET_NUTRITION: NutritionTotals = { pro: 160, carb: 250, cal: 2200 };
 
 function key(base: string, userId: string | null) {
   return userId ? `${base}_${userId}` : `${base}_guest`;
@@ -83,47 +90,10 @@ export function stripExerciseProgress(exercises: DashboardExercise[]): Dashboard
 }
 
 export function loadFoodLog(userId: string | null): FoodLogItem[] {
-  return readJson<FoodLogItem[]>(key('tezca_dashboard_food_v1', userId), [
-    { id: 1, name: 'Phở bò (sáng)', pro: 25, carb: 45, cal: 350 },
-  ]);
+  const raw = readJson<FoodLogItem[]>(key('tezca_dashboard_food_v1', userId), defaultFoodLogSeed());
+  return normalizeFoodLog(raw);
 }
 
 export function saveFoodLog(userId: string | null, log: FoodLogItem[]) {
-  writeJson(key('tezca_dashboard_food_v1', userId), log);
-}
-
-export function sumNutrition(log: FoodLogItem[]): NutritionTotals {
-  return log.reduce(
-    (acc, f) => ({
-      pro: acc.pro + f.pro,
-      carb: acc.carb + f.carb,
-      cal: acc.cal + f.cal,
-    }),
-    { pro: 0, carb: 0, cal: 0 },
-  );
-}
-
-export function getTargetNutrition(): NutritionTotals {
-  return { ...TARGET_NUTRITION };
-}
-
-export function estimateMacrosFromInput(input: string): NutritionTotals {
-  const text = input.toLowerCase();
-  if (
-    text.includes('gà') ||
-    text.includes('bò') ||
-    text.includes('trứng') ||
-    text.includes('whey') ||
-    text.includes('cá') ||
-    text.includes('thịt')
-  ) {
-    return { pro: 30, carb: 5, cal: 220 };
-  }
-  if (text.includes('cơm') || text.includes('phở') || text.includes('bánh') || text.includes('mì')) {
-    return { pro: 8, carb: 55, cal: 400 };
-  }
-  if (text.includes('rau') || text.includes('salad') || text.includes('trái cây')) {
-    return { pro: 2, carb: 15, cal: 80 };
-  }
-  return { pro: 5, carb: 20, cal: 150 };
+  writeJson(key('tezca_dashboard_food_v1', userId), normalizeFoodLog(log));
 }

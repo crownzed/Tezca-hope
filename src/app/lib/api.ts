@@ -1,3 +1,7 @@
+import { ApiError } from './apiError';
+
+export { ApiError } from './apiError';
+
 type ViteEnv = ImportMeta & {
   env: {
     VITE_API_URL?: string;
@@ -77,20 +81,22 @@ function devDirectApiBases(): string[] {
   return [`http://127.0.0.1:${port}`];
 }
 
-async function parseErrorResponse(res: Response, path: string) {
+async function parseErrorResponse(res: Response, path: string): Promise<never> {
   const err = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
   if (res.status === 405) {
-    throw new Error(
+    throw new ApiError(
       err.error ||
         'Máy chủ từ chối POST (405). Trên host cần proxy /api → Node (xem deploy/website/apache-snippet.conf). Local: chạy `npm run dev`.',
+      405,
     );
   }
   if (res.status === 404 && (path.includes('register') || path.includes('auth'))) {
-    throw new Error(
+    throw new ApiError(
       err.error || err.hint || 'Không tìm thấy API. Chạy `npm run dev:all` và thử lại.',
+      404,
     );
   }
-  throw new Error(err.error || `${res.status} ${res.statusText}`);
+  throw new ApiError(err.error || `${res.status} ${res.statusText}`, res.status);
 }
 
 async function doFetch(
