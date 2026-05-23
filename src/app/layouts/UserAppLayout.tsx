@@ -14,6 +14,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { usePatientAuth } from '../context/PatientAuthContext';
+import { tezcaTheme } from '../lib/tezcaTheme';
 
 const nav = [
   { to: ROUTES.app.root, end: true, label: 'Trung tâm Kỷ luật', icon: Flame },
@@ -68,7 +69,7 @@ export function UserAppLayout() {
   const { user, token, sessionReady, logout } = usePatientAuth();
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: '#F9F9FB' }}>
+    <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: tezcaTheme.bg }}>
       <aside
         className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r px-4 py-4 md:py-8"
         style={{ borderColor: 'rgba(26, 32, 44, 0.08)', backgroundColor: 'rgba(255,255,255,0.9)' }}
@@ -141,7 +142,7 @@ export function UserAppLayout() {
           )}
         </div>
       </aside>
-      <div className="flex-1 p-6 md:p-10 overflow-auto" style={{ backgroundColor: '#000' }}>
+      <div className="flex-1 p-6 md:p-10 overflow-auto" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
         <Outlet />
       </div>
     </div>

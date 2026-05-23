@@ -19,3 +19,12 @@ export function mapSqliteError(err) {
   }
   return err;
 }
+
+/** Chuẩn hóa lỗi từ repository / JSON store → DbError hoặc rethrow. */
+export function mapDbDomainError(err) {
+  if (err instanceof DbError) return err;
+  if (err?.message === 'JSON_PAYLOAD_TOO_LARGE') {
+    return new DbError('PAYLOAD_TOO_LARGE', 'Dữ liệu kế hoạch quá lớn', 413);
+  }
+  return mapSqliteError(err);
+}

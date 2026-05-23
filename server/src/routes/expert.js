@@ -13,10 +13,13 @@ import {
   getLastLiveMessageMap,
   assignExpertToPatient,
   removeExpertPatientAssignment,
+  getTrainingPlanForPatient,
+  updateTrainingPlanByExpert,
 } from '../db.js';
 import { authMiddleware } from '../auth.js';
 import { buildWeeklyReport } from '../weeklyReport.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
+import { DbError, mapDbDomainError } from '../dbErrors.js';
 
 export const expertRouter = Router();
 const requireExpert = authMiddleware('expert');
@@ -31,11 +34,12 @@ expertRouter.get('/reports/weekly', requireExpert, (req, res) => {
 });
 
 expertRouter.get('/me', requireExpert, (req, res) => {
+  const u = req.dbUser;
   res.json({
     user: {
-      id: req.user.sub,
-      email: req.user.email,
-      name: req.user.name,
+      id: u.id,
+      email: u.email,
+      name: u.name,
       role: 'expert',
     },
   });
@@ -85,7 +89,13 @@ expertRouter.post('/patients/assign', requireExpert, (req, res) => {
   }
   const r = assignExpertToPatient(expertId, u.id);
   if (!r.ok) {
-    res.status(400).json({ error: 'Không thể gán' });
+    const msg =
+      r.error === 'invalid_expert'
+        ? 'Phiên chuyên gia không hợp lệ. Hãy đăng xuất và đăng nhập lại.'
+        : r.error === 'invalid_patient'
+          ? 'Tài khoản bệnh nhân không hợp lệ.'
+          : 'Không thể gán';
+    res.status(400).json({ error: msg });
     return;
   }
   pushAudit({ actorId: expertId, role: 'expert', action: 'assign_patient', patientId: u.id, meta: { email } });
@@ -143,6 +153,71 @@ expertRouter.delete('/patients/:patientId/assignment', requireExpert, (req, res)
   removeExpertPatientAssignment(expertId, patientId);
   pushAudit({ actorId: expertId, role: 'expert', action: 'unassign_patient', patientId });
   res.json({ ok: true });
+});
+
+expertRouter.get('/patients/:patientId/training-plan', requireExpert, (req, res) => {
+  const expertId = req.user.sub;
+  const { patientId } = req.params;
+  if (!canExpertAccessPatient(expertId, patientId)) {
+    res.status(403).json({ error: 'Không được truy cập' });
+    return;
+  }
+  const plan = getTrainingPlanForPatient(patientId);
+  res.json({ plan });
+});
+
+expertRouter.put('/patients/:patientId/training-plan', requireExpert, (req, res) => {
+  const expertId = req.user.sub;
+  const { patientId } = req.params;
+  if (!canExpertAccessPatient(expertId, patientId)) {
+    res.status(403).json({ error: 'Không được truy cập' });
+    return;
+  }
+  try {
+    const existing = getTrainingPlanForPatient(patientId);
+    if (!existing) {
+      res.status(404).json({ error: 'Bệnh nhân chưa có kế hoạch tập trên hệ thống' });
+      return;
+    }
+    const { exercises, status, expertNote } = req.body || {};
+    if (exercises != null && !Array.isArray(exercises)) {
+      res.status(400).json({ error: 'exercises phải là mảng' });
+      return;
+    }
+    const sanitized =
+      exercises == null
+        ? null
+        : exercises.slice(0, 20).map((ex, i) => ({
+            id: Number(ex.id) || Date.now() + i,
+            title: String(ex.title || 'Bài tập').trim().slice(0, 140),
+            sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
+            reps:
+              typeof ex.reps === 'string' || typeof ex.reps === 'number'
+                ? String(ex.reps).slice(0, 40)
+                : 'Theo kế hoạch',
+            isPTLocked: ex.isPTLocked !== false,
+          }));
+    const saved = updateTrainingPlanByExpert(patientId, expertId, {
+      exercises: sanitized,
+      status,
+      expertNote,
+    });
+    pushAudit({
+      actorId: expertId,
+      role: 'expert',
+      action: 'update_training_plan',
+      patientId,
+      meta: { status: saved?.status },
+    });
+    res.json({ plan: saved });
+  } catch (e) {
+    const err = mapDbDomainError(e);
+    if (err instanceof DbError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    throw e;
+  }
 });
 
 expertRouter.get('/patients/:patientId', requireExpert, (req, res) => {

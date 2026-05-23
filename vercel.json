@@ -5,15 +5,13 @@
   "functions": {
     "api/index.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
     "api/[...path].js": { "maxDuration": 30, "includeFiles": "server/src/**" },
-    "api/expert/**/*.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
     "api/me/**/*.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
+    "api/expert/**/*.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
     "api/health.js": { "maxDuration": 30, "includeFiles": "server/src/**" },
     "api/auth/**/*.js": { "maxDuration": 30, "includeFiles": "server/src/**" }
   },
   "rewrites": [
-    { "source": "/api/expert/:path*", "destination": "/api?path=expert/:path*" },
-    { "source": "/api/me/:path*", "destination": "/api?path=me/:path*" },
-    { "source": "/api/health/:path*", "destination": "/api?path=health/:path*" },
+    { "source": "/api/:path*", "destination": "/api?path=:path*" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
   ]
 }

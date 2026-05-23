@@ -118,3 +118,128 @@ export async function geminiChat(messages, opts = {}) {
 
   return text;
 }
+
+/**
+ * Trích text từ một chunk SSE Gemini.
+ * @param {unknown} data
+ */
+function textFromStreamChunk(data) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+  return parts
+    .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+    .join('');
+}
+
+/**
+ * Stream nội dung — mỗi lần yield là đoạn delta cần nối thêm.
+ * @param {Array<{ role: 'system' | 'user' | 'assistant'; content: string }>} messages
+ * @param {{ temperature?: number; max_tokens?: number }} opts
+ * @returns {AsyncGenerator<string>}
+ */
+export async function* geminiChatStream(messages, opts = {}) {
+  const key = getGeminiApiKey();
+  if (!key) {
+    const err = new Error('Chưa cấu hình GOOGLE_GENERATIVE_AI_API_KEY trên server');
+    err.code = 'GEMINI_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const { systemText, contents } = toGeminiPayload(messages);
+  if (contents.length === 0) {
+    const err = new Error('Không có tin nhắn hợp lệ cho Gemini');
+    err.code = 'GEMINI_EMPTY';
+    throw err;
+  }
+
+  const body = {
+    contents,
+    generationConfig: {
+      temperature: opts.temperature ?? 0.7,
+      maxOutputTokens: opts.max_tokens ?? 1200,
+      topP: 0.92,
+    },
+  };
+  if (systemText) {
+    body.systemInstruction = { parts: [{ text: systemText }] };
+  }
+
+  const url = `${API_BASE}/models/${encodeURIComponent(model())}:streamGenerateContent?alt=sse`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': key,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const raw =
+      data?.error?.message ||
+      data?.error?.status ||
+      `${res.status} ${res.statusText}`;
+    const msg = redactSecrets(typeof raw === 'string' ? raw : 'Gemini lỗi không xác định');
+    const err = new Error(msg);
+    err.code = 'GEMINI_HTTP';
+    err.status = res.status;
+    throw err;
+  }
+
+  if (!res.body) {
+    const err = new Error('Gemini không trả luồng dữ liệu');
+    err.code = 'GEMINI_EMPTY';
+    throw err;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let sseBuffer = '';
+  let accumulated = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    sseBuffer += decoder.decode(value, { stream: true });
+
+    let boundary = sseBuffer.indexOf('\n\n');
+    while (boundary !== -1) {
+      const eventBlock = sseBuffer.slice(0, boundary);
+      sseBuffer = sseBuffer.slice(boundary + 2);
+
+      for (const line of eventBlock.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let parsed;
+        try {
+          parsed = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        const chunkText = textFromStreamChunk(parsed);
+        if (!chunkText) continue;
+
+        let delta = chunkText;
+        if (chunkText.startsWith(accumulated)) {
+          delta = chunkText.slice(accumulated.length);
+          accumulated = chunkText;
+        } else {
+          accumulated += chunkText;
+        }
+        if (delta) yield delta;
+      }
+
+      boundary = sseBuffer.indexOf('\n\n');
+    }
+  }
+
+  if (!accumulated.trim()) {
+    const err = new Error('Gemini không trả nội dung hợp lệ');
+    err.code = 'GEMINI_EMPTY';
+    throw err;
+  }
+}

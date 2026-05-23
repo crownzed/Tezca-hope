@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
   Activity,
@@ -18,7 +18,9 @@ import {
   estimateMacrosFromInput,
   getTargetNutrition,
   loadDashboardExercises,
+  loadDailyProgressLocal,
   loadFoodLog,
+  saveDailyProgressLocal,
   saveDashboardExercises,
   saveFoodLog,
   sumNutrition,
@@ -26,6 +28,19 @@ import {
   type FoodLogItem,
 } from '../../lib/dashboardStorage';
 import { ROUTES } from '../../routes';
+import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
+import { apiFetch } from '../../lib/api';
+import type { TrainingPlanResponse } from '../../lib/trainingPlan';
+import { syncTrainingProgressToServer } from '../../lib/syncTrainingProgress';
+import {
+  applyDayProgress,
+  buildWeekDaysWithIso,
+  countDayDone,
+  extractDayProgress,
+  isoDateForWeekDayId,
+  normalizeDailyProgressFromApi,
+  type DailyProgressMap,
+} from '../../lib/trainingDayProgress';
 
 const MOTIVATIONAL_QUOTES = [
   { text: 'Kỷ luật là chiếc cầu nối giữa mục tiêu và thành tựu.', author: 'Jim Rohn' },
@@ -37,26 +52,6 @@ const MOTIVATIONAL_QUOTES = [
     author: 'Rikki Rogers',
   },
 ];
-
-function buildWeekDays() {
-  const today = new Date();
-  const dow = today.getDay();
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayOffset);
-  const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-  const ids = [1, 2, 3, 4, 5, 6, 0];
-  return ids.map((id, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return {
-      id,
-      label: labels[i]!,
-      date: String(d.getDate()),
-      isToday: d.toDateString() === today.toDateString(),
-    };
-  });
-}
 
 function formatHeaderDate() {
   try {
@@ -85,7 +80,7 @@ function weightDeltaText(entries: ReturnType<typeof loadBmiEntries>): string | n
 const DASHBOARD_STYLES = `
   .tezca-dash-scrollbar::-webkit-scrollbar { width: 4px; }
   .tezca-dash-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .tezca-dash-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+  .tezca-dash-scrollbar::-webkit-scrollbar-thumb { background: rgba(26, 32, 44, 0.2); border-radius: 4px; }
   @keyframes tezcaDashFadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes tezcaDashSlideUp {
     from { opacity: 0; transform: translateY(20px) scale(0.95); }
@@ -100,14 +95,27 @@ export function PatientDashboardPage() {
   const userId = user?.id ?? null;
   const isLoggedIn = Boolean(token && user);
 
-  const [exercises, setExercises] = useState<DashboardExercise[]>(() => loadDashboardExercises(userId));
+  const [baseExercises, setBaseExercises] = useState<DashboardExercise[]>(() => loadDashboardExercises(userId));
+  const [dailyProgress, setDailyProgress] = useState<DailyProgressMap>(() => loadDailyProgressLocal(userId));
   const [foodLog, setFoodLog] = useState<FoodLogItem[]>(() => loadFoodLog(userId));
   const [foodInput, setFoodInput] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
   const [quote, setQuote] = useState(MOTIVATIONAL_QUOTES[0]!);
-  const [activeDay, setActiveDay] = useState(() => buildWeekDays().find((d) => d.isToday)?.id ?? 1);
+  const weekDays = useMemo(() => buildWeekDaysWithIso(), []);
+  const [activeDay, setActiveDay] = useState(() => weekDays.find((d) => d.isToday)?.id ?? 1);
+  const [trainingStatus, setTrainingStatus] = useState<'pending_review' | 'approved' | null>(null);
+  const [expertTrainingNote, setExpertTrainingNote] = useState('');
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle');
 
-  const weekDays = useMemo(() => buildWeekDays(), []);
+  const activeIso = useMemo(
+    () => isoDateForWeekDayId(activeDay, weekDays),
+    [activeDay, weekDays],
+  );
+
+  const exercises = useMemo(
+    () => applyDayProgress(baseExercises, dailyProgress[activeIso]),
+    [baseExercises, dailyProgress, activeIso],
+  );
   const targetNutrition = getTargetNutrition();
   const nutrition = useMemo(() => sumNutrition(foodLog), [foodLog]);
   const gam = deriveGamificationState();
@@ -118,13 +126,64 @@ export function PatientDashboardPage() {
   const weightDelta = weightDeltaText(bmiList);
 
   useEffect(() => {
-    setExercises(loadDashboardExercises(userId));
+    setBaseExercises(loadDashboardExercises(userId));
+    setDailyProgress(loadDailyProgressLocal(userId));
     setFoodLog(loadFoodLog(userId));
+    setTrainingStatus(null);
+    setExpertTrainingNote('');
+    setSyncState('idle');
   }, [userId]);
 
   useEffect(() => {
-    saveDashboardExercises(userId, exercises);
-  }, [exercises, userId]);
+    if (!token) return;
+    apiFetch<TrainingPlanResponse>('/api/me/training-plan', { token })
+      .then((r) => {
+        if (!r.plan?.exercises?.length) return;
+        setTrainingStatus(r.plan.status);
+        setExpertTrainingNote(r.plan.expertNote || '');
+        setBaseExercises(r.plan.exercises);
+        const serverDaily = normalizeDailyProgressFromApi(r.plan.dailyProgress);
+        setDailyProgress((prev) => {
+          const merged = { ...prev, ...serverDaily };
+          saveDailyProgressLocal(userId, merged);
+          return merged;
+        });
+        saveDashboardExercises(userId, r.plan.exercises);
+      })
+      .catch(() => {
+        /* giữ bản local */
+      });
+  }, [token, userId]);
+
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pushProgressToServer = useCallback(
+    (dayExercises: DashboardExercise[], immediate = false) => {
+      if (!token) return;
+      const run = () => {
+        setSyncState('syncing');
+        void syncTrainingProgressToServer(token, activeIso, dayExercises, baseExercises).then((ok) => {
+          setSyncState(ok ? 'idle' : 'error');
+        });
+      };
+      if (immediate) {
+        if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+        run();
+        return;
+      }
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = setTimeout(run, 500);
+    },
+    [token, activeIso, baseExercises],
+  );
+
+  useEffect(() => {
+    saveDashboardExercises(userId, baseExercises);
+  }, [baseExercises, userId]);
+
+  useEffect(() => {
+    saveDailyProgressLocal(userId, dailyProgress);
+  }, [dailyProgress, userId]);
 
   useEffect(() => {
     saveFoodLog(userId, foodLog);
@@ -160,34 +219,64 @@ export function PatientDashboardPage() {
     setFoodInput('');
   };
 
-  const toggleExercise = useCallback((id: number) => {
-    setExercises((list) => list.map((ex) => (ex.id === id ? { ...ex, completed: !ex.completed } : ex)));
-  }, []);
+  const updateDayExercises = useCallback(
+    (nextDayList: DashboardExercise[], immediate: boolean) => {
+      const dayPatch = extractDayProgress(nextDayList);
+      setDailyProgress((prev) => {
+        const next = { ...prev, [activeIso]: dayPatch };
+        return next;
+      });
+      pushProgressToServer(nextDayList, immediate);
+    },
+    [activeIso, pushProgressToServer],
+  );
 
-  const updateWeight = useCallback((id: number, weight: string) => {
-    setExercises((list) => list.map((ex) => (ex.id === id ? { ...ex, actualWeight: weight } : ex)));
-  }, []);
+  const toggleExercise = useCallback(
+    (id: number) => {
+      const next = exercises.map((ex) => (ex.id === id ? { ...ex, completed: !ex.completed } : ex));
+      updateDayExercises(next, true);
+    },
+    [exercises, updateDayExercises],
+  );
+
+  const updateWeight = useCallback(
+    (id: number, weight: string) => {
+      const next = exercises.map((ex) => (ex.id === id ? { ...ex, actualWeight: weight } : ex));
+      updateDayExercises(next, false);
+    },
+    [exercises, updateDayExercises],
+  );
 
   const progressPct = exercises.length ? (completedCount / exercises.length) * 100 : 0;
   const firstName = user?.name?.trim().split(/\s+/)[0];
 
   return (
-    <div className="-mx-6 -mt-6 md:-mx-10 md:-mt-10 min-h-[calc(100vh-1rem)] bg-black text-gray-100 font-sans">
+    <div
+      className="-mx-6 -mt-6 md:-mx-10 md:-mt-10 min-h-[calc(100vh-1rem)] font-sans"
+      style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}
+    >
       <style dangerouslySetInnerHTML={{ __html: DASHBOARD_STYLES }} />
 
       <div className="p-4 md:p-8 flex flex-col items-center min-h-full">
         {!sessionReady && token ? (
-          <p className="text-gray-400 text-sm mb-4">Đang tải tài khoản…</p>
+          <p className="text-sm mb-4 opacity-70 m-0">Đang tải tài khoản…</p>
         ) : null}
 
         {!isLoggedIn && sessionReady && (
-          <div className="w-full max-w-6xl mb-6 rounded-2xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-yellow-100 m-0">
+          <div
+            className="w-full max-w-6xl mb-6 rounded-2xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3"
+            style={{
+              borderColor: 'rgba(251, 191, 36, 0.5)',
+              backgroundColor: 'rgba(254, 243, 199, 0.5)',
+            }}
+          >
+            <p className="text-sm m-0" style={{ color: '#78350f' }}>
               Đăng nhập để lưu bài tập, dinh dưỡng và đồng bộ dữ liệu sức khỏe lên tài khoản Tezca.
             </p>
             <Link
               to={ROUTES.app.login}
-              className="text-sm font-bold px-4 py-2 rounded-xl bg-yellow-500 text-black no-underline hover:bg-yellow-400"
+              className="text-sm font-bold px-4 py-2 rounded-xl text-white no-underline hover:opacity-90"
+              style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
             >
               Đăng nhập
             </Link>
@@ -196,13 +285,13 @@ export function PatientDashboardPage() {
 
         <header className="w-full max-w-6xl mb-6 md:mb-8 flex flex-wrap justify-between items-end gap-4">
           <div>
-            <p className="text-yellow-500/80 text-xs font-bold uppercase tracking-widest m-0 mb-1">
+            <p className="text-xs font-bold uppercase tracking-widest m-0 mb-1" style={{ color: tezcaTheme.accentDark }}>
               {isLoggedIn && firstName ? `Xin chào, ${firstName}` : 'Tezca'}
             </p>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tighter m-0">
-              TRUNG TÂM <span className="text-yellow-500">KỶ LUẬT</span>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter m-0">
+              TRUNG TÂM <span style={{ color: tezcaTheme.accent }}>KỶ LUẬT</span>
             </h1>
-            <p className="text-gray-400 mt-1 font-medium m-0 capitalize">{formatHeaderDate()}</p>
+            <p className="mt-1 font-medium m-0 capitalize opacity-70">{formatHeaderDate()}</p>
           </div>
           <nav className="flex flex-wrap gap-2 text-xs">
             {[
@@ -215,7 +304,8 @@ export function PatientDashboardPage() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="px-3 py-1.5 rounded-lg border border-gray-700 text-gray-300 no-underline hover:border-yellow-500/50 hover:text-white transition-colors"
+                className="px-3 py-1.5 rounded-lg border no-underline transition-colors hover:opacity-100 opacity-80"
+                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text, backgroundColor: tezcaTheme.surface }}
               >
                 {item.label}
               </Link>
@@ -225,38 +315,42 @@ export function PatientDashboardPage() {
 
         <main className="w-full max-w-6xl flex-1 grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 md:gap-8 pb-8">
           <section className="min-h-[420px]">
-            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 flex flex-col h-full shadow-2xl">
+            <div className="rounded-2xl p-6 border flex flex-col h-full" style={tezcaCardStyle}>
               <div className="flex items-center gap-3 mb-6">
-                <Activity className="text-blue-400" size={24} />
-                <h2 className="text-xl font-black text-white tracking-wide uppercase m-0">Dữ Liệu Cơ Thể</h2>
+                <Activity style={{ color: tezcaTheme.accent }} size={24} />
+                <h2 className="text-xl font-black tracking-wide uppercase m-0">Dữ Liệu Cơ Thể</h2>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700/50">
-                  <p className="text-gray-400 text-sm font-medium mb-1 m-0">Cân Nặng</p>
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}>
+                  <p className="text-sm font-medium mb-1 m-0 opacity-70">Cân Nặng</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-white">
+                    <span className="text-3xl font-black">
                       {latestBmi ? latestBmi.weightKg.toFixed(1) : '—'}
                     </span>
-                    <span className="text-gray-500 font-bold">kg</span>
+                    <span className="font-bold opacity-50">kg</span>
                   </div>
                   {weightDelta ? (
-                    <p className="text-green-400 text-xs mt-2 flex items-center gap-1 m-0">
+                    <p className="text-emerald-600 text-xs mt-2 flex items-center gap-1 m-0">
                       <TrendingDown size={12} />
                       {weightDelta}
                     </p>
                   ) : (
-                    <Link to={ROUTES.app.bmi} className="text-yellow-500/90 text-xs mt-2 inline-block no-underline hover:underline">
+                    <Link
+                      to={ROUTES.app.bmi}
+                      className="text-xs mt-2 inline-block no-underline hover:underline font-medium"
+                      style={{ color: tezcaTheme.accentDark }}
+                    >
                       Thêm đo BMI →
                     </Link>
                   )}
                 </div>
-                <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700/50">
-                  <p className="text-gray-400 text-sm font-medium mb-1 m-0">Chỉ số BMI</p>
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}>
+                  <p className="text-sm font-medium mb-1 m-0 opacity-70">Chỉ số BMI</p>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-white">{latestBmi ? latestBmi.bmi.toFixed(1) : '—'}</span>
+                    <span className="text-3xl font-black">{latestBmi ? latestBmi.bmi.toFixed(1) : '—'}</span>
                   </div>
-                  <p className="text-yellow-400 text-xs mt-2 m-0">
+                  <p className="text-xs mt-2 m-0" style={{ color: tezcaTheme.accentDark }}>
                     {latestBmi ? `Cập nhật ${latestBmi.date}` : 'Chưa có dữ liệu'}
                   </p>
                 </div>
@@ -264,19 +358,19 @@ export function PatientDashboardPage() {
 
               <div className="mb-6 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center gap-2 mb-4">
-                  <UtensilsCrossed className="text-emerald-400" size={20} />
-                  <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider m-0">Trạm Nạp Năng Lượng</h3>
+                  <UtensilsCrossed className="text-emerald-600" size={20} />
+                  <h3 className="text-sm font-bold uppercase tracking-wider m-0 opacity-80">Trạm Nạp Năng Lượng</h3>
                 </div>
 
                 <div className="mb-5 space-y-3">
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-400 font-medium">Calo Tổng</span>
-                      <span className="text-emerald-400 font-bold">
+                      <span className="font-medium opacity-70">Calo Tổng</span>
+                      <span className="text-emerald-600 font-bold">
                         {nutrition.cal} / {targetNutrition.cal} kcal
                       </span>
                     </div>
-                    <div className="w-full bg-gray-800 rounded-full h-1.5">
+                    <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                       <div
                         className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min((nutrition.cal / targetNutrition.cal) * 100, 100)}%` }}
@@ -286,10 +380,10 @@ export function PatientDashboardPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-gray-400">Protein</span>
-                        <span className="text-blue-400 font-bold">{nutrition.pro}g</span>
+                        <span className="opacity-70">Protein</span>
+                        <span className="text-blue-600 font-bold">{nutrition.pro}g</span>
                       </div>
-                      <div className="w-full bg-gray-800 rounded-full h-1.5">
+                      <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                         <div
                           className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
                           style={{ width: `${Math.min((nutrition.pro / targetNutrition.pro) * 100, 100)}%` }}
@@ -298,10 +392,10 @@ export function PatientDashboardPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-gray-400">Carb</span>
-                        <span className="text-orange-400 font-bold">{nutrition.carb}g</span>
+                        <span className="opacity-70">Carb</span>
+                        <span className="text-orange-600 font-bold">{nutrition.carb}g</span>
                       </div>
-                      <div className="w-full bg-gray-800 rounded-full h-1.5">
+                      <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                         <div
                           className="bg-orange-500 h-1.5 rounded-full transition-all duration-500"
                           style={{ width: `${Math.min((nutrition.carb / targetNutrition.carb) * 100, 100)}%` }}
@@ -317,7 +411,8 @@ export function PatientDashboardPage() {
                     placeholder="Nhập món (VD: 200g ức gà...)"
                     value={foodInput}
                     onChange={(e) => setFoodInput(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="flex-1 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-emerald-500 transition-colors border"
+                    style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
                   />
                   <button
                     type="submit"
@@ -332,23 +427,30 @@ export function PatientDashboardPage() {
                   {foodLog.map((food) => (
                     <div
                       key={food.id}
-                      className="flex justify-between items-center bg-gray-800/50 p-2.5 rounded-lg border border-gray-700/30 text-sm tezca-animate-fade-in"
+                      className="flex justify-between items-center p-2.5 rounded-lg border text-sm tezca-animate-fade-in"
+                      style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
                     >
-                      <span className="text-gray-200 font-medium truncate pr-2">{food.name}</span>
+                      <span className="font-medium truncate pr-2">{food.name}</span>
                       <div className="flex gap-3 text-xs shrink-0">
-                        <span className="text-blue-400">{food.pro}g P</span>
-                        <span className="text-emerald-400 font-bold">{food.cal} cal</span>
+                        <span className="text-blue-600">{food.pro}g P</span>
+                        <span className="text-emerald-600 font-bold">{food.cal} cal</span>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="mt-auto bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-4 border border-gray-700">
+              <div
+                className="mt-auto rounded-xl p-4 border"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(45, 212, 191, 0.08) 0%, rgba(20, 184, 166, 0.04) 100%)',
+                  borderColor: 'rgba(45, 212, 191, 0.25)',
+                }}
+              >
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-sm text-gray-400 font-medium m-0">Chuỗi Kỷ Luật (Streak)</p>
-                    <p className="text-2xl font-black text-white mt-1 m-0">
+                    <p className="text-sm font-medium m-0 opacity-70">Chuỗi Kỷ Luật (Streak)</p>
+                    <p className="text-2xl font-black mt-1 m-0">
                       {streak > 0 ? streak : '—'} {streak > 0 ? 'Ngày' : ''}
                     </p>
                   </div>
@@ -361,57 +463,94 @@ export function PatientDashboardPage() {
           </section>
 
           <section className="min-h-[480px]">
-            <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 flex flex-col h-full relative overflow-hidden shadow-2xl">
+            <div className="rounded-2xl p-6 border flex flex-col h-full relative overflow-hidden" style={tezcaCardStyle}>
               <div
                 className={`absolute inset-0 bg-green-500/5 transition-opacity duration-1000 pointer-events-none ${isAllDone ? 'opacity-100' : 'opacity-0'}`}
               />
 
               <div className="flex justify-between items-end mb-6 relative z-10">
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-wide uppercase m-0">Chiến Dịch Tập Luyện</h2>
-                  <p className="text-gray-400 text-sm mt-1 m-0">
-                    Cấp {gam.level} · {gam.xp} XP · Hôm nay
+                  <h2 className="text-xl font-black tracking-wide uppercase m-0">Chiến Dịch Tập Luyện</h2>
+                  <p className="text-sm mt-1 m-0 opacity-70">
+                    Cấp {gam.level} · {gam.xp} XP ·{' '}
+                    {weekDays.find((d) => d.id === activeDay)?.label ?? '—'}{' '}
+                    {weekDays.find((d) => d.id === activeDay)?.isToday ? '(hôm nay)' : ''}
+                    {trainingStatus === 'pending_review' && (
+                      <span className="block text-amber-700 text-xs mt-1">Chờ chuyên gia duyệt kế hoạch</span>
+                    )}
+                    {trainingStatus === 'approved' && expertTrainingNote && (
+                      <span className="block text-xs mt-1" style={{ color: tezcaTheme.accentDark }}>
+                        {expertTrainingNote}
+                      </span>
+                    )}
+                    {token && syncState === 'syncing' && (
+                      <span className="block text-xs mt-1 opacity-50">Đang lưu tiến độ…</span>
+                    )}
+                    {token && syncState === 'error' && (
+                      <span className="block text-rose-600 text-xs mt-1">Không lưu được tiến độ — thử lại sau</span>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-3xl font-black text-white">{completedCount}</span>
-                  <span className="text-gray-500 font-bold">/{exercises.length}</span>
+                  <span className="text-3xl font-black">{completedCount}</span>
+                  <span className="font-bold opacity-50">/{exercises.length}</span>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center mb-6 relative z-10 bg-gray-800/50 p-2 rounded-2xl border border-gray-700/50">
-                {weekDays.map((day) => (
+              <div
+                className="flex justify-between items-center mb-6 relative z-10 p-2 rounded-2xl border"
+                style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
+              >
+                {weekDays.map((day) => {
+                  const { done, total } = countDayDone(baseExercises, dailyProgress[day.isoDate]);
+                  const allDone = total > 0 && done === total;
+                  const partial = done > 0 && !allDone;
+                  return (
                   <button
                     key={day.id}
                     type="button"
                     onClick={() => setActiveDay(day.id)}
                     className={`flex flex-col items-center justify-center w-[13%] aspect-[3/4] rounded-xl transition-all border-0 cursor-pointer ${
                       activeDay === day.id
-                        ? 'bg-yellow-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.4)] scale-110 z-10'
-                        : 'hover:bg-gray-700 text-gray-400 bg-transparent'
+                        ? 'scale-110 z-10 shadow-md'
+                        : 'hover:opacity-100 opacity-60 bg-transparent'
                     }`}
+                    style={
+                      activeDay === day.id
+                        ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
+                        : undefined
+                    }
                   >
                     <span
-                      className={`text-[10px] md:text-xs font-bold uppercase mb-0.5 ${activeDay === day.id ? 'text-black/70' : 'text-gray-500'}`}
+                      className={`text-[10px] md:text-xs font-bold uppercase mb-0.5 ${activeDay === day.id ? 'opacity-70' : 'opacity-50'}`}
                     >
                       {day.label}
                     </span>
-                    <span className={`text-base md:text-lg font-black ${activeDay === day.id ? 'text-black' : 'text-white'}`}>
+                    <span className="text-base md:text-lg font-black">
                       {day.date}
                     </span>
-                    {day.isToday && (
+                    {(day.isToday || allDone || partial) && (
                       <div
-                        className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full mt-1 ${activeDay === day.id ? 'bg-black' : 'bg-yellow-500'}`}
+                        className={`w-1 h-1 md:w-1.5 md:h-1.5 rounded-full mt-1 ${
+                          allDone
+                            ? 'bg-green-500'
+                            : partial
+                              ? 'bg-orange-400'
+                              : activeDay === day.id
+                                ? 'bg-white'
+                                : 'bg-amber-400'
+                        }`}
                       />
                     )}
                   </button>
-                ))}
+                  );
+                })}
               </div>
 
-              <div className="w-full bg-gray-800 rounded-full h-1.5 mb-6 relative z-10">
+              <div className="w-full rounded-full h-1.5 mb-6 relative z-10" style={{ backgroundColor: tezcaTheme.subtleBg }}>
                 <div
-                  className="bg-yellow-500 h-1.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(234,179,8,0.5)]"
-                  style={{ width: `${progressPct}%` }}
+                  className="h-1.5 rounded-full transition-all duration-500 ease-out"
+                  style={{ background: tezcaTheme.accentGradient, width: `${progressPct}%` }}
                 />
               </div>
 
@@ -420,20 +559,20 @@ export function PatientDashboardPage() {
                   <div
                     key={ex.id}
                     className={`group relative flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 ${
-                      ex.completed
-                        ? 'bg-gray-800/30 border-gray-700 opacity-60'
-                        : ex.isPTLocked
-                          ? 'bg-gray-800 border-yellow-500/30 hover:border-yellow-500/60'
-                          : 'bg-gray-800 border-gray-700 hover:border-gray-500'
+                      ex.completed ? 'opacity-60' : ''
                     }`}
+                    style={{
+                      backgroundColor: tezcaTheme.surface,
+                      borderColor: ex.isPTLocked && !ex.completed ? 'rgba(45, 212, 191, 0.35)' : tezcaTheme.border,
+                    }}
                   >
                     <button
                       type="button"
                       onClick={() => toggleExercise(ex.id)}
                       className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
                         ex.completed
-                          ? 'bg-green-500 border-green-500 text-gray-900'
-                          : 'border-gray-500 text-transparent hover:border-white bg-transparent'
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'border-slate-300 text-transparent hover:border-emerald-500 bg-transparent'
                       }`}
                       aria-label={ex.completed ? 'Bỏ hoàn thành' : 'Đánh dấu hoàn thành'}
                     >
@@ -443,13 +582,15 @@ export function PatientDashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <h3
-                          className={`font-bold truncate m-0 text-base ${ex.completed ? 'text-gray-400 line-through' : 'text-gray-100'}`}
+                          className={`font-bold truncate m-0 text-base ${ex.completed ? 'opacity-50 line-through' : ''}`}
                         >
                           {ex.title}
                         </h3>
-                        {ex.isPTLocked && !ex.completed && <Lock className="text-yellow-500 shrink-0" size={16} />}
+                        {ex.isPTLocked && !ex.completed && (
+                          <Lock className="shrink-0" size={16} style={{ color: tezcaTheme.accent }} />
+                        )}
                       </div>
-                      <p className="text-sm text-gray-500 font-medium mt-0.5 m-0">
+                      <p className="text-sm font-medium mt-0.5 m-0 opacity-60">
                         {ex.sets} Hiệp x {ex.reps}
                       </p>
                     </div>
@@ -461,11 +602,14 @@ export function PatientDashboardPage() {
                         value={ex.actualWeight}
                         onChange={(e) => updateWeight(ex.id, e.target.value)}
                         disabled={ex.completed}
-                        className={`w-full text-center text-sm font-bold bg-gray-900 border rounded-lg py-2 outline-none transition-colors ${
-                          ex.isPTLocked && !ex.completed
-                            ? 'border-yellow-500/30 focus:border-yellow-500'
-                            : 'border-gray-700 focus:border-gray-500'
-                        } ${ex.completed ? 'text-gray-500' : 'text-white'}`}
+                        className={`w-full text-center text-sm font-bold border rounded-lg py-2 outline-none transition-colors ${
+                          ex.isPTLocked && !ex.completed ? 'focus:border-teal-500' : 'focus:border-slate-400'
+                        } ${ex.completed ? 'opacity-50' : ''}`}
+                        style={{
+                          backgroundColor: tezcaTheme.bg,
+                          borderColor: ex.isPTLocked && !ex.completed ? 'rgba(45, 212, 191, 0.35)' : tezcaTheme.borderStrong,
+                          color: tezcaTheme.text,
+                        }}
                       />
                     </div>
                   </div>
@@ -479,30 +623,50 @@ export function PatientDashboardPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4 tezca-animate-fade-in">
             <button
               type="button"
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm border-0 cursor-default"
+              className="absolute inset-0 backdrop-blur-sm border-0 cursor-default"
+              style={{ backgroundColor: 'rgba(26, 32, 44, 0.45)' }}
               aria-label="Đóng"
               onClick={() => setShowCelebration(false)}
             />
-            <div className="relative bg-gray-900 border border-yellow-500/50 rounded-2xl p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(234,179,8,0.15)] tezca-animate-slide-up">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-yellow-500/20 rounded-full blur-3xl pointer-events-none" />
+            <div
+              className="relative border rounded-2xl p-8 max-w-lg w-full text-center tezca-animate-slide-up"
+              style={{
+                ...tezcaCardStyle,
+                borderColor: 'rgba(45, 212, 191, 0.35)',
+                boxShadow: '0 24px 80px -24px rgba(45, 212, 191, 0.25)',
+              }}
+            >
+              <div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-40"
+                style={{ backgroundColor: tezcaTheme.accentLight }}
+              />
               <div className="flex justify-center mb-6 relative">
-                <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center border-2 border-yellow-500/30">
-                  <Trophy className="text-yellow-400" size={48} />
+                <div
+                  className="w-20 h-20 rounded-full flex items-center justify-center border-2"
+                  style={{ backgroundColor: 'rgba(45, 212, 191, 0.12)', borderColor: 'rgba(45, 212, 191, 0.35)' }}
+                >
+                  <Trophy style={{ color: tezcaTheme.accent }} size={48} />
                 </div>
               </div>
-              <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide m-0">Chiến Dịch Hoàn Tất!</h2>
-              <p className="text-green-400 font-bold mb-8 m-0">Bạn đã cộng thêm +1 ngày vào chuỗi Kỷ Luật.</p>
-              <div className="bg-gray-800/80 rounded-xl p-6 border-l-4 border-yellow-500 relative mb-8 text-left">
-                <Quote className="absolute top-2 left-2 w-8 h-8 text-gray-700 opacity-50" />
-                <p className="text-gray-300 font-medium italic text-lg leading-relaxed relative z-10 pl-6 m-0">
+              <h2 className="text-3xl font-black mb-2 uppercase tracking-wide m-0">Chiến Dịch Hoàn Tất!</h2>
+              <p className="text-emerald-600 font-bold mb-8 m-0">Bạn đã cộng thêm +1 ngày vào chuỗi Kỷ Luật.</p>
+              <div
+                className="rounded-xl p-6 border-l-4 relative mb-8 text-left"
+                style={{ backgroundColor: tezcaTheme.subtleBg, borderLeftColor: tezcaTheme.accent }}
+              >
+                <Quote className="absolute top-2 left-2 w-8 h-8 opacity-20" />
+                <p className="font-medium italic text-lg leading-relaxed relative z-10 pl-6 m-0 opacity-90">
                   &ldquo;{quote.text}&rdquo;
                 </p>
-                <p className="text-yellow-500 font-bold mt-4 text-right pr-2 m-0">— {quote.author}</p>
+                <p className="font-bold mt-4 text-right pr-2 m-0" style={{ color: tezcaTheme.accentDark }}>
+                  — {quote.author}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCelebration(false)}
-                className="w-full bg-white hover:bg-gray-200 text-black font-black py-4 rounded-xl transition-transform active:scale-95 uppercase tracking-wider border-0 cursor-pointer"
+                className="w-full font-black py-4 rounded-xl transition-transform active:scale-95 uppercase tracking-wider border-0 cursor-pointer text-white hover:opacity-90"
+                style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
               >
                 Đóng bảng vinh danh
               </button>

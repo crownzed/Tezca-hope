@@ -16,6 +16,7 @@ import {
 import { apiFetch } from '../../lib/api';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES, expertPatientPath } from '../../routes';
+import { tezcaTheme } from '../../lib/tezcaTheme';
 
 type WeeklyReport = {
   period: { from: string; to: string; weekStart: string; label: string };
@@ -124,15 +125,15 @@ export function ExpertWeeklyReportPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6" style={{ color: tezcaTheme.text }}>
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white m-0 flex items-center gap-2">
-              <CalendarRange className="text-teal-400" size={26} />
+            <h1 className="text-2xl font-bold m-0 flex items-center gap-2">
+              <CalendarRange style={{ color: tezcaTheme.accent }} size={26} />
               Báo cáo theo tuần
             </h1>
-            <p className="text-sm text-slate-400 mt-2 m-0 max-w-xl">
+            <p className="text-sm mt-2 m-0 max-w-xl" style={{ color: tezcaTheme.textMuted }}>
               Tổng hợp hoạt động bệnh nhân được gán trong tuần (Thứ Hai – Chủ Nhật): chat, BMI, nhật ký cảm xúc và Tezca AI.
               Dùng để theo dõi đồng hành — không thay cho khám trực tiếp.
             </p>
@@ -140,7 +141,8 @@ export function ExpertWeeklyReportPage() {
           <div className="flex flex-wrap gap-2">
             <Link
               to={ROUTES.expert.doctorDesk}
-              className="text-sm font-medium rounded-xl px-4 py-2.5 text-teal-300 border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20"
+              className="text-sm font-medium rounded-xl px-4 py-2.5 border transition-colors"
+              style={{ borderColor: 'rgba(45, 212, 191, 0.35)', color: tezcaTheme.accentDark, backgroundColor: 'rgba(45, 212, 191, 0.08)' }}
             >
               Doctor Desk
             </Link>
@@ -148,7 +150,8 @@ export function ExpertWeeklyReportPage() {
               type="button"
               onClick={copySummary}
               disabled={!report}
-              className="text-sm font-medium rounded-xl px-4 py-2.5 text-slate-300 border border-slate-600 hover:bg-slate-800 disabled:opacity-40"
+              className="text-sm font-medium rounded-xl px-4 py-2.5 border disabled:opacity-40"
+              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text, backgroundColor: tezcaTheme.surface }}
             >
               {copied ? 'Đã sao chép' : 'Sao chép tóm tắt'}
             </button>
@@ -156,26 +159,28 @@ export function ExpertWeeklyReportPage() {
         </div>
 
         <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+          style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.surface, boxShadow: tezcaTheme.cardShadow }}
           role="navigation"
           aria-label="Chọn tuần"
         >
           <button
             type="button"
             onClick={() => setWeekStart((w) => shiftWeekStart(w, -1))}
-            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-300 border border-slate-700 hover:bg-slate-800"
+            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm border hover:opacity-90"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           >
             <ChevronLeft size={18} />
             Tuần trước
           </button>
           <div className="text-center min-w-[180px]">
-            <p className="text-sm font-semibold text-white m-0">
+            <p className="text-sm font-semibold m-0">
               {loading && !report ? 'Đang tải…' : report?.period.label ?? '—'}
             </p>
             {report && (
-              <p className="text-xs text-slate-500 m-0 mt-0.5">
+              <p className="text-xs m-0 mt-0.5" style={{ color: tezcaTheme.textMuted }}>
                 {formatShortIso(report.period.from)} – {formatShortIso(report.period.to)}
-                {isCurrentWeek && <span className="text-teal-400/90"> · Tuần này</span>}
+                {isCurrentWeek && <span style={{ color: tezcaTheme.accentDark }}> · Tuần này</span>}
               </p>
             )}
           </div>
@@ -183,7 +188,8 @@ export function ExpertWeeklyReportPage() {
             type="button"
             onClick={() => setWeekStart((w) => shiftWeekStart(w, 1))}
             disabled={isCurrentWeek}
-            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-300 border border-slate-700 hover:bg-slate-800 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm border disabled:opacity-40 hover:opacity-90"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           >
             Tuần sau
             <ChevronRight size={18} />
@@ -192,11 +198,11 @@ export function ExpertWeeklyReportPage() {
       </header>
 
       {error && (
-        <p className="text-sm text-rose-400 bg-rose-950/40 border border-rose-900/50 rounded-xl px-4 py-3 m-0">{error}</p>
+        <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 m-0">{error}</p>
       )}
 
       {loading && (
-        <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
+        <div className="flex items-center justify-center gap-2 py-16" style={{ color: tezcaTheme.textMuted }}>
           <Loader2 className="animate-spin" size={22} />
           <span className="text-sm">Đang tạo báo cáo…</span>
         </div>
@@ -214,26 +220,37 @@ export function ExpertWeeklyReportPage() {
             <SummaryCard icon={Heart} label="Tâm trạng thấp" value={String(report.summary.lowMoodCount)} accent={report.summary.lowMoodCount > 0} />
           </section>
 
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-              <ClipboardList size={18} className="text-teal-400" />
-              <h2 className="text-sm font-semibold text-white m-0">Chi tiết theo bệnh nhân</h2>
+          <section
+            className="rounded-2xl border overflow-hidden"
+            style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.surface, boxShadow: tezcaTheme.cardShadow }}
+          >
+            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: tezcaTheme.border }}>
+              <ClipboardList size={18} style={{ color: tezcaTheme.accent }} />
+              <h2 className="text-sm font-semibold m-0">Chi tiết theo bệnh nhân</h2>
             </div>
             {report.patients.length === 0 ? (
-              <p className="text-sm text-slate-500 px-4 py-8 m-0 text-center">Chưa có bệnh nhân được gán.</p>
+              <p className="text-sm px-4 py-8 m-0 text-center" style={{ color: tezcaTheme.textMuted }}>
+                Chưa có bệnh nhân được gán.
+              </p>
             ) : (
-              <ul className="divide-y divide-slate-800 list-none m-0 p-0">
+              <ul className="divide-y list-none m-0 p-0" style={{ borderColor: tezcaTheme.border }}>
                 {report.patients.map((p) => (
-                  <li key={p.id} className="px-4 py-4 hover:bg-slate-800/40 transition-colors">
+                  <li key={p.id} className="px-4 py-4 hover:opacity-95 transition-colors" style={{ borderColor: tezcaTheme.border }}>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                         <div>
-                          <Link to={expertPatientPath(p.id)} className="font-semibold text-white hover:text-teal-400">
+                          <Link
+                            to={expertPatientPath(p.id)}
+                            className="font-semibold hover:underline"
+                            style={{ color: tezcaTheme.text }}
+                          >
                             {p.name}
                           </Link>
-                          <p className="text-xs text-slate-500 m-0 mt-0.5">{p.email}</p>
+                          <p className="text-xs m-0 mt-0.5" style={{ color: tezcaTheme.textMuted }}>
+                            {p.email}
+                          </p>
                           {p.stats.avgMoodScore != null && (
-                            <p className="text-xs text-slate-400 m-0 mt-1">Điểm cảm xúc TB: {p.stats.avgMoodScore}/5</p>
+                            <p className="text-xs m-0 mt-1 opacity-80">Điểm cảm xúc TB: {p.stats.avgMoodScore}/5</p>
                           )}
                         </div>
                         <div className="grid grid-cols-4 gap-2 text-xs shrink-0 max-w-[220px]">
@@ -250,10 +267,10 @@ export function ExpertWeeklyReportPage() {
                               key={h}
                               className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
                                 h.includes('phản hồi')
-                                  ? 'bg-amber-500/20 text-amber-300'
+                                  ? 'bg-amber-100 text-amber-800'
                                   : h.includes('thấp')
-                                    ? 'bg-rose-500/20 text-rose-300'
-                                    : 'bg-slate-700 text-slate-400'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-slate-100 text-slate-600'
                               }`}
                             >
                               {h}
@@ -264,12 +281,15 @@ export function ExpertWeeklyReportPage() {
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         <Link
                           to={`${ROUTES.expert.doctorDesk}/${encodeURIComponent(p.id)}`}
-                          className="font-medium text-teal-400 hover:underline"
+                          className="font-medium hover:underline"
+                          style={{ color: tezcaTheme.accentDark }}
                         >
                           Mở Doctor Desk
                         </Link>
                         {p.lastActivity && (
-                          <span className="text-slate-500">Hoạt động cuối: {formatShortIso(p.lastActivity)}</span>
+                          <span style={{ color: tezcaTheme.textMuted }}>
+                            Hoạt động cuối: {formatShortIso(p.lastActivity)}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -300,22 +320,34 @@ function SummaryCard({
   return (
     <div
       className={`rounded-xl border p-3 ${
-        accent ? 'border-amber-500/40 bg-amber-500/10' : 'border-slate-800 bg-slate-900/80'
+        accent ? 'border-amber-300 bg-amber-50' : 'border'
       }`}
+      style={accent ? undefined : { borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.surface }}
     >
-      <Icon size={16} className={accent ? 'text-amber-400' : 'text-teal-400'} />
-      <p className="text-lg font-bold text-white mt-2 m-0">{value}</p>
-      <p className="text-[11px] text-slate-500 m-0 mt-0.5">{label}</p>
-      {sub && <p className="text-[10px] text-slate-600 m-0 mt-1">{sub}</p>}
+      <Icon size={16} style={{ color: accent ? '#d97706' : tezcaTheme.accent }} />
+      <p className="text-lg font-bold mt-2 m-0">{value}</p>
+      <p className="text-[11px] m-0 mt-0.5" style={{ color: tezcaTheme.textMuted }}>
+        {label}
+      </p>
+      {sub && (
+        <p className="text-[10px] m-0 mt-1" style={{ color: tezcaTheme.textMuted }}>
+          {sub}
+        </p>
+      )}
     </div>
   );
 }
 
 function StatPill({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-slate-950/80 border border-slate-800 px-2 py-1.5 text-center">
-      <p className="text-slate-500 m-0 text-[10px]">{label}</p>
-      <p className="text-white font-semibold m-0">{value}</p>
+    <div
+      className="rounded-lg border px-2 py-1.5 text-center"
+      style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.bg }}
+    >
+      <p className="m-0 text-[10px]" style={{ color: tezcaTheme.textMuted }}>
+        {label}
+      </p>
+      <p className="font-semibold m-0">{value}</p>
     </div>
   );
 }

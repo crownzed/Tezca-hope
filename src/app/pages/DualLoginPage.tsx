@@ -4,6 +4,7 @@ import { Heart, Stethoscope, ArrowRight } from 'lucide-react';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useExpertAuth } from '../context/ExpertAuthContext';
 import { ROUTES } from '../routes';
+import { tezcaTheme } from '../lib/tezcaTheme';
 
 export function LoginHubPage() {
   const { hash } = useLocation();
@@ -14,7 +15,7 @@ export function LoginHubPage() {
   }, [hash, navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ color: '#1A202C' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
       <header
         className="sticky top-0 z-30 flex flex-row items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md"
         style={{ backgroundColor: 'rgba(249, 249, 251, 0.92)', borderColor: 'rgba(26, 32, 44, 0.1)' }}
@@ -68,11 +69,22 @@ export function LoginHubPage() {
               Đăng nhập <ArrowRight size={16} />
             </span>
           </Link>
-          <Link to={ROUTES.expert.login} className="rounded-2xl border border-slate-700 bg-slate-900 p-6 no-underline text-slate-200 hover:border-teal-600/50">
-            <span className="inline-flex p-2 rounded-xl bg-slate-800 text-teal-400 border border-slate-700 mb-3"><Stethoscope size={24} /></span>
-            <h2 className="text-lg font-bold m-0 mb-1 text-white">Chuyên gia</h2>
-            <p className="text-sm text-slate-400 m-0 mb-3">Doctor Desk & theo dõi BN.</p>
-            <span className="text-sm font-semibold text-teal-400 inline-flex items-center gap-1">Đăng nhập <ArrowRight size={16} /></span>
+          <Link
+            to={ROUTES.expert.login}
+            className="rounded-2xl border p-6 no-underline hover:shadow-lg bg-white"
+            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.text }}
+          >
+            <span
+              className="inline-flex p-2 rounded-xl mb-3"
+              style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: tezcaTheme.accentDark }}
+            >
+              <Stethoscope size={24} />
+            </span>
+            <h2 className="text-lg font-bold m-0 mb-1">Chuyên gia</h2>
+            <p className="text-sm opacity-70 m-0 mb-3">Doctor Desk & theo dõi BN.</p>
+            <span className="text-sm font-semibold inline-flex items-center gap-1" style={{ color: tezcaTheme.accentDark }}>
+              Đăng nhập <ArrowRight size={16} />
+            </span>
           </Link>
         </div>
       </main>
@@ -265,28 +277,45 @@ function PatientLoginPanel() {
 
 export function ExpertLoginPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-200">
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
+      <header
+        className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md"
+        style={{ backgroundColor: 'rgba(249,249,251,0.92)', borderColor: tezcaTheme.borderStrong }}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <Link to={ROUTES.home} className="flex items-center gap-2 font-semibold text-lg text-white shrink-0">
-            <span className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-slate-950 text-sm font-bold bg-teal-400">T</span>
+          <Link to={ROUTES.home} className="flex items-center gap-2 font-semibold text-lg shrink-0">
+            <span
+              className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-white text-sm font-bold"
+              style={{ backgroundColor: tezcaTheme.accentLight }}
+            >
+              T
+            </span>
             <span>Tezca</span>
           </Link>
-          <span className="text-slate-600 hidden sm:inline">·</span>
-          <h1 className="text-base sm:text-lg font-semibold m-0 text-white truncate">Chuyên gia</h1>
+          <span className="opacity-30 hidden sm:inline">·</span>
+          <h1 className="text-base sm:text-lg font-semibold m-0 truncate">Chuyên gia</h1>
         </div>
         <div className="flex gap-3 shrink-0">
-          <Link to={ROUTES.app.login} className="text-sm text-slate-400 hover:text-teal-400">Bệnh nhân →</Link>
-          <Link to={ROUTES.home} className="text-sm text-slate-400 hover:text-teal-400">Trang chủ</Link>
+          <Link to={ROUTES.app.login} className="text-sm font-medium" style={{ color: tezcaTheme.accentDark }}>
+            Bệnh nhân →
+          </Link>
+          <Link to={ROUTES.home} className="text-sm font-medium opacity-80" style={{ color: tezcaTheme.accentDark }}>
+            Trang chủ
+          </Link>
         </div>
       </header>
       <main className="flex-1 flex items-center justify-center px-4 py-10 md:py-14">
         <div className="max-w-md w-full">
           <div className="flex items-center gap-2 mb-2">
-            <span className="inline-flex p-2 rounded-xl bg-slate-800 text-teal-400 border border-slate-700"><Stethoscope size={22} /></span>
-            <h1 className="text-2xl font-bold m-0 text-white">Chuyên gia đồng hành</h1>
+            <span
+              className="inline-flex p-2 rounded-xl"
+              style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: tezcaTheme.accentDark }}
+            >
+              <Stethoscope size={22} />
+            </span>
+            <h1 className="text-2xl font-bold m-0">Chuyên gia đồng hành</h1>
           </div>
-          <p className="text-sm text-slate-400 m-0 mb-6">Dashboard bệnh nhân được gán và chat trực tiếp.</p>
+          <p className="text-sm opacity-75 m-0 mb-6">Dashboard bệnh nhân được gán và chat trực tiếp.</p>
           <ExpertLoginPanel />
         </div>
       </main>
@@ -304,27 +333,33 @@ function ExpertLoginPanel() {
 
   if (user) {
     return (
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8 shadow-xl">
-        <h2 className="text-lg font-semibold m-0 mb-2 text-white">Đã đăng nhập chuyên gia</h2>
-        <p className="text-sm text-slate-400 m-0 mb-4">
-          <span className="text-slate-200 font-medium">{user.name}</span> · {user.email}
+      <div
+        className="rounded-2xl border p-6 md:p-8 shadow-xl"
+        style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+      >
+        <h2 className="text-lg font-semibold m-0 mb-2">Đã đăng nhập chuyên gia</h2>
+        <p className="text-sm opacity-80 m-0 mb-4">
+          <strong>{user.name}</strong>
+          <span className="opacity-60"> · {user.email}</span>
         </p>
         <div className="flex flex-col sm:flex-row gap-2">
           <Link
             to={ROUTES.expert.doctorDesk}
-            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold bg-teal-500 text-slate-950 hover:bg-teal-400 text-center"
+            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold text-center no-underline"
+            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
           >
             Mở Doctor Desk
           </Link>
           <button
             type="button"
             onClick={() => logout()}
-            className="rounded-full py-3 px-4 font-medium border border-slate-600 text-slate-200 text-sm hover:bg-slate-800"
+            className="rounded-full py-3 px-4 font-medium border text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           >
             Đăng xuất chuyên gia
           </button>
         </div>
-        <Link to={ROUTES.app.login} className="text-xs text-slate-500 mt-4 inline-block hover:text-teal-400">
+        <Link to={ROUTES.app.login} className="text-xs opacity-60 mt-4 inline-block" style={{ color: tezcaTheme.accentDark }}>
           Đăng nhập bệnh nhân (phiên riêng)
         </Link>
       </div>
@@ -346,42 +381,49 @@ function ExpertLoginPanel() {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8 shadow-xl">
-      <h2 className="text-lg font-semibold m-0 mb-1 text-white">Đăng nhập dashboard</h2>
-      <p className="text-xs text-slate-500 m-0 mb-4">
-        Demo API: <code className="text-teal-400">expert@tezca.vn</code> / <code className="text-teal-400">TezcaDemo#2026</code>
+    <div
+      className="rounded-2xl border p-6 md:p-8 shadow-xl"
+      style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+    >
+      <h2 className="text-lg font-semibold m-0 mb-1">Đăng nhập dashboard</h2>
+      <p className="text-xs opacity-55 m-0 mb-4">
+        Demo API: <code style={{ color: tezcaTheme.accentDark }}>expert@tezca.vn</code> /{' '}
+        <code style={{ color: tezcaTheme.accentDark }}>TezcaDemo#2026</code>
       </p>
       <form onSubmit={submit} className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <label className="block text-sm font-medium">
           Email
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           />
         </label>
-        <label className="block text-sm font-medium text-slate-300">
+        <label className="block text-sm font-medium">
           Mật khẩu
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           />
         </label>
-        {error && <p className="text-sm text-red-400 m-0">{error}</p>}
+        {error && <p className="text-sm text-red-600 m-0">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-full py-3 font-semibold bg-teal-500 text-slate-950 hover:bg-teal-400 disabled:opacity-50"
+          className="w-full rounded-full py-3 font-semibold text-white disabled:opacity-50"
+          style={{ background: tezcaTheme.accentGradient }}
         >
           {busy ? 'Đang xử lý…' : 'Đăng nhập chuyên gia'}
         </button>
       </form>
-      <Link to={ROUTES.home} className="block text-center text-sm mt-5 text-slate-500 hover:text-teal-400">
+      <Link to={ROUTES.home} className="block text-center text-sm mt-5 opacity-60" style={{ color: tezcaTheme.accentDark }}>
         Về trang chủ
       </Link>
     </div>

@@ -61,45 +61,67 @@ export function useLiveChat({
   const [sendError, setSendError] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
   const sinceRef = useRef(0);
+  const patientIdRef = useRef(patientId);
+  patientIdRef.current = patientId;
   const onIncomingRef = useRef(onIncoming);
   onIncomingRef.current = onIncoming;
 
   const appendMessages = useCallback((incoming: LiveMessage[]) => {
-    if (!incoming.length) return;
+    const activePatientId = patientIdRef.current;
+    if (!activePatientId || !incoming.length) return;
+    const forPatient = incoming.filter((m) => m.patientId === activePatientId);
+    if (!forPatient.length) return;
     setMessages((prev) => {
-      const next = mergeMessages(prev, incoming);
+      const base = prev.filter((m) => m.patientId === activePatientId);
+      const next = mergeMessages(base, forPatient);
       sinceRef.current = maxTs(next);
       return next;
     });
-    for (const m of incoming) onIncomingRef.current?.(m);
+    for (const m of forPatient) onIncomingRef.current?.(m);
   }, []);
 
   const loadHistory = useCallback(async () => {
     if (!token || !patientId || !enabled) return;
+    const loadFor = patientId;
     setLoading(true);
     try {
       const r = await apiFetch<{ messages: LiveMessage[] }>(historyUrl, { token });
-      const list = r.messages || [];
+      if (patientIdRef.current !== loadFor) return;
+      const list = (r.messages || []).filter((m) => m.patientId === loadFor);
       setMessages(list);
       sinceRef.current = maxTs(list);
       setSendError('');
     } catch {
+      if (patientIdRef.current !== loadFor) return;
       setMessages([]);
       sinceRef.current = 0;
     } finally {
-      setLoading(false);
+      if (patientIdRef.current === loadFor) setLoading(false);
     }
   }, [token, patientId, historyUrl, enabled]);
 
   useEffect(() => {
     if (!enabled || !token || !patientId) {
       setMessages([]);
+      sinceRef.current = 0;
       setLoading(false);
       setTransport('connecting');
       return;
     }
+    setMessages([]);
+    sinceRef.current = 0;
+    setSendError('');
+    setLoading(true);
     loadHistory();
   }, [enabled, token, patientId, loadHistory]);
+
+  /** Đổi phòng WS khi chuyên gia chọn bệnh nhân khác (không cần reconnect). */
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN && patientId) {
+      ws.send(JSON.stringify({ type: 'join', patientId }));
+    }
+  }, [patientId]);
 
   const poll = useCallback(async () => {
     if (!token || !patientId || !enabled) return;
@@ -230,8 +252,10 @@ export function useLiveChat({
           token,
           body: JSON.stringify({ text: trimmed }),
         });
+        if (r.message.patientId !== patientIdRef.current) return true;
         setMessages((prev) => {
-          const withoutOpt = prev.filter((m) => m.id !== optimisticId);
+          const pid = patientIdRef.current;
+          const withoutOpt = prev.filter((m) => m.id !== optimisticId && m.patientId === pid);
           return mergeMessages(withoutOpt, [r.message]);
         });
         sinceRef.current = Math.max(sinceRef.current, r.message.ts);

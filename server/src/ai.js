@@ -1,4 +1,4 @@
-import { geminiChat, isGeminiConfigured } from './gemini.js';
+import { geminiChat, geminiChatStream, isGeminiConfigured } from './gemini.js';
 
 export { isGeminiConfigured as isAiConfigured };
 
@@ -13,4 +13,9 @@ export function aiProvider() {
  */
 export async function aiChat(messages, opts = {}) {
   return geminiChat(messages, opts);
+}
+
+/** @returns {AsyncGenerator<string>} */
+export function aiChatStream(messages, opts = {}) {
+  return geminiChatStream(messages, opts);
 }

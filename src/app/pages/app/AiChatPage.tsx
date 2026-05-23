@@ -27,13 +27,11 @@ import {
 } from '../../lib/aiChatHistory';
 import { mockAiReply } from '../../lib/mockAi';
 import { apiFetch } from '../../lib/api';
+import { polishAiText } from '../../lib/polishAiText';
+import { simulateTextStream, streamAiChat } from '../../lib/streamAiChat';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { ROUTES } from '../../routes';
 import { ChatHistoryPanel } from '../../components/ChatHistoryPanel';
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 function formatTime(ts: number): string {
   try {
@@ -65,9 +63,11 @@ export function AiChatPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const abortRef = useRef<AbortController | null>(null);
 
   const persistMessages = useCallback(
     (list: ChatMessage[]) => {
@@ -93,7 +93,11 @@ export function AiChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pending]);
+  }, [messages, pending, streamingId]);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (!sessionReady) return;
@@ -183,38 +187,67 @@ export function AiChatPage() {
     setInput('');
     setPending(true);
 
+    const replyId = crypto.randomUUID();
+    const replyShell: ChatMessage = {
+      id: replyId,
+      role: 'assistant',
+      content: '',
+      ts: Date.now(),
+    };
+    const withShell = [...next, replyShell];
+    setMessages(withShell);
+    setStreamingId(replyId);
+
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    const patchStreaming = (content: string) => {
+      setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, content } : m)));
+    };
+
     try {
+      let finalContent: string;
+
       if (canPersist) {
         const apiMsgs = next.map(({ role, content }) => ({ role, content }));
-        const r = await apiFetch<{ content: string }>('/api/me/ai-chat', {
-          method: 'POST',
-          token: token!,
-          body: JSON.stringify({ messages: apiMsgs }),
-        });
-        const reply: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: r.content,
-          ts: Date.now(),
-        };
-        const withReply = [...next, reply];
-        setMessages(withReply);
-        persistMessages(withReply);
+        try {
+          finalContent = await streamAiChat({
+            token: token!,
+            messages: apiMsgs,
+            onDelta: patchStreaming,
+            signal: ac.signal,
+          });
+        } catch {
+          const r = await apiFetch<{ content: string }>('/api/me/ai-chat', {
+            method: 'POST',
+            token: token!,
+            body: JSON.stringify({ messages: apiMsgs }),
+            signal: ac.signal,
+          });
+          finalContent = polishAiText(r.content);
+          await simulateTextStream(finalContent, patchStreaming, { signal: ac.signal });
+        }
       } else {
-        await sleep(600 + Math.random() * 400);
-        const reply: ChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: mockAiReply(text),
-          ts: Date.now(),
-        };
-        const withReply = [...next, reply];
-        setMessages(withReply);
+        finalContent = await simulateTextStream(mockAiReply(text), patchStreaming, {
+          signal: ac.signal,
+        });
       }
+
+      const reply: ChatMessage = {
+        id: replyId,
+        role: 'assistant',
+        content: finalContent,
+        ts: Date.now(),
+      };
+      const withReply = [...next, reply];
+      setMessages(withReply);
+      if (canPersist) persistMessages(withReply);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       const errMsg = err instanceof Error ? err.message : 'Lỗi không xác định';
       const reply: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: replyId,
         role: 'assistant',
         content: canPersist
           ? `Không nhận được phản hồi từ AI (${errMsg}). Vui lòng thử lại sau.`
@@ -225,7 +258,9 @@ export function AiChatPage() {
       setMessages(withReply);
       if (canPersist) persistMessages(withReply);
     } finally {
+      setStreamingId(null);
       setPending(false);
+      abortRef.current = null;
     }
   };
 
@@ -434,7 +469,9 @@ export function AiChatPage() {
                     </button>
                   )}
                   <div
-                    className="inline-block rounded-2xl px-4 py-3 text-sm leading-relaxed text-left whitespace-pre-wrap break-words"
+                    className={`inline-block rounded-2xl px-4 py-3 text-sm leading-relaxed text-left whitespace-pre-wrap break-words ${
+                      m.role === 'assistant' && m.id === streamingId ? 'transition-[opacity] duration-150' : ''
+                    }`}
                     style={
                       m.role === 'user'
                         ? {
@@ -451,6 +488,12 @@ export function AiChatPage() {
                     }
                   >
                     {m.content}
+                    {m.role === 'assistant' && m.id === streamingId && (
+                      <span
+                        className="inline-block w-0.5 h-[1em] align-middle ml-0.5 bg-teal-500/80 animate-pulse rounded-full"
+                        aria-hidden
+                      />
+                    )}
                   </div>
                   <p className="text-[11px] opacity-45 mt-1.5 m-0 px-1" style={{ color: '#1A202C' }}>
                     {m.role === 'user' ? 'Bạn' : 'Tezca AI'} · {formatTime(m.ts)}
@@ -462,7 +505,7 @@ export function AiChatPage() {
               </div>
             ))}
 
-            {pending && (
+            {pending && !streamingId && (
               <div className="flex gap-3">
                 <div
                   className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center"

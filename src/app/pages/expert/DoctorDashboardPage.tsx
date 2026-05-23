@@ -25,6 +25,7 @@ import { apiFetch } from '../../lib/api';
 import { useLiveChat, type LiveMessage } from '../../lib/liveChat';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES } from '../../routes';
+import { tezcaTheme } from '../../lib/tezcaTheme';
 import { ExpertCustomerList, type ExpertPatientInboxRow } from '../../components/expert/ExpertCustomerList';
 
 type PatientDetail = {
@@ -171,6 +172,11 @@ export function DoctorDashboardPage() {
     loadDetail();
   }, [loadDetail]);
 
+  useEffect(() => {
+    setDraft('');
+    setShowAiContext(false);
+  }, [patientId]);
+
   const loadPatientList = useCallback(() => {
     if (!token) return;
     setListLoading(true);
@@ -249,10 +255,18 @@ export function DoctorDashboardPage() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-slate-100 text-slate-900 font-[Inter,ui-sans-serif,system-ui,sans-serif] tabular-nums">
-      <div className="lg:hidden shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 bg-[#0c1929] text-slate-200 border-b border-slate-800/80">
-        <span className="text-sm font-semibold text-white truncate">Tezca · Doctor Desk</span>
-        <Link to={ROUTES.expert.root} className="text-xs font-medium text-teal-300 hover:text-teal-200 shrink-0">
+    <div
+      className="flex flex-col h-full min-h-0 font-[Inter,ui-sans-serif,system-ui,sans-serif] tabular-nums"
+      style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}
+    >
+      <div
+        className="lg:hidden shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 border-b"
+        style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+      >
+        <span className="text-sm font-semibold truncate" style={{ color: tezcaTheme.text }}>
+          Tezca · Doctor Desk
+        </span>
+        <Link to={ROUTES.expert.root} className="text-xs font-medium shrink-0" style={{ color: tezcaTheme.accent }}>
           Danh sách
         </Link>
       </div>
@@ -389,8 +403,14 @@ export function DoctorDashboardPage() {
                 </div>
               )}
 
-              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-3">
-                {messages.length === 0 && !loading && (
+              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-3" key={patientId ?? 'none'}>
+                {live.loading && (
+                  <p className="text-sm text-slate-500 text-center py-8 m-0 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Đang tải lịch sử chat…
+                  </p>
+                )}
+                {messages.length === 0 && !live.loading && (
                   <p className="text-sm text-slate-500 text-center py-8 m-0">Chưa có tin nhắn trong hồ sơ này.</p>
                 )}
                 {messages.map((m) => (
@@ -446,7 +466,8 @@ export function DoctorDashboardPage() {
                   <button
                     type="button"
                     onClick={sendDoctor}
-                    className="h-11 w-11 shrink-0 rounded-xl bg-[#0c1929] text-white flex items-center justify-center hover:bg-slate-800 disabled:opacity-40"
+                    className="h-11 w-11 shrink-0 rounded-xl text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
                     aria-label="Gửi"
                     disabled={!liveMode || !live.ready || live.sending}
                   >

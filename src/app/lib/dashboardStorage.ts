@@ -1,3 +1,5 @@
+import type { DailyProgressMap } from './trainingDayProgress';
+
 export type DashboardExercise = {
   id: number;
   title: string;
@@ -59,11 +61,25 @@ function writeJson(k: string, value: unknown) {
 
 export function loadDashboardExercises(userId: string | null): DashboardExercise[] {
   const list = readJson<DashboardExercise[]>(key('tezca_dashboard_exercises_v1', userId), []);
-  return list.length > 0 ? list : DEFAULT_EXERCISES.map((e) => ({ ...e }));
+  const base = list.length > 0 ? list : DEFAULT_EXERCISES.map((e) => ({ ...e }));
+  return stripExerciseProgress(base);
+}
+
+export function loadDailyProgressLocal(userId: string | null): DailyProgressMap {
+  return readJson<DailyProgressMap>(key('tezca_dashboard_daily_v1', userId), {});
+}
+
+export function saveDailyProgressLocal(userId: string | null, map: DailyProgressMap) {
+  writeJson(key('tezca_dashboard_daily_v1', userId), map);
 }
 
 export function saveDashboardExercises(userId: string | null, exercises: DashboardExercise[]) {
   writeJson(key('tezca_dashboard_exercises_v1', userId), exercises);
+}
+
+/** Cấu trúc bài tập (không lưu completed theo ngày — dùng trainingDayProgress). */
+export function stripExerciseProgress(exercises: DashboardExercise[]): DashboardExercise[] {
+  return exercises.map((ex) => ({ ...ex, completed: false }));
 }
 
 export function loadFoodLog(userId: string | null): FoodLogItem[] {

@@ -1,13 +1,17 @@
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { generatePersonalizedPlan, type PlanInput } from '../../lib/planGenerator';
 import { ROUTES } from '../../routes';
 import { recordPlanGenerated } from '../../lib/gamification';
 import { apiFetch } from '../../lib/api';
 import { usePatientAuth } from '../../context/PatientAuthContext';
+import { parseExercisesFromPlanMarkdown } from '../../lib/planToExercises';
+import { loadDashboardExercises, saveDashboardExercises } from '../../lib/dashboardStorage';
+import { simulateTextStream } from '../../lib/streamAiChat';
 
 export function PlansPage() {
-  const { token } = usePatientAuth();
+  const { token, user } = usePatientAuth();
+  const navigate = useNavigate();
   const [age, setAge] = useState('28');
   const [goal, setGoal] = useState<PlanInput['goal']>('maintain');
   const [activity, setActivity] = useState<PlanInput['activity']>('medium');
@@ -15,6 +19,13 @@ export function PlansPage() {
   const [plan, setPlan] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [planSource, setPlanSource] = useState<'ai' | 'local' | null>(null);
+  const [integrating, setIntegrating] = useState(false);
+  const [integrateMsg, setIntegrateMsg] = useState('');
+
+  const previewExercises = useMemo(
+    () => (plan ? parseExercisesFromPlanMarkdown(plan) : []),
+    [plan],
+  );
 
   const generate = async () => {
     const a = parseInt(age, 10);
@@ -44,8 +55,9 @@ export function PlansPage() {
             dietNote: input.dietNote,
           }),
         });
-        setPlan(r.plan);
         setPlanSource('ai');
+        setPlan('');
+        await simulateTextStream(r.plan, (t) => setPlan(t), { minMs: 8, maxMs: 22 });
         recordPlanGenerated();
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Lỗi không xác định';
@@ -65,6 +77,28 @@ export function PlansPage() {
     setPlan(local);
     setPlanSource('local');
     recordPlanGenerated();
+  };
+
+  const integrateToTraining = async () => {
+    if (!plan || !token) return;
+    setIntegrating(true);
+    setIntegrateMsg('');
+    try {
+      const r = await apiFetch<{ plan: { exercises: ReturnType<typeof parseExercisesFromPlanMarkdown> } }>(
+        '/api/me/training-plan/integrate',
+        {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ plan }),
+        },
+      );
+      saveDashboardExercises(user?.id ?? null, r.plan.exercises);
+      setIntegrateMsg('Đã tích hợp vào Chiến dịch tập luyện. Chuyên gia có thể xem và chỉnh sửa trước khi duyệt.');
+    } catch (e) {
+      setIntegrateMsg(e instanceof Error ? e.message : 'Không tích hợp được');
+    } finally {
+      setIntegrating(false);
+    }
   };
 
   return (
@@ -185,6 +219,46 @@ export function PlansPage() {
             </p>
           )}
           <pre className="whitespace-pre-wrap font-sans m-0">{plan}</pre>
+          {token ? (
+            <div className="mt-6 pt-6 border-t space-y-3" style={{ borderColor: 'rgba(26, 32, 44, 0.08)' }}>
+              <p className="text-sm m-0 opacity-80">
+                {previewExercises.length > 0
+                  ? `Sẽ thêm ${previewExercises.length} mục vận động vào Trung tâm kỷ luật (Chiến dịch tập luyện). Chuyên gia được gán có thể kiểm tra và chỉnh sửa.`
+                  : 'Không trích được mục vận động rõ — hệ thống vẫn tạo một buổi tổng hợp để chuyên gia chỉnh.'}
+              </p>
+              {integrateMsg && (
+                <p className="text-sm m-0" style={{ color: '#0F766E' }}>
+                  {integrateMsg}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void integrateToTraining()}
+                  disabled={integrating}
+                  className="rounded-full px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                  style={{ backgroundColor: '#0F766E' }}
+                >
+                  {integrating ? 'Đang tích hợp…' : 'Tích hợp vào tập luyện'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.app.root)}
+                  className="rounded-full px-6 py-2.5 text-sm font-medium border"
+                  style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
+                >
+                  Mở Chiến dịch tập luyện
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm mt-6 m-0 opacity-70">
+              <Link to={ROUTES.app.login} style={{ color: '#0F766E', fontWeight: 600 }}>
+                Đăng nhập
+              </Link>{' '}
+              để tích hợp kế hoạch vào phần tập luyện và gửi cho chuyên gia duyệt.
+            </p>
+          )}
         </div>
       )}
     </div>

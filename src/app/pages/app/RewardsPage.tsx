@@ -231,7 +231,7 @@ function LevelHero({ state }: { state: GamificationState }) {
               {maxed ? 'MAX' : `${xpIntoLevel} / 200 XP`}
             </span>
           </div>
-          <div className="h-3 rounded-full bg-black/20 overflow-hidden">
+          <div className="h-3 rounded-full bg-white/25 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500 ease-out"
               style={{
