@@ -107,6 +107,17 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(isoDate, delta) {
+  const d = new Date(`${isoDate}T12:00:00`);
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function customerIndexFromEmail(email, fallback) {
+  const m = String(email).match(/-(\d{3})@/);
+  return m ? Number(m[1]) : fallback;
+}
+
 function planMarkdown(customerName, expertName) {
   return `${WORK_TAG}\n## Kế hoạch demo — ${customerName}\nChuyên gia phụ trách: ${expertName}\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút`;
 }
@@ -198,6 +209,86 @@ export function seedDemoCustomers(options = {}) {
   }
 
   return { count, prefix, created, skipped, assigned, withHealth };
+}
+
+/**
+ * BMI + mood 30 ngày (heatmap chuyên gia) cho mọi khách kh-demo-*.
+ * @param {{ prefix?: string; days?: number }} [options]
+ */
+export function seedDemoHealthHistory30Days(options = {}) {
+  const prefix = String(options.prefix ?? DEMO_CUSTOMER_PREFIX).replace(/[^a-z0-9-]/gi, '') || DEMO_CUSTOMER_PREFIX;
+  const days = Math.max(1, Math.min(120, options.days ?? 30));
+  const db = getDb();
+  const today = todayIso();
+  const startDate = addDays(today, -(days - 1));
+
+  const customers = db
+    .prepare(
+      `SELECT id, email FROM users WHERE role = 'user' AND email LIKE ? ORDER BY email COLLATE NOCASE`,
+    )
+    .all(`${prefix}-%`);
+
+  if (customers.length === 0) {
+    return { ok: false, error: 'no_demo_customers', customers: 0, days };
+  }
+
+  const delBmi = db.prepare(`DELETE FROM bmi_entries WHERE user_id = ? AND date >= ? AND date <= ?`);
+  const delMood = db.prepare(`DELETE FROM mood_entries WHERE user_id = ? AND date >= ? AND date <= ?`);
+  const insBmi = db.prepare(
+    `INSERT INTO bmi_entries (id, user_id, date, height_cm, weight_kg, bmi) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  const insMood = db.prepare(
+    `INSERT INTO mood_entries (id, user_id, date, mood_label, mood_score, note) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+
+  let bmiRows = 0;
+  let moodRows = 0;
+
+  db.transaction(() => {
+    for (let ci = 0; ci < customers.length; ci += 1) {
+      const { id: userId, email } = customers[ci];
+      const idx = customerIndexFromEmail(email, ci + 1);
+      const heightCm = 155 + (idx % 25);
+      const baseWeight = 50 + (idx % 28);
+
+      delBmi.run(userId, startDate, today);
+      delMood.run(userId, startDate, today);
+
+      for (let d = 0; d < days; d += 1) {
+        const date = addDays(today, -d);
+        const weightKg = round1(baseWeight - d * 0.04 + ((idx + d) % 5) * 0.1);
+        insBmi.run(
+          crypto.randomUUID(),
+          userId,
+          date,
+          heightCm,
+          weightKg,
+          round1(weightKg / (heightCm / 100) ** 2),
+        );
+        bmiRows += 1;
+
+        const moodScore = 1 + ((idx + d * 2) % 5);
+        insMood.run(
+          crypto.randomUUID(),
+          userId,
+          date,
+          MOOD_LABELS[(idx + d) % MOOD_LABELS.length],
+          moodScore,
+          d % 12 === 0 ? 'Dữ liệu heatmap 30 ngày (demo).' : '',
+        );
+        moodRows += 1;
+      }
+    }
+  })();
+
+  return {
+    ok: true,
+    customers: customers.length,
+    days,
+    bmiRows,
+    moodRows,
+    dateRange: `${startDate} … ${today}`,
+  };
 }
 
 /**
@@ -318,20 +409,25 @@ export function seedDemoExpertsAndWork(options = {}) {
   };
 }
 
-/** Yêu cầu 1 + 2: 100 khách (BMI/mood), 4 CG, gán đều, 200 bản ghi công việc. */
+/** Yêu cầu 1 + 2: 100 khách, 30 ngày BMI/mood, 4 CG, gán đều, 200 bản ghi công việc. */
 export function seedAllDemo(options = {}) {
+  const prefix = options.prefix ?? DEMO_CUSTOMER_PREFIX;
   const customers = seedDemoCustomers({
     count: options.count ?? 100,
-    prefix: options.prefix ?? DEMO_CUSTOMER_PREFIX,
-    withHealth: true,
+    prefix,
+    withHealth: options.withHealth !== false,
     assignExpert: false,
   });
+  const health30d = seedDemoHealthHistory30Days({
+    prefix,
+    days: options.healthDays ?? 30,
+  });
   const expertsWork = seedDemoExpertsAndWork({
-    customerPrefix: options.prefix ?? DEMO_CUSTOMER_PREFIX,
+    customerPrefix: prefix,
     workPlans: options.workPlans ?? 100,
     workMessages: options.workMessages ?? 100,
   });
-  return { customers, expertsWork };
+  return { customers, health30d, expertsWork };
 }
 
 export function shouldRunBulkDemoSeed() {

@@ -11,6 +11,7 @@
     "seed:demo-customers": "node scripts/seed-demo-customers.mjs",
     "seed:demo-experts-work": "node scripts/seed-demo-experts-work.mjs",
     "seed:all-demo": "node scripts/seed-all-demo.mjs",
+    "seed:demo-health-30d": "node scripts/seed-demo-health-30d.mjs",
     "generate:data-management-files": "node scripts/generate-data-management-fixtures.mjs"
   },
   "dependencies": {
