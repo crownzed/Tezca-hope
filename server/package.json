@@ -7,13 +7,18 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "verify:db": "node scripts/verify-db.mjs",
-    "seed:test-users": "node scripts/ensure-test-users.mjs"
+    "seed:test-users": "node scripts/ensure-test-users.mjs",
+    "seed:demo-customers": "node scripts/seed-demo-customers.mjs",
+    "seed:demo-experts-work": "node scripts/seed-demo-experts-work.mjs",
+    "seed:all-demo": "node scripts/seed-all-demo.mjs",
+    "generate:data-management-files": "node scripts/generate-data-management-fixtures.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
     "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^11.8.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "google-auth-library": "^9.15.1",
     "jsonwebtoken": "^9.0.2",
     "ws": "^8.18.0"
   }
