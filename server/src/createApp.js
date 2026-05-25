@@ -20,11 +20,6 @@ import {
   forgotPasswordHandler,
   resetPasswordHandler,
 } from './routes/auth.js';
-import {
-  googleAuthRouter,
-  googleAuthStartHandler,
-  googleAuthCallbackHandler,
-} from './routes/googleAuth.js';
 import { registerLimiter, forgotPasswordLimiter, loginLimiter, resetPasswordLimiter } from './rateLimit.js';
 import { userRouter } from './routes/user.js';
 import { expertRouter } from './routes/expert.js';
@@ -88,11 +83,7 @@ export function createApp() {
   app.post('/api/auth/forgot-password', forgotPasswordLimiter, forgotPasswordHandler);
   app.post('/api/auth/reset-password', resetPasswordLimiter, resetPasswordHandler);
 
-  app.get('/api/auth/google', loginLimiter, googleAuthStartHandler);
-  app.get('/api/auth/google/callback', loginLimiter, googleAuthCallbackHandler);
-
   app.use('/api/auth', authRouter);
-  app.use('/api/auth', googleAuthRouter);
   app.use('/auth', authRouter);
 
   /** Alias — path bị rút hoặc client gọi URL ngắn */
