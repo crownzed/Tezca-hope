@@ -1,211 +1,268 @@
 import { Link } from 'react-router';
-import { MessageCircle, Sparkles } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 import { ROUTES } from '../routes';
+import { LandingAmbient } from './landing/LandingAmbient';
+import { landingEase, landingSpring, staggerContainer, staggerItem } from '../lib/landingMotion';
+
+const stats = ['100%', '24/7', 'Miễn phí'] as const;
+
+const chatMessages = [
+  { side: 'user' as const, text: 'Mình vừa ăn phở gà với trứng 🍜', delay: 0.9 },
+  { side: 'ai' as const, rich: true, delay: 1.15 },
+  { side: 'ai' as const, text: 'Hôm nay bạn cảm thấy thế nào? 🌸', delay: 1.45 },
+];
 
 export function HeroSection() {
+  const reduce = useReducedMotion();
+
   return (
-    <section id="hero" className="px-6 py-24 md:py-32 scroll-mt-24">
-      <div className="max-w-7xl mx-auto">
+    <section id="hero" className="relative px-6 py-24 md:py-32 scroll-mt-24 overflow-hidden">
+      <LandingAmbient />
+      <div className="max-w-7xl mx-auto relative z-10">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left - Content */}
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{ backgroundColor: 'rgba(45, 212, 191, 0.1)' }}>
-              <Sparkles size={16} style={{ color: '#2DD4BF' }} />
-              <span className="text-sm font-medium" style={{ color: '#2DD4BF' }}>
-                AI-Powered Wellness
-              </span>
-            </div>
-            
-            <h1 
+          <motion.div
+            className="space-y-8"
+            variants={staggerContainer}
+            initial={reduce ? false : 'hidden'}
+            animate="visible"
+          >
+            <motion.h1
+              variants={staggerItem}
               className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight"
               style={{ color: '#1A202C' }}
             >
-              Sức khỏe của bạn.<br />
-              Được thấu hiểu.<br />
+              Sức khỏe của bạn.
+              <br />
+              Được thấu hiểu.
+              <br />
               Được chăm sóc.
-            </h1>
-            
-            <p className="text-xl md:text-2xl leading-relaxed opacity-60" style={{ color: '#1A202C' }}>
+            </motion.h1>
+
+            <motion.p
+              variants={staggerItem}
+              className="text-xl md:text-2xl leading-relaxed opacity-60"
+              style={{ color: '#1A202C' }}
+            >
               Trợ lý AI thấu cảm kết hợp chuyên gia y tế. Theo dõi dinh dưỡng, sức khỏe tinh thần và nhận tư vấn 24/7.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link
-                to={ROUTES.app.chat}
-                className="px-8 py-4 rounded-full text-lg font-semibold transition-all hover:scale-105 hover:shadow-2xl flex items-center justify-center gap-3"
-                style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
-              >
-                <MessageCircle size={24} />
-                Trò chuyện ẩn danh ngay
-              </Link>
-              
-              <Link
-                to={ROUTES.app.root}
-                className="px-8 py-4 rounded-full text-lg font-medium transition-all hover:bg-opacity-10 inline-flex items-center justify-center"
-                style={{ backgroundColor: 'transparent', color: '#1A202C', border: '2px solid rgba(26, 32, 44, 0.1)' }}
-              >
-                Vào ứng dụng
-              </Link>
-            </div>
-            
-            {/* Stats */}
-            <div className="flex gap-8 pt-8">
-              <div>
-                <div className="text-3xl font-bold" style={{ color: '#1A202C' }}>100%</div>
+            </motion.p>
+
+            <motion.div variants={staggerItem} className="flex flex-col sm:flex-row gap-4">
+              <motion.div whileHover={reduce ? undefined : { scale: 1.04 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
                 <Link
-                  to={ROUTES.product.security}
-                  className="text-sm opacity-50 hover:opacity-80 transition-opacity block mt-0.5"
-                  style={{ color: '#1A202C' }}
+                  to={ROUTES.app.chat}
+                  className="px-8 py-4 rounded-full text-lg font-semibold flex items-center justify-center gap-3 shadow-lg shadow-teal-500/20"
+                  style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
                 >
-                  Bảo mật
+                  <MessageCircle size={24} />
+                  Trò chuyện ẩn danh ngay
                 </Link>
-              </div>
-              <div>
-                <div className="text-3xl font-bold" style={{ color: '#1A202C' }}>24/7</div>
-                <div className="text-sm opacity-50" style={{ color: '#1A202C' }}>Hỗ trợ AI</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold" style={{ color: '#1A202C' }}>Miễn phí</div>
-                <div className="text-sm opacity-50" style={{ color: '#1A202C' }}>Để bắt đầu</div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Right - iPhone Mockup */}
-          <div className="relative flex justify-center lg:justify-end">
-            <div className="relative" style={{ perspective: '1000px' }}>
-              {/* 3D iPhone */}
-              <div 
-                className="relative w-[320px] transition-transform duration-300"
-                style={{ 
-                  transform: 'rotateY(-5deg) rotateX(2deg)',
-                  transformStyle: 'preserve-3d'
-                }}
-              >
-                {/* Device Frame */}
-                <div 
-                  className="rounded-[3rem] p-3 shadow-2xl relative"
-                  style={{ 
-                    backgroundColor: '#1A202C',
-                    boxShadow: '0 50px 100px -20px rgba(26, 32, 44, 0.3), 0 30px 60px -30px rgba(45, 212, 191, 0.2)'
+              </motion.div>
+
+              <motion.div whileHover={reduce ? undefined : { scale: 1.02 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
+                <Link
+                  to={ROUTES.app.dashboard}
+                  className="px-8 py-4 rounded-full text-lg font-medium inline-flex items-center justify-center"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#1A202C',
+                    border: '2px solid rgba(26, 32, 44, 0.1)',
                   }}
                 >
-                  {/* Dynamic Island */}
-                  <div className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-8 bg-black rounded-full z-20"></div>
-                  
-                  {/* Screen */}
-                  <div className="rounded-[2.5rem] overflow-hidden relative" style={{ aspectRatio: '9/19.5', backgroundColor: '#F9F9FB' }}>
-                    {/* Status Bar */}
-                    <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-8 pt-4 z-10">
-                      <span className="text-xs font-semibold" style={{ color: '#1A202C' }}>9:41</span>
-                      <div className="flex items-center gap-1">
-                        <div className="w-4 h-4" style={{ color: '#1A202C' }}>📶</div>
-                        <div className="w-4 h-4" style={{ color: '#1A202C' }}>🔋</div>
-                      </div>
-                    </div>
-                    
-                    {/* App Content */}
-                    <div className="h-full flex flex-col pt-16">
-                      {/* Chat Header - Glassmorphism */}
-                      <div 
+                  Vào ứng dụng
+                </Link>
+              </motion.div>
+            </motion.div>
+
+            <motion.div variants={staggerItem} className="flex gap-8 pt-8">
+              {stats.map((value, i) => (
+                <motion.div
+                  key={value}
+                  className="text-3xl font-bold"
+                  style={{ color: '#1A202C' }}
+                  initial={reduce ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 + i * 0.08, duration: 0.45, ease: landingEase }}
+                >
+                  {value}
+                </motion.div>
+              ))}
+            </motion.div>
+          </motion.div>
+
+          <motion.div
+            className="relative flex justify-center lg:justify-end"
+            initial={reduce ? false : { opacity: 0, x: 40, rotateY: -8 }}
+            animate={{ opacity: 1, x: 0, rotateY: -5 }}
+            transition={{ ...landingSpring, delay: 0.2 }}
+          >
+            <div className="relative" style={{ perspective: '1000px' }}>
+              <motion.div
+                className="relative w-[320px]"
+                style={{
+                  transformStyle: 'preserve-3d',
+                }}
+                animate={
+                  reduce
+                    ? undefined
+                    : {
+                        y: [0, -10, 0],
+                        rotateX: [2, 4, 2],
+                      }
+                }
+                transition={
+                  reduce
+                    ? undefined
+                    : {
+                        y: { duration: 5.5, repeat: Infinity, ease: 'easeInOut' },
+                        rotateX: { duration: 5.5, repeat: Infinity, ease: 'easeInOut' },
+                      }
+                }
+                whileHover={reduce ? undefined : { scale: 1.02, rotateY: -2 }}
+              >
+                <div
+                  className="rounded-[3rem] p-3 shadow-2xl relative border"
+                  style={{
+                    backgroundColor: '#ffffff',
+                    borderColor: 'rgba(26, 32, 44, 0.1)',
+                    boxShadow:
+                      '0 50px 100px -20px rgba(26, 32, 44, 0.12), 0 30px 60px -30px rgba(45, 212, 191, 0.15)',
+                    transform: 'rotateY(-5deg) rotateX(2deg)',
+                  }}
+                >
+                  <div
+                    className="absolute top-6 left-1/2 -translate-x-1/2 w-28 h-8 rounded-full z-20"
+                    style={{ backgroundColor: 'rgba(26, 32, 44, 0.12)' }}
+                  />
+
+                  <div
+                    className="rounded-[2.5rem] overflow-hidden relative"
+                    style={{ aspectRatio: '9/19.5', backgroundColor: '#F9F9FB' }}
+                  >
+                    <div className="h-full flex flex-col pt-8">
+                      <div
                         className="px-6 py-4 backdrop-blur-xl border-b"
-                        style={{ 
+                        style={{
                           backgroundColor: 'rgba(249, 249, 251, 0.8)',
-                          borderColor: 'rgba(26, 32, 44, 0.1)'
+                          borderColor: 'rgba(26, 32, 44, 0.1)',
                         }}
                       >
                         <div className="flex items-center gap-3">
-                          <div 
+                          <motion.div
                             className="w-10 h-10 rounded-full flex items-center justify-center"
-                            style={{ 
-                              background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)'
+                            style={{
+                              background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
                             }}
+                            animate={reduce ? undefined : { scale: [1, 1.06, 1] }}
+                            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                           >
                             <span className="text-lg">✨</span>
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold" style={{ color: '#1A202C' }}>Tezca AI</div>
-                            <div className="text-xs" style={{ color: '#2DD4BF' }}>Đang hoạt động</div>
+                          </motion.div>
+                          <div className="text-sm font-semibold" style={{ color: '#1A202C' }}>
+                            Tezca AI
                           </div>
                         </div>
                       </div>
-                      
-                      {/* Messages */}
+
                       <div className="flex-1 px-4 py-6 space-y-4 overflow-hidden">
-                        {/* User Message */}
-                        <div className="flex justify-end">
-                          <div 
-                            className="px-4 py-3 rounded-3xl rounded-tr-lg max-w-[75%]"
-                            style={{ 
-                              background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
-                              color: 'white'
-                            }}
-                          >
-                            <p className="text-sm">Mình vừa ăn phở gà với trứng 🍜</p>
-                          </div>
-                        </div>
-                        
-                        {/* AI Response - Glassmorphism Card */}
-                        <div className="flex justify-start">
-                          <div 
-                            className="p-4 rounded-3xl rounded-tl-lg max-w-[85%] backdrop-blur-xl border"
-                            style={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                              borderColor: 'rgba(45, 212, 191, 0.2)',
-                              boxShadow: '0 8px 32px rgba(45, 212, 191, 0.1)'
-                            }}
-                          >
-                            <p className="text-sm mb-3 font-medium" style={{ color: '#1A202C' }}>
-                              Tuyệt vời! Đã ghi nhận 💚
-                            </p>
-                            
-                            {/* Macro Card */}
-                            <div className="p-3 rounded-2xl mb-3" style={{ backgroundColor: 'rgba(45, 212, 191, 0.1)' }}>
-                              <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-semibold" style={{ color: '#1A202C' }}>Phở gà</span>
-                                <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>350 cal</span>
+                        {chatMessages.map((msg, idx) =>
+                          msg.rich ? (
+                            <motion.div
+                              key="rich"
+                              className="flex justify-start"
+                              initial={reduce ? false : { opacity: 0, x: -16, scale: 0.96 }}
+                              animate={{ opacity: 1, x: 0, scale: 1 }}
+                              transition={{ delay: msg.delay, duration: 0.5, ease: landingEase }}
+                            >
+                              <div
+                                className="p-4 rounded-3xl rounded-tl-lg max-w-[85%] backdrop-blur-xl border"
+                                style={{
+                                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                  borderColor: 'rgba(45, 212, 191, 0.2)',
+                                  boxShadow: '0 8px 32px rgba(45, 212, 191, 0.1)',
+                                }}
+                              >
+                                <p className="text-sm mb-3 font-medium m-0" style={{ color: '#1A202C' }}>
+                                  Tuyệt vời! Đã ghi nhận 💚
+                                </p>
+                                <div
+                                  className="p-3 rounded-2xl mb-3"
+                                  style={{ backgroundColor: 'rgba(45, 212, 191, 0.1)' }}
+                                >
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-xs font-semibold" style={{ color: '#1A202C' }}>
+                                      Phở gà
+                                    </span>
+                                    <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>
+                                      350 cal
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-semibold" style={{ color: '#1A202C' }}>
+                                      Trứng luộc
+                                    </span>
+                                    <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>
+                                      70 cal
+                                    </span>
+                                  </div>
+                                </div>
+                                <div
+                                  className="flex justify-between items-center pt-2 border-t"
+                                  style={{ borderColor: 'rgba(45, 212, 191, 0.2)' }}
+                                >
+                                  <span className="text-xs font-bold" style={{ color: '#1A202C' }}>
+                                    Tổng cộng
+                                  </span>
+                                  <span className="text-sm font-bold" style={{ color: '#2DD4BF' }}>
+                                    420 cal
+                                  </span>
+                                </div>
                               </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-semibold" style={{ color: '#1A202C' }}>Trứng luộc</span>
-                                <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>70 cal</span>
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key={idx}
+                              className={`flex ${msg.side === 'user' ? 'justify-end' : 'justify-start'}`}
+                              initial={reduce ? false : { opacity: 0, y: 12, x: msg.side === 'user' ? 12 : -12 }}
+                              animate={{ opacity: 1, y: 0, x: 0 }}
+                              transition={{ delay: msg.delay, duration: 0.45, ease: landingEase }}
+                            >
+                              <div
+                                className={`px-4 py-3 rounded-3xl max-w-[85%] ${
+                                  msg.side === 'user' ? 'rounded-tr-lg' : 'rounded-tl-lg backdrop-blur-xl border'
+                                }`}
+                                style={
+                                  msg.side === 'user'
+                                    ? {
+                                        background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)',
+                                        color: 'white',
+                                      }
+                                    : {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                        borderColor: 'rgba(45, 212, 191, 0.2)',
+                                        color: '#1A202C',
+                                      }
+                                }
+                              >
+                                <p className="text-sm m-0">{msg.text}</p>
                               </div>
-                            </div>
-                            
-                            {/* Total */}
-                            <div className="flex justify-between items-center pt-2 border-t" style={{ borderColor: 'rgba(45, 212, 191, 0.2)' }}>
-                              <span className="text-xs font-bold" style={{ color: '#1A202C' }}>Tổng cộng</span>
-                              <span className="text-sm font-bold" style={{ color: '#2DD4BF' }}>420 cal</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Mood Check */}
-                        <div className="flex justify-start">
-                          <div 
-                            className="px-4 py-3 rounded-3xl rounded-tl-lg backdrop-blur-xl border"
-                            style={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                              borderColor: 'rgba(45, 212, 191, 0.2)'
-                            }}
-                          >
-                            <p className="text-sm" style={{ color: '#1A202C' }}>
-                              Hôm nay bạn cảm thấy thế nào? 🌸
-                            </p>
-                          </div>
-                        </div>
+                            </motion.div>
+                          ),
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-                
-                {/* Glow Effect */}
-                <div 
-                  className="absolute inset-0 -z-10 blur-3xl opacity-30 rounded-[3rem]"
+
+                <motion.div
+                  className="absolute inset-0 -z-10 blur-3xl rounded-[3rem]"
                   style={{ backgroundColor: '#2DD4BF' }}
-                ></div>
-              </div>
+                  animate={reduce ? undefined : { opacity: [0.25, 0.4, 0.25] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>
