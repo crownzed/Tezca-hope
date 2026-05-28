@@ -1,9 +1,10 @@
 /** Đường dẫn chuẩn — dùng xuyên suốt Header, Footer, CTA */
 export const ROUTES = {
   home: '/',
-  /** Trang đăng nhập chung: hai cột bệnh nhân (sáng) + chuyên gia (tối) */
   auth: {
     hub: '/dang-nhap',
+    patientLogin: '/dang-nhap/benh-nhan',
+    expertLogin: '/dang-nhap/chuyen-gia',
   },
   product: {
     features: '/san-pham/tinh-nang',
@@ -19,7 +20,7 @@ export const ROUTES = {
   },
   app: {
     root: '/app',
-    login: '/dang-nhap#benh-nhan',
+    login: '/dang-nhap/benh-nhan',
     bmi: '/app/bmi',
     mood: '/app/mood',
     chat: '/app/chat',
@@ -28,9 +29,10 @@ export const ROUTES = {
     rewards: '/app/rewards',
   },
   expert: {
-    login: '/dang-nhap#chuyen-gia',
+    login: '/dang-nhap/chuyen-gia',
     root: '/expert',
     doctorDesk: '/expert/doctor-desk',
+    weeklyReport: '/expert/bao-cao-tuan',
     settings: '/expert/settings',
   },
 } as const;

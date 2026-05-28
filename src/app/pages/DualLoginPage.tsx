@@ -1,27 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Heart, Stethoscope } from 'lucide-react';
+import { resolvePatientPostLoginPath } from '../lib/patientSessionGate';
+import { Heart, Stethoscope, ArrowRight } from 'lucide-react';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { useExpertAuth } from '../context/ExpertAuthContext';
 import { ROUTES } from '../routes';
+import { tezcaTheme } from '../lib/tezcaTheme';
 
-function useScrollToHash() {
+export function LoginHubPage() {
   const { hash } = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
-    const id = hash === '#benh-nhan' ? 'benh-nhan' : hash === '#chuyen-gia' ? 'chuyen-gia' : null;
-    if (!id) return;
-    const t = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-    return () => window.clearTimeout(t);
-  }, [hash]);
-}
-
-export function DualLoginPage() {
-  useScrollToHash();
+    if (hash === '#benh-nhan') navigate(ROUTES.app.login, { replace: true });
+    else if (hash === '#chuyen-gia') navigate(ROUTES.expert.login, { replace: true });
+  }, [hash, navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ color: '#1A202C' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
       <header
         className="sticky top-0 z-30 flex flex-row items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md"
         style={{ backgroundColor: 'rgba(249, 249, 251, 0.92)', borderColor: 'rgba(26, 32, 44, 0.1)' }}
@@ -43,61 +38,97 @@ export function DualLoginPage() {
             Đăng nhập
           </h1>
         </div>
-        <Link
-          to={ROUTES.home}
-          className="text-sm font-medium opacity-80 hover:opacity-100 shrink-0 whitespace-nowrap"
-          style={{ color: '#0F766E' }}
-        >
-          Về trang chủ
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 shrink-0 justify-end">
+          <Link to={ROUTES.expert.login} className="text-sm font-medium whitespace-nowrap" style={{ color: '#0F766E' }}>
+            Chuyên gia →
+          </Link>
+          <Link
+            to={ROUTES.home}
+            className="text-sm font-medium opacity-80 hover:opacity-100 whitespace-nowrap"
+            style={{ color: '#0F766E' }}
+          >
+            Về trang chủ
+          </Link>
+        </div>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row min-h-0">
-        {/* Bệnh nhân — giao diện sáng */}
-        <section
-          id="benh-nhan"
-          className="flex-1 flex flex-col items-stretch justify-start px-4 py-10 md:px-10 md:py-14 lg:border-r"
-          style={{ backgroundColor: '#F9F9FB', borderColor: 'rgba(26, 32, 44, 0.08)' }}
-        >
-          <div className="max-w-md mx-auto w-full">
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className="inline-flex p-2 rounded-xl"
-                style={{ backgroundColor: 'rgba(45, 212, 191, 0.2)', color: '#0F766E' }}
-              >
-                <Heart size={22} strokeWidth={2} />
-              </span>
-              <h1 className="text-2xl font-bold m-0" style={{ color: '#1A202C' }}>
-                Người dùng & bệnh nhân
-              </h1>
-            </div>
-            <p className="text-sm opacity-75 m-0 mb-6" style={{ color: '#1A202C' }}>
-              BMI, nhật ký, Tezca AI, phần thưởng và chat với chuyên gia được gán. Gửi email đăng ký cho chuyên gia để
-              họ thêm bạn trong dashboard của họ.
-            </p>
-            <PatientLoginPanel />
-          </div>
-        </section>
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12">
+        <h1 className="text-2xl md:text-3xl font-bold m-0 mb-2 text-center">Chọn cổng đăng nhập</h1>
+        <p className="text-sm opacity-70 m-0 mb-10 text-center max-w-md">Bệnh nhân và chuyên gia có giao diện riêng.</p>
+        <div className="grid sm:grid-cols-2 gap-4 w-full max-w-2xl">
+          <Link
+            to={ROUTES.app.login}
+            className="rounded-2xl border p-6 no-underline hover:shadow-lg bg-white"
+            style={{ borderColor: 'rgba(26,32,44,0.1)', color: '#1A202C' }}
+          >
+            <span className="inline-flex p-2 rounded-xl mb-3" style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: '#0F766E' }}>
+              <Heart size={24} />
+            </span>
+            <h2 className="text-lg font-bold m-0 mb-1">Bệnh nhân</h2>
+            <p className="text-sm opacity-70 m-0 mb-3">BMI, nhật ký, Tezca AI và ứng dụng sức khỏe.</p>
+            <span className="text-sm font-semibold inline-flex items-center gap-1" style={{ color: '#0F766E' }}>
+              Đăng nhập <ArrowRight size={16} />
+            </span>
+          </Link>
+          <Link
+            to={ROUTES.expert.login}
+            className="rounded-2xl border p-6 no-underline hover:shadow-lg bg-white"
+            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.text }}
+          >
+            <span
+              className="inline-flex p-2 rounded-xl mb-3"
+              style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: tezcaTheme.accentDark }}
+            >
+              <Stethoscope size={24} />
+            </span>
+            <h2 className="text-lg font-bold m-0 mb-1">Chuyên gia</h2>
+            <p className="text-sm opacity-70 m-0 mb-3">Doctor Desk & theo dõi BN.</p>
+            <span className="text-sm font-semibold inline-flex items-center gap-1" style={{ color: tezcaTheme.accentDark }}>
+              Đăng nhập <ArrowRight size={16} />
+            </span>
+          </Link>
+        </div>
+      </main>
+    </div>
+  );
+}
 
-        {/* Chuyên gia — giao diện tối */}
-        <section
-          id="chuyen-gia"
-          className="flex-1 flex flex-col items-stretch justify-start px-4 py-10 md:px-10 md:py-14 bg-slate-950 text-slate-200"
-        >
-          <div className="max-w-md mx-auto w-full">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex p-2 rounded-xl bg-slate-800 text-teal-400 border border-slate-700">
-                <Stethoscope size={22} strokeWidth={2} />
-              </span>
-              <h1 className="text-2xl font-bold m-0 text-white">Chuyên gia đồng hành</h1>
-            </div>
-            <p className="text-sm text-slate-400 m-0 mb-6">
-              Dashboard theo dõi bệnh nhân được gán, dữ liệu đồng bộ và chat trực tiếp. Chỉ dành cho tài khoản vai trò
-              chuyên gia.
-            </p>
-            <ExpertLoginPanel />
+export const DualLoginPage = LoginHubPage;
+
+export function PatientLoginPage() {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9FB', color: '#1A202C' }}>
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md" style={{ backgroundColor: 'rgba(249,249,251,0.92)', borderColor: 'rgba(26,32,44,0.1)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <Link to={ROUTES.home} className="flex items-center gap-2 font-semibold text-lg shrink-0">
+            <span className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: '#2DD4BF' }}>T</span>
+            <span>Tezca</span>
+          </Link>
+          <span className="text-slate-300 hidden sm:inline">·</span>
+          <h1 className="text-base sm:text-lg font-semibold m-0 truncate">Bệnh nhân</h1>
+        </div>
+        <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+          <Link to={ROUTES.expert.login} className="text-sm font-medium" style={{ color: '#0F766E' }}>
+            Chuyên gia →
+          </Link>
+          <Link to={ROUTES.home} className="text-sm font-medium opacity-80" style={{ color: '#0F766E' }}>
+            Trang chủ
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-4 py-10 md:py-14">
+        <div className="max-w-md w-full">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex p-2 rounded-xl" style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: '#0F766E' }}>
+              <Heart size={22} />
+            </span>
+            <h1 className="text-2xl font-bold m-0">Người dùng & bệnh nhân</h1>
           </div>
-        </section>
+          <p className="text-sm opacity-75 m-0 mb-6">
+            BMI, nhật ký, Tezca AI và chat với chuyên gia được gán. Sau đăng nhập bạn vào ứng dụng bệnh nhân.
+          </p>
+          <PatientLoginPanel />
+        </div>
       </main>
     </div>
   );
@@ -105,6 +136,7 @@ export function DualLoginPage() {
 
 function PatientLoginPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login, register, logout } = usePatientAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -129,7 +161,7 @@ function PatientLoginPanel() {
         <div className="flex flex-col sm:flex-row gap-2">
           <Link
             to={ROUTES.app.root}
-            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold text-white text-center"
+            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold text-white text-center no-underline"
             style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
           >
             Vào ứng dụng
@@ -143,9 +175,9 @@ function PatientLoginPanel() {
             Đăng xuất bệnh nhân
           </button>
         </div>
-        <p className="text-xs opacity-60 mt-4 m-0" style={{ color: '#1A202C' }}>
-          Bạn vẫn có thể đăng nhập chuyên gia ở cột bên phải (phiên riêng).
-        </p>
+        <Link to={ROUTES.expert.login} className="text-xs opacity-60 mt-4 inline-block" style={{ color: '#0F766E' }}>
+          Đăng nhập chuyên gia (phiên riêng)
+        </Link>
       </div>
     );
   }
@@ -157,7 +189,8 @@ function PatientLoginPanel() {
     try {
       if (mode === 'login') await login(email, password);
       else await register(email, password, name || undefined);
-      navigate(ROUTES.app.root, { replace: true });
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(resolvePatientPostLoginPath(from), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi');
     } finally {
@@ -201,11 +234,16 @@ function PatientLoginPanel() {
           <input
             type="password"
             required
+            minLength={mode === 'register' ? 8 : undefined}
+            autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
             style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
           />
+          {mode === 'register' && (
+            <span className="block text-xs opacity-55 mt-1 font-normal">Ít nhất 8 ký tự</span>
+          )}
         </label>
         {error && <p className="text-sm text-red-600 m-0">{error}</p>}
         <button
@@ -225,13 +263,6 @@ function PatientLoginPanel() {
       >
         {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
       </button>
-      <Link
-        to={ROUTES.app.root}
-        className="block text-center text-sm mt-4 opacity-60 hover:opacity-100"
-        style={{ color: '#1A202C' }}
-      >
-        Tiếp tục dùng offline (không đồng bộ)
-      </Link>
       <p className="text-xs text-center mt-5 opacity-50 leading-relaxed m-0" style={{ color: '#1A202C' }}>
         Tiếp tục nghĩa là bạn đã xem{' '}
         <Link to={ROUTES.legal.terms} className="underline underline-offset-2" style={{ color: '#0F766E' }}>
@@ -247,37 +278,94 @@ function PatientLoginPanel() {
   );
 }
 
+export function ExpertLoginPage() {
+  return (
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
+      <header
+        className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md"
+        style={{ backgroundColor: 'rgba(249,249,251,0.92)', borderColor: tezcaTheme.borderStrong }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Link to={ROUTES.home} className="flex items-center gap-2 font-semibold text-lg shrink-0">
+            <span
+              className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-white text-sm font-bold"
+              style={{ backgroundColor: tezcaTheme.accentLight }}
+            >
+              T
+            </span>
+            <span>Tezca</span>
+          </Link>
+          <span className="opacity-30 hidden sm:inline">·</span>
+          <h1 className="text-base sm:text-lg font-semibold m-0 truncate">Chuyên gia</h1>
+        </div>
+        <div className="flex gap-3 shrink-0">
+          <Link to={ROUTES.app.login} className="text-sm font-medium" style={{ color: tezcaTheme.accentDark }}>
+            Bệnh nhân →
+          </Link>
+          <Link to={ROUTES.home} className="text-sm font-medium opacity-80" style={{ color: tezcaTheme.accentDark }}>
+            Trang chủ
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-4 py-10 md:py-14">
+        <div className="max-w-md w-full">
+          <div className="flex items-center gap-2 mb-2">
+            <span
+              className="inline-flex p-2 rounded-xl"
+              style={{ backgroundColor: 'rgba(45,212,191,0.2)', color: tezcaTheme.accentDark }}
+            >
+              <Stethoscope size={22} />
+            </span>
+            <h1 className="text-2xl font-bold m-0">Chuyên gia đồng hành</h1>
+          </div>
+          <p className="text-sm opacity-75 m-0 mb-6">Dashboard bệnh nhân được gán và chat trực tiếp.</p>
+          <ExpertLoginPanel />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 function ExpertLoginPanel() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login, logout } = useExpertAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user?.role === 'expert') {
+  if (user) {
     return (
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8 shadow-xl">
-        <h2 className="text-lg font-semibold m-0 mb-2 text-white">Đã đăng nhập chuyên gia</h2>
-        <p className="text-sm text-slate-400 m-0 mb-4">
-          <span className="text-slate-200 font-medium">{user.name}</span> · {user.email}
+      <div
+        className="rounded-2xl border p-6 md:p-8 shadow-xl"
+        style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+      >
+        <h2 className="text-lg font-semibold m-0 mb-2">Đã đăng nhập chuyên gia</h2>
+        <p className="text-sm opacity-80 m-0 mb-4">
+          <strong>{user.name}</strong>
+          <span className="opacity-60"> · {user.email}</span>
         </p>
         <div className="flex flex-col sm:flex-row gap-2">
           <Link
             to={ROUTES.expert.doctorDesk}
-            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold bg-teal-500 text-slate-950 hover:bg-teal-400 text-center"
+            className="inline-flex justify-center rounded-full py-3 px-4 font-semibold text-center no-underline"
+            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
           >
             Mở Doctor Desk
           </Link>
           <button
             type="button"
             onClick={() => logout()}
-            className="rounded-full py-3 px-4 font-medium border border-slate-600 text-slate-200 text-sm hover:bg-slate-800"
+            className="rounded-full py-3 px-4 font-medium border text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           >
             Đăng xuất chuyên gia
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-4 m-0">Đăng nhập bệnh nhân ở cột bên trái nếu cần (phiên riêng).</p>
+        <Link to={ROUTES.app.login} className="text-xs opacity-60 mt-4 inline-block" style={{ color: tezcaTheme.accentDark }}>
+          Đăng nhập bệnh nhân (phiên riêng)
+        </Link>
       </div>
     );
   }
@@ -288,7 +376,12 @@ function ExpertLoginPanel() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate(ROUTES.expert.doctorDesk, { replace: true });
+      const from = (location.state as { from?: string } | null)?.from;
+      const target =
+        typeof from === 'string' && from.startsWith('/expert') && !from.startsWith('//')
+          ? from
+          : ROUTES.expert.doctorDesk;
+      navigate(target, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi');
     } finally {
@@ -297,42 +390,49 @@ function ExpertLoginPanel() {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 md:p-8 shadow-xl">
-      <h2 className="text-lg font-semibold m-0 mb-1 text-white">Đăng nhập dashboard</h2>
-      <p className="text-xs text-slate-500 m-0 mb-4">
-        Demo API: <code className="text-teal-400">expert@tezca.vn</code> / <code className="text-teal-400">TezcaDemo#2026</code>
+    <div
+      className="rounded-2xl border p-6 md:p-8 shadow-xl"
+      style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+    >
+      <h2 className="text-lg font-semibold m-0 mb-1">Đăng nhập dashboard</h2>
+      <p className="text-xs opacity-55 m-0 mb-4">
+        Demo API: <code style={{ color: tezcaTheme.accentDark }}>expert@tezca.vn</code> /{' '}
+        <code style={{ color: tezcaTheme.accentDark }}>TezcaDemo#2026</code>
       </p>
       <form onSubmit={submit} className="space-y-4">
-        <label className="block text-sm font-medium text-slate-300">
+        <label className="block text-sm font-medium">
           Email
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           />
         </label>
-        <label className="block text-sm font-medium text-slate-300">
+        <label className="block text-sm font-medium">
           Mật khẩu
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
+            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
           />
         </label>
-        {error && <p className="text-sm text-red-400 m-0">{error}</p>}
+        {error && <p className="text-sm text-red-600 m-0">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-full py-3 font-semibold bg-teal-500 text-slate-950 hover:bg-teal-400 disabled:opacity-50"
+          className="w-full rounded-full py-3 font-semibold text-white disabled:opacity-50"
+          style={{ background: tezcaTheme.accentGradient }}
         >
           {busy ? 'Đang xử lý…' : 'Đăng nhập chuyên gia'}
         </button>
       </form>
-      <Link to={ROUTES.home} className="block text-center text-sm mt-5 text-slate-500 hover:text-teal-400">
+      <Link to={ROUTES.home} className="block text-center text-sm mt-5 opacity-60" style={{ color: tezcaTheme.accentDark }}>
         Về trang chủ
       </Link>
     </div>

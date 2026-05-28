@@ -12,6 +12,7 @@ import { TermsOfServicePage } from './pages/legal/TermsOfServicePage';
 import { CookiePolicyPage } from './pages/legal/CookiePolicyPage';
 import { GdprNoticePage } from './pages/legal/GdprNoticePage';
 import { UserAppLayout } from './layouts/UserAppLayout';
+import { PatientAppGate } from './layouts/PatientAppGate';
 import { AppHome } from './pages/app/AppHome';
 import { BmiPage } from './pages/app/BmiPage';
 import { MoodJournalPage } from './pages/app/MoodJournalPage';
@@ -20,11 +21,12 @@ import { PlansPage } from './pages/app/PlansPage';
 import { RewardsPage } from './pages/app/RewardsPage';
 import { PatientExpertChatPage } from './pages/app/PatientExpertChatPage';
 import { ExpertLayout } from './layouts/ExpertLayout';
-import { DualLoginPage } from './pages/DualLoginPage';
+import { LoginHubPage, PatientLoginPage, ExpertLoginPage } from './pages/DualLoginPage';
 import { ExpertPatientListPage } from './pages/expert/ExpertPatientListPage';
 import { ExpertPatientWorkspacePage } from './pages/expert/ExpertPatientWorkspacePage';
 import { DoctorDashboardPage } from './pages/expert/DoctorDashboardPage';
 import { ExpertSettingsPage } from './pages/expert/ExpertSettingsPage';
+import { ExpertWeeklyReportPage } from './pages/expert/ExpertWeeklyReportPage';
 
 export default function App() {
   return (
@@ -52,24 +54,29 @@ export default function App() {
           <Route path="/phap-ly/cookie" element={<CookiePolicyPage />} />
           <Route path="/phap-ly/gdpr" element={<GdprNoticePage />} />
         </Route>
-        <Route path={ROUTES.auth.hub} element={<DualLoginPage />} />
+        <Route path={ROUTES.auth.hub} element={<LoginHubPage />} />
+        <Route path={ROUTES.auth.patientLogin} element={<PatientLoginPage />} />
+        <Route path={ROUTES.auth.expertLogin} element={<ExpertLoginPage />} />
         <Route path="/login" element={<Navigate to={ROUTES.auth.hub} replace />} />
         <Route path="/app/login" element={<Navigate to={ROUTES.app.login} replace />} />
         <Route path="/expert/login" element={<Navigate to={ROUTES.expert.login} replace />} />
         <Route path="/app" element={<UserAppLayout />}>
-          <Route index element={<AppHome />} />
-          <Route path="bmi" element={<BmiPage />} />
-          <Route path="mood" element={<MoodJournalPage />} />
-          <Route path="chat" element={<AiChatPage />} />
-          <Route path="expert-chat" element={<PatientExpertChatPage />} />
-          <Route path="plans" element={<PlansPage />} />
-          <Route path="rewards" element={<RewardsPage />} />
-          <Route path="*" element={<Navigate to={ROUTES.app.root} replace />} />
+          <Route element={<PatientAppGate />}>
+            <Route index element={<AppHome />} />
+            <Route path="bmi" element={<BmiPage />} />
+            <Route path="mood" element={<MoodJournalPage />} />
+            <Route path="chat" element={<AiChatPage />} />
+            <Route path="expert-chat" element={<PatientExpertChatPage />} />
+            <Route path="plans" element={<PlansPage />} />
+            <Route path="rewards" element={<RewardsPage />} />
+            <Route path="*" element={<Navigate to={ROUTES.app.root} replace />} />
+          </Route>
         </Route>
         <Route path="/expert" element={<ExpertLayout />}>
           <Route index element={<ExpertPatientListPage />} />
           <Route path="doctor-desk" element={<DoctorDashboardPage />} />
           <Route path="doctor-desk/:patientId" element={<DoctorDashboardPage />} />
+          <Route path="bao-cao-tuan" element={<ExpertWeeklyReportPage />} />
           <Route path="settings" element={<ExpertSettingsPage />} />
           <Route path="patients/:patientId" element={<ExpertPatientWorkspacePage />} />
           <Route path="*" element={<Navigate to={ROUTES.expert.root} replace />} />

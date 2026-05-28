@@ -23,7 +23,9 @@ export type ChatMessage = {
 
 const BMI_KEY = 'tezca_bmi_entries_v1';
 const MOOD_KEY = 'tezca_mood_entries_v1';
-const CHAT_KEY = 'tezca_ai_chat_v1';
+/** @deprecated — chỉ dùng để migrate sang key theo user */
+const CHAT_KEY_LEGACY = 'tezca_ai_chat_v1';
+const CHAT_KEY_PREFIX = 'tezca_ai_chat_user_v1';
 const EXPERT_CHAT_KEY = 'tezca_expert_chat_v1';
 
 function readJson<T>(key: string, fallback: T): T {
@@ -86,12 +88,52 @@ export function saveMoodEntries(entries: MoodEntry[]) {
   writeJson(MOOD_KEY, entries);
 }
 
-export function loadAiChat(): ChatMessage[] {
-  return readJson<ChatMessage[]>(CHAT_KEY, []);
+export function aiChatStorageKey(userId: string | null | undefined): string | null {
+  if (!userId) return null;
+  return `${CHAT_KEY_PREFIX}_${userId}`;
 }
 
-export function saveAiChat(messages: ChatMessage[]) {
-  writeJson(CHAT_KEY, messages);
+/** Chỉ đọc cache khi đã đăng nhập (có userId). Khách: luôn []. */
+export function loadAiChatForUser(userId: string | null | undefined): ChatMessage[] {
+  const key = aiChatStorageKey(userId);
+  if (!key) return [];
+  return readJson<ChatMessage[]>(key, []);
+}
+
+export function saveAiChatForUser(userId: string | null | undefined, messages: ChatMessage[]) {
+  const key = aiChatStorageKey(userId);
+  if (!key) return;
+  writeJson(key, messages);
+}
+
+/** Migrate dữ liệu chat cũ (một key chung) sang key theo user — gọi một lần sau đăng nhập. */
+export function migrateLegacyAiChat(userId: string): ChatMessage[] {
+  const key = aiChatStorageKey(userId);
+  if (!key) return [];
+  const existing = readJson<ChatMessage[]>(key, []);
+  if (existing.length > 0) return existing;
+  const legacy = readJson<ChatMessage[]>(CHAT_KEY_LEGACY, []);
+  if (legacy.length > 0) {
+    writeJson(key, legacy);
+    try {
+      localStorage.removeItem(CHAT_KEY_LEGACY);
+    } catch {
+      /* ignore */
+    }
+    return legacy;
+  }
+  return [];
+}
+
+/** @param userId — nếu có, đọc cache theo tài khoản; không có = không lưu khách */
+export function loadAiChat(userId?: string | null): ChatMessage[] {
+  if (!userId) return [];
+  return loadAiChatForUser(userId);
+}
+
+/** @deprecated Dùng saveAiChatForUser — không ghi khi chưa đăng nhập */
+export function saveAiChat(messages: ChatMessage[], userId?: string | null) {
+  saveAiChatForUser(userId ?? null, messages);
 }
 
 export function loadExpertChat(): ChatMessage[] {

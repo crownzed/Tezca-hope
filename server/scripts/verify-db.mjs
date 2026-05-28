@@ -1,6 +1,6 @@
 /**
- * Kiểm tra kết nối SQLite: file, schema, PRAGMA, seed, truy vấn mẫu.
- * Chạy: node scripts/verify-db.mjs   (từ thư mục server)
+ * Kiểm tra kết nối SQLite: file, schema, PRAGMA, seed, training plan, giao dịch ghi.
+ * Chạy: npm run verify:db   (từ thư mục server)
  */
 import fs from 'fs';
 import path from 'path';
@@ -9,8 +9,18 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.chdir(path.join(__dirname, '..'));
 
-const { initDb, getDb, DB_FILE, findUserByEmail, listBmiForUser, canExpertAccessPatient } =
-  await import('../src/db.js');
+const {
+  initDb,
+  getDb,
+  DB_FILE,
+  findUserByEmail,
+  listBmiForUser,
+  canExpertAccessPatient,
+  runDatabaseDiagnostics,
+  getTrainingPlanForPatient,
+  syncTrainingPlanProgress,
+  ensureTrainingPlanFromWorkout,
+} = await import('../src/db.js');
 
 const report = { ok: true, errors: [], checks: {} };
 
@@ -27,45 +37,11 @@ try {
   report.checks.fileExists = fs.existsSync(DB_FILE);
   report.checks.fileSizeBytes = report.checks.fileExists ? fs.statSync(DB_FILE).size : 0;
 
-  const journal = db.pragma('journal_mode', { simple: true });
-  report.checks.journalMode = journal;
-
-  db.pragma('foreign_keys = ON');
-  report.checks.foreignKeysOn = db.pragma('foreign_keys', { simple: true }) === 1;
-
-  const integrityRows = db.prepare('PRAGMA integrity_check').all();
-  const integrityOk =
-    integrityRows.length === 1 && integrityRows[0].integrity_check === 'ok';
-  report.checks.integrityCheck = integrityOk ? 'ok' : integrityRows;
-
-  if (!integrityOk) fail('PRAGMA integrity_check không phải ok');
-
-  const tables = db
-    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-    .all()
-    .map((r) => r.name);
-
-  const expected = [
-    'assignments',
-    'audit_log',
-    'bmi_entries',
-    'bot_messages',
-    'live_messages',
-    'mood_entries',
-    'users',
-  ];
-  const missing = expected.filter((t) => !tables.includes(t));
-  report.checks.tablesFound = tables;
-  report.checks.tablesExpected = expected;
-  if (missing.length) fail(`Thiếu bảng: ${missing.join(', ')}`);
-
-  const counts = {};
-  for (const name of tables) {
-    counts[name] = db.prepare(`SELECT COUNT(*) AS c FROM "${name}"`).get().c;
+  const deep = runDatabaseDiagnostics();
+  report.checks.diagnostics = deep.checks;
+  if (!deep.ok) {
+    for (const e of deep.errors) fail(e);
   }
-  report.checks.rowCounts = counts;
-
-  if (counts.users < 1) fail('Bảng users rỗng (seed có thể lỗi)');
 
   const expert = findUserByEmail('expert@tezca.vn');
   const patient = findUserByEmail('patient@tezca.vn');
@@ -74,26 +50,55 @@ try {
   if (!expert || !patient) fail('Thiếu user seed expert@ / patient@');
 
   if (expert && patient) {
-    const canSee = canExpertAccessPatient(expert.id, patient.id);
-    report.checks.expertCanAccessSeedPatient = canSee;
-    if (!canSee) fail('Assignment expert–patient seed không đúng');
-
+    if (!canExpertAccessPatient(expert.id, patient.id)) {
+      fail('Assignment expert–patient seed không đúng');
+    }
     const bmi = listBmiForUser(patient.id);
     report.checks.patientBmiRows = bmi.length;
     if (bmi.length < 1) fail('Seed BMI trống cho patient@');
 
-    const writeTest = db.transaction(() => {
-      const id = crypto.randomUUID();
-      db.prepare(
-        `INSERT INTO bmi_entries (id, user_id, date, height_cm, weight_kg, bmi) VALUES (?, ?, '2099-01-01', 170, 70, 24.2)`,
-      ).run(id, patient.id);
-      db.prepare(`DELETE FROM bmi_entries WHERE id = ?`).run(id);
-    });
-    writeTest();
-    report.checks.readWriteTransaction = true;
+    getDb().prepare(`DELETE FROM patient_training_plans WHERE patient_id = ?`).run(patient.id);
+
+    const testDate = '2098-06-15';
+    const plan = ensureTrainingPlanFromWorkout(patient.id, [
+      {
+        id: 88001,
+        title: 'Verify squat',
+        sets: 3,
+        reps: 8,
+        isPTLocked: true,
+        completed: false,
+        actualWeight: '60kg',
+      },
+    ]);
+    if (!plan?.exercises?.length) fail('ensureTrainingPlanFromWorkout failed');
+
+    const synced = syncTrainingPlanProgress(
+      patient.id,
+      testDate,
+      [{ id: 88001, completed: true, actualWeight: '62kg' }],
+      plan.exercises,
+    );
+    const dayEntry = synced?.dailyProgress?.[testDate];
+    const done =
+      dayEntry?.['88001']?.completed === true || dayEntry?.[88001]?.completed === true;
+    if (!done) {
+      fail('syncTrainingPlanProgress daily round-trip failed');
+    }
+
+    const reloaded = getTrainingPlanForPatient(patient.id);
+    report.checks.trainingPlanReloaded = Boolean(reloaded?.patientId);
+    report.checks.trainingDailyKeys = Object.keys(reloaded?.dailyProgress || {}).length;
+
+    const daily = { ...(reloaded.dailyProgress || {}) };
+    delete daily[testDate];
+    getDb()
+      .prepare(`UPDATE patient_training_plans SET daily_progress_json = ? WHERE patient_id = ?`)
+      .run(JSON.stringify(daily), patient.id);
+    report.checks.trainingCleanup = true;
   }
 } catch (e) {
-  fail(String(e));
+  fail(e instanceof Error ? e.message : String(e));
 }
 
 console.log(JSON.stringify(report, null, 2));

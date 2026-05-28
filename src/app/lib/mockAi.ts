@@ -1,5 +1,5 @@
 /**
- * Phản hồi khi chưa gọi ChatGPT (ngoại tuyến / chưa đăng nhập).
+ * Phản hồi khi chưa gọi Gemini (ngoại tuyến / chưa đăng nhập).
  * Ưu tiên an toàn → intent có độ cụ thể cao → fallback chung.
  */
 import { normalizeVi } from './textNormalize';

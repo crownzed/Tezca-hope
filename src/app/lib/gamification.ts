@@ -147,7 +147,19 @@ export type GamificationState = {
 export function deriveGamificationState(): GamificationState {
   const bmi = loadBmiEntries();
   const moods = loadMoodEntries();
-  const chat = loadAiChat();
+  const chat = loadAiChat(
+    typeof localStorage !== 'undefined'
+      ? (() => {
+          try {
+            const raw = localStorage.getItem('tezca_patient_user');
+            if (!raw) return null;
+            return (JSON.parse(raw) as { id?: string }).id ?? null;
+          } catch {
+            return null;
+          }
+        })()
+      : null,
+  );
   const moodDates = moods.map((m) => m.date);
   const streak = computeCurrentMoodStreak(moodDates);
   const userChatMessages = chat.filter((m) => m.role === 'user').length;

@@ -15,7 +15,7 @@ export function ProductPricingPage() {
           <strong>Dùng thử / nội bộ:</strong> theo cấu hình máy chủ của bạn (localhost, Docker, XAMPP + API).
         </li>
         <li>
-          <strong>Chat AI:</strong> sử dụng API OpenAI — chi phí theo tài khoản OpenAI của đơn vị vận hành.
+          <strong>Chat AI:</strong> sử dụng Google Gemini — chi phí theo tài khoản Google AI của đơn vị vận hành.
         </li>
       </ul>
       <h2>Liên hệ thương mại</h2>

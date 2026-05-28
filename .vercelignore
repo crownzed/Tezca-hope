@@ -1,0 +1,17 @@
+# Giảm kích thước upload Vercel — không ảnh hưởng build (build chạy trên cloud)
+.agents/
+.cursor/
+docs/diagrams/
+server/data/*.sqlite*
+*.md
+!README.md
+terminals/
+agent-transcripts/
+dist/
+
+# Hobby plan: tối đa 12 Serverless Functions — chỉ deploy api/index.js (rewrite → /api?path=...)
+api/auth/
+api/me/
+api/expert/
+api/health.js
+api/[...path].js

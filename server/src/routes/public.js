@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { getDb } from '../db.js';
-import { isOpenAiConfigured } from '../openai.js';
+import { getDb, getDatabaseInfo, runDatabaseDiagnostics } from '../db.js';
+import { isAiConfigured, aiProvider } from '../ai.js';
+import { isProduction } from '../secrets.js';
 
 /** Route không cần JWT — đăng ký TRƯỚC userRouter để không bị middleware auth chặn */
 export const publicApiRouter = Router();
@@ -8,23 +9,33 @@ export const publicApiRouter = Router();
 publicApiRouter.get('/health', (_req, res) => res.json({ ok: true }));
 
 publicApiRouter.get('/health/ai', (_req, res) => {
-  res.json({ configured: isOpenAiConfigured() });
+  if (isProduction()) {
+    res.json({ ok: isAiConfigured() });
+    return;
+  }
+  res.json({ configured: isAiConfigured(), provider: aiProvider() });
 });
 
 publicApiRouter.get('/health/db', (_req, res) => {
   try {
-    const db = getDb();
-    db.prepare('SELECT 1 AS ok').get();
-    const integrity = db.prepare('PRAGMA integrity_check').all();
-    const integrityOk =
-      integrity.length === 1 && integrity[0].integrity_check === 'ok';
-    const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
-    res.json({
-      ok: true,
+    const diagnostics = runDatabaseDiagnostics();
+    const info = getDatabaseInfo();
+    res.status(diagnostics.ok ? 200 : 503).json({
+      ok: diagnostics.ok,
       engine: 'sqlite',
-      integrity: integrityOk ? 'ok' : integrity,
-      users: userCount,
-      journalMode: db.pragma('journal_mode', { simple: true }),
+      errors: diagnostics.errors,
+      users: info.rowCounts?.users ?? 0,
+      trainingPlans: info.rowCounts?.patient_training_plans ?? 0,
+      journalMode: info.journalMode,
+      synchronous: info.synchronous,
+      foreignKeysOn: info.foreignKeysOn,
+      busyTimeoutMs: info.busyTimeoutMs,
+      file: info.file,
+      sizeBytes: info.sizeBytes,
+      tables: info.tables,
+      rowCounts: info.rowCounts,
+      migrations: info.migrations,
+      checks: diagnostics.checks,
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e) });

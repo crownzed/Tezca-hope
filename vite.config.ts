@@ -16,16 +16,41 @@ function figmaAssetResolver() {
   }
 }
 
+const apiProxyTarget = `http://127.0.0.1:${process.env.VITE_API_PROXY_PORT || process.env.PORT || 3001}`;
+const wsProxyTarget = apiProxyTarget.replace(/^http/, 'ws');
+
+const apiProxy = {
+  target: apiProxyTarget,
+  changeOrigin: true,
+  configure(proxy) {
+    proxy.on('error', (_err, _req, res) => {
+      if (res && !res.headersSent && typeof res.writeHead === 'function') {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: 'API local chưa chạy. Chạy: npm run dev:all',
+          }),
+        );
+      }
+    });
+  },
+};
+
+const apiProxyPort = String(process.env.VITE_API_PROXY_PORT || process.env.PORT || 3001);
+
 export default defineConfig({
   /** Đặt VITE_BASE_PATH=/tezca/ khi phục vụ tại http://localhost/tezca/ (không dùng virtual host). */
   base: process.env.VITE_BASE_PATH || '/',
+  define: {
+    'import.meta.env.VITE_API_PROXY_PORT': JSON.stringify(apiProxyPort),
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:3001', changeOrigin: true },
-      '/ws': { target: 'ws://127.0.0.1:3001', ws: true },
+      '/api': apiProxy,
+      '/ws': { target: wsProxyTarget, ws: true },
     },
   },
   preview: {
@@ -34,8 +59,8 @@ export default defineConfig({
     strictPort: true,
     /** Giống dev: preview phục vụ static nhưng vẫn proxy /api và /ws tới API */
     proxy: {
-      '/api': { target: 'http://127.0.0.1:3001', changeOrigin: true },
-      '/ws': { target: 'ws://127.0.0.1:3001', ws: true },
+      '/api': apiProxy,
+      '/ws': { target: wsProxyTarget, ws: true },
     },
   },
   plugins: [

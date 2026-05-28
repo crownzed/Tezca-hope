@@ -7,32 +7,43 @@ import {
   listBotMessagesForUser,
   replaceBotMessagesForUser,
   listLiveMessagesForPatient,
+  listLiveMessagesForPatientSince,
   getExpertsForPatient,
+  getTrainingPlanForPatient,
+  integrateTrainingPlanFromAi,
+  syncTrainingPlanProgress,
 } from '../db.js';
+import { parseExercisesFromPlanMarkdown } from '../planToExercises.js';
+import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { authMiddleware } from '../auth.js';
-import { openaiChat, isOpenAiConfigured } from '../openai.js';
+import { aiChat, aiChatStream, isAiConfigured } from '../ai.js';
+import { polishAiText } from '../polishAiText.js';
+import { aiChatLimiter, aiPlanLimiter } from '../rateLimit.js';
+import { sanitizeClientError } from '../secrets.js';
+import { DbError, mapDbDomainError } from '../dbErrors.js';
 
 export const userRouter = Router();
-userRouter.use(authMiddleware('user'));
+const requireUser = authMiddleware('user');
 
-userRouter.get('/me', (req, res) => {
+userRouter.get('/me', requireUser, (req, res) => {
+  const u = req.dbUser;
   res.json({
-    user: { id: req.user.sub, email: req.user.email, name: req.user.name, role: req.user.role },
+    user: { id: u.id, email: u.email, name: u.name, role: u.role },
   });
 });
 
 /** Chuyên gia được gán (để BN biết ai đồng hành + bật chat) */
-userRouter.get('/me/care-team', (req, res) => {
+userRouter.get('/me/care-team', requireUser, (req, res) => {
   const experts = getExpertsForPatient(req.user.sub);
   res.json({ experts, primary: experts[0] || null });
 });
 
-userRouter.get('/me/bmi', (req, res) => {
+userRouter.get('/me/bmi', requireUser, (req, res) => {
   const list = listBmiForUser(req.user.sub);
   res.json({ entries: list });
 });
 
-userRouter.post('/me/bmi', (req, res) => {
+userRouter.post('/me/bmi', requireUser, (req, res) => {
   const { date, heightCm, weightKg, bmi } = req.body || {};
   if (!date || heightCm == null || weightKg == null || bmi == null) {
     res.status(400).json({ error: 'Thiếu trường bắt buộc' });
@@ -50,12 +61,12 @@ userRouter.post('/me/bmi', (req, res) => {
   res.status(201).json({ entry: row });
 });
 
-userRouter.get('/me/moods', (req, res) => {
+userRouter.get('/me/moods', requireUser, (req, res) => {
   const list = listMoodsForUser(req.user.sub);
   res.json({ entries: list });
 });
 
-userRouter.post('/me/moods', (req, res) => {
+userRouter.post('/me/moods', requireUser, (req, res) => {
   const { date, moodLabel, moodScore, note } = req.body || {};
   if (!date || moodLabel == null || moodScore == null) {
     res.status(400).json({ error: 'Thiếu trường bắt buộc' });
@@ -73,12 +84,12 @@ userRouter.post('/me/moods', (req, res) => {
   res.status(201).json({ entry: row });
 });
 
-userRouter.get('/me/bot-messages', (req, res) => {
+userRouter.get('/me/bot-messages', requireUser, (req, res) => {
   const list = listBotMessagesForUser(req.user.sub);
   res.json({ messages: list });
 });
 
-userRouter.put('/me/bot-messages', (req, res) => {
+userRouter.put('/me/bot-messages', requireUser, (req, res) => {
   const { messages } = req.body || {};
   if (!Array.isArray(messages)) {
     res.status(400).json({ error: 'messages phải là mảng' });
@@ -88,52 +99,124 @@ userRouter.put('/me/bot-messages', (req, res) => {
   res.json({ ok: true });
 });
 
-userRouter.get('/me/live-messages', (req, res) => {
-  const list = listLiveMessagesForPatient(req.user.sub);
+userRouter.get('/me/live-messages', requireUser, (req, res) => {
+  const since = req.query.since;
+  const list =
+    since != null && since !== ''
+      ? listLiveMessagesForPatientSince(req.user.sub, since)
+      : listLiveMessagesForPatient(req.user.sub);
   res.json({ messages: list });
 });
 
-const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca.
-Ngôn ngữ: tiếng Việt. Giọng điệu: đồng cảm, rõ ràng, không phán xét. Độ dài: 3–8 câu trừ khi người dùng yêu cầu chi tiết.
-Phạm vi: giáo dục sức khỏe — dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress/nhật ký cảm xúc.
-Không đưa ra kết luận y khoa, bệnh danh hay kê đơn; không thay đổi phác đồ thuốc. Khuyến khích tới cơ sở y tế khi có triệu chứng cấp, bệnh nền, mang thai/cho con bú, hay không chắc chắn.
-Khẩn cấp / ý định tự hại / đau ngực khó thở / co giật / yếu nửa người đột ngột → yêu cầu gọi 115 hoặc đến cấp cứu ngay.
-Luôn nhắc thông tin chỉ mang tính tham khảo khi đưa gợi ý cụ thể.`;
+userRouter.post('/me/live-messages', requireUser, (req, res) => {
+  const text = String((req.body || {}).text || '').trim();
+  if (!text) {
+    res.status(400).json({ error: 'Tin nhắn trống' });
+    return;
+  }
+  const msg = sendLiveChatMessage({
+    patientId: req.user.sub,
+    senderUserId: req.user.sub,
+    senderRole: 'patient',
+    content: text,
+  });
+  if (!msg) {
+    res.status(400).json({ error: 'Không gửi được' });
+    return;
+  }
+  res.status(201).json({ message: msg });
+});
 
-userRouter.post('/me/ai-chat', async (req, res) => {
-  if (!isOpenAiConfigured()) {
-    res.status(503).json({ error: 'AI chưa được cấu hình (OPENAI_API_KEY).' });
-    return;
-  }
-  const { messages } = req.body || {};
-  if (!Array.isArray(messages) || messages.length === 0) {
-    res.status(400).json({ error: 'Cần mảng messages' });
-    return;
-  }
+const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca — trò chuyện trực tiếp bằng tiếng Việt (Việt Nam).
+
+Cách viết:
+- Giọng ấm, đồng cảm, không phán xét; câu ngắn vừa phải, nối ý tự nhiên như đang chat.
+- Không bullet/đánh số trừ khi người dùng xin danh sách hoặc kế hoạch từng bước.
+- Tránh mở đầu lặp ("Chào bạn", "Cảm ơn câu hỏi") nếu đã chào gần đây trong hội thoại.
+- Một nhắc ngắn "tham khảo, không thay khám" ở cuối khi cần — không lặp sau mỗi câu.
+- Độ dài: 3–8 câu; chi tiết hơn chỉ khi được yêu cầu.
+
+Phạm vi: dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress/cảm xúc — giáo dục sức khỏe, không chẩn đoán, không kê đơn, không đổi thuốc.
+Khẩn cấp / ý định tự hại / đau ngực khó thở / co giật / yếu nửa người đột ngột → yêu cầu gọi 115 hoặc cấp cứu ngay.`;
+
+function trimChatMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
   const trimmed = messages
     .slice(-24)
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map((m) => ({
       role: m.role,
-      content: String(m.content).slice(0, 8000),
+      content: String(m.content).slice(0, 4000),
     }));
-  if (trimmed.length === 0) {
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+userRouter.post('/me/ai-chat', requireUser, aiChatLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
+    return;
+  }
+  const trimmed = trimChatMessages(req.body?.messages);
+  if (!trimmed) {
     res.status(400).json({ error: 'Không có tin nhắn hợp lệ' });
     return;
   }
   try {
     const payload = [{ role: 'system', content: CHAT_SYSTEM }, ...trimmed];
-    const reply = await openaiChat(payload, { max_tokens: 900, temperature: 0.55 });
-    res.json({ content: reply });
+    const reply = await aiChat(payload, { max_tokens: 900, temperature: 0.62 });
+    res.json({ content: polishAiText(reply) });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Lỗi AI';
-    res.status(502).json({ error: msg });
+    const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
+    res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
   }
 });
 
-userRouter.post('/me/plan-ai', async (req, res) => {
-  if (!isOpenAiConfigured()) {
-    res.status(503).json({ error: 'AI chưa được cấu hình (OPENAI_API_KEY).' });
+/** SSE: data: {"delta":"..."} rồi data: {"done":true,"content":"..."} */
+userRouter.post('/me/ai-chat/stream', requireUser, aiChatLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
+    return;
+  }
+  const trimmed = trimChatMessages(req.body?.messages);
+  if (!trimmed) {
+    res.status(400).json({ error: 'Không có tin nhắn hợp lệ' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const send = (obj) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  };
+
+  try {
+    const payload = [{ role: 'system', content: CHAT_SYSTEM }, ...trimmed];
+    let raw = '';
+    for await (const delta of aiChatStream(payload, { max_tokens: 900, temperature: 0.62 })) {
+      raw += delta;
+      send({ delta });
+    }
+    const content = polishAiText(raw);
+    send({ done: true, content });
+    res.end();
+  } catch (e) {
+    send({ error: sanitizeClientError(e, 'Lỗi AI') });
+    res.end();
+  }
+});
+
+userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
     return;
   }
   const { age, goal, activity, dietNote } = req.body || {};
@@ -171,23 +254,103 @@ Yêu cầu nội dung:
 
 Không kê thuốc, không liều bổ sung cụ thể trừ khi chỉ là “thảo luận với bác sĩ”.`;
 
-  const PLAN_SYSTEM = `Bạn là chuyên gia dinh dưỡng & hoạt động thể chất (giọng Việt Nam, thực tế).
-Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn mạnh thói quen bền vững.
-Không đưa ra bệnh danh hay kết luận y khoa; chỉ gợi ý dinh dưỡng và vận động mang tính giáo dục sức khỏe.
-Phân biệt người trưởng thành khỏe mạnh vs người có ràng buộc y tế — khi có ghi chú người dùng, tôn trọng nhưng không vượt quá vai trò giáo dục.
-Viết Markdown rõ ràng; không lặp ý; không chèn disclaimer sau mỗi câu — một khối cuối hoặc xen nhẹ hợp lý.`;
+  const PLAN_SYSTEM = `Bạn là chuyên gia dinh dưỡng & hoạt động thể chất — viết tiếng Việt tự nhiên, thực tế.
+Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
+Không chẩn đoán hay kê đơn; chỉ giáo dục sức khỏe. Tôn trọng ghi chú y tế của người dùng.
+Markdown gọn: tiêu đề ##, đoạn ngắn, bullet khi cần danh sách; câu nối mạch lạc, không lặp ý; một disclaimer ngắn ở cuối.`;
 
   try {
-    const plan = await openaiChat(
+    const plan = await aiChat(
       [
         { role: 'system', content: PLAN_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
       { temperature: 0.65, max_tokens: 2500 },
     );
-    res.json({ plan });
+    res.json({ plan: polishAiText(plan) });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Lỗi AI';
-    res.status(502).json({ error: msg });
+    const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
+    res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
+  }
+});
+
+/** Kế hoạch tập luyện tích hợp từ AI (Chiến dịch tập luyện) */
+userRouter.get('/me/training-plan', requireUser, (req, res) => {
+  const plan = getTrainingPlanForPatient(req.user.sub);
+  res.json({ plan });
+});
+
+userRouter.post('/me/training-plan/integrate', requireUser, (req, res) => {
+  try {
+    const planMd = String((req.body || {}).plan || '').trim();
+    if (!planMd || planMd.length < 40) {
+      res.status(400).json({ error: 'Thiếu nội dung kế hoạch để tích hợp' });
+      return;
+    }
+    let exercises = parseExercisesFromPlanMarkdown(planMd);
+    if (exercises.length === 0) {
+      exercises = [
+        {
+          id: Date.now(),
+          title: 'Buổi vận động theo kế hoạch AI',
+          sets: 1,
+          reps: 'Xem chi tiết trong kế hoạch',
+          isPTLocked: true,
+          completed: false,
+          actualWeight: '',
+        },
+      ];
+    }
+    const saved = integrateTrainingPlanFromAi(req.user.sub, planMd, exercises);
+    res.status(201).json({ plan: saved });
+  } catch (e) {
+    const err = mapDbDomainError(e);
+    if (err instanceof DbError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    throw e;
+  }
+});
+
+/** Đồng bộ tiến độ hoàn thành bài tập theo ngày (Chiến dịch tập luyện). */
+userRouter.patch('/me/training-plan/progress', requireUser, (req, res) => {
+  try {
+    const date = String((req.body || {}).date || '').trim().slice(0, 10);
+    const items = (req.body || {}).exercises;
+    const workout = (req.body || {}).workout;
+    if (!Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ error: 'Cần mảng exercises với id và trạng thái' });
+      return;
+    }
+    const progress = items.slice(0, 20).map((ex) => ({
+      id: Number(ex.id),
+      completed: ex.completed,
+      actualWeight: ex.actualWeight,
+    }));
+    const bootstrap =
+      Array.isArray(workout) && workout.length > 0
+        ? workout.slice(0, 20).map((ex, i) => ({
+            id: Number(ex.id) || Date.now() + i,
+            title: String(ex.title || 'Bài tập'),
+            sets: ex.sets,
+            reps: ex.reps,
+            isPTLocked: ex.isPTLocked,
+            actualWeight: ex.actualWeight,
+          }))
+        : null;
+    const saved = syncTrainingPlanProgress(req.user.sub, date, progress, bootstrap);
+    if (!saved) {
+      res.status(400).json({ error: 'Không lưu được tiến độ — cần ít nhất một bài tập' });
+      return;
+    }
+    res.json({ plan: saved });
+  } catch (e) {
+    const err = mapDbDomainError(e);
+    if (err instanceof DbError) {
+      res.status(err.status).json({ error: err.message, code: err.code });
+      return;
+    }
+    throw e;
   }
 });
