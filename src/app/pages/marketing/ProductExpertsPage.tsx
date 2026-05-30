@@ -17,7 +17,7 @@ export function ProductExpertsPage() {
       <ol>
         <li>Tạo hoặc dùng tài khoản vai trò chuyên gia</li>
         <li>Đăng nhập tại cổng chuyên gia</li>
-        <li>Chọn bệnh nhân trong danh sách được gán</li>
+        <li>Chọn khách hàng trong danh sách được gán</li>
       </ol>
       <p className="pt-4">
         {expertLoggedIn ? (

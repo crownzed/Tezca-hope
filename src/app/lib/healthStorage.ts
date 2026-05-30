@@ -11,7 +11,11 @@ export type MoodEntry = {
   date: string;
   moodLabel: string;
   moodScore: number;
-  note: string;
+  moodEmoji?: string;
+  moodKey?: string;
+  /** @deprecated — không còn dùng trên UI */
+  note?: string;
+  freeText?: string;
 };
 
 export type ChatMessage = {

@@ -2,27 +2,39 @@ import { Router } from 'express';
 import {
   findUserById,
   findUserByEmail,
-  canExpertAccessPatient,
+  canExpertAccessCustomer,
   pushAudit,
-  getPatientIdsForExpert,
+  getCustomerIdsForExpert,
   listBmiForUser,
   listMoodsForUser,
   listBotMessagesForUser,
-  listLiveMessagesForPatient,
-  listLiveMessagesForPatientSince,
+  listLiveMessagesForCustomer,
+  listLiveMessagesForCustomerSince,
   getLastLiveMessageMap,
-  assignExpertToPatient,
-  removeExpertPatientAssignment,
-  getTrainingPlanForPatient,
+  assignExpertToCustomer,
+  removeExpertCustomerAssignment,
+  getTrainingPlanForCustomer,
   updateTrainingPlanByExpert,
+  listPendingCustomersForExpert,
+  decideExpertAssignment,
+  getCustomerHealthProfile,
 } from '../db.js';
 import { authMiddleware } from '../auth.js';
 import { buildWeeklyReport } from '../weeklyReport.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { DbError, mapDbDomainError } from '../dbErrors.js';
+import * as adminManagementService from '../services/adminManagementService.js';
 
 export const expertRouter = Router();
 const requireExpert = authMiddleware('expert');
+
+function customerIdFromReq(req) {
+  return req.params.customerId ?? req.params.patientId;
+}
+
+function isCustomerSenderRole(role) {
+  return role === 'customer' || role === 'patient';
+}
 
 /** Báo cáo tuần — ?weekStart=YYYY-MM-DD (thứ Hai), mặc định tuần hiện tại */
 expertRouter.get('/reports/weekly', requireExpert, (req, res) => {
@@ -45,23 +57,23 @@ expertRouter.get('/me', requireExpert, (req, res) => {
   });
 });
 
-expertRouter.get('/patients', requireExpert, (req, res) => {
+function listCustomersHandler(req, res) {
   const expertId = req.user.sub;
-  const patientIds = getPatientIdsForExpert(expertId);
-  const lastLiveByPatient = getLastLiveMessageMap(patientIds);
-  const list = patientIds.map((pid) => {
-    const u = findUserById(pid);
-    const bmis = listBmiForUser(pid);
-    const moods = listMoodsForUser(pid);
-    const lastLiveMessage = lastLiveByPatient.get(pid) || null;
+  const customerIds = getCustomerIdsForExpert(expertId);
+  const lastLiveByCustomer = getLastLiveMessageMap(customerIds);
+  const list = customerIds.map((cid) => {
+    const u = findUserById(cid);
+    const bmis = listBmiForUser(cid);
+    const moods = listMoodsForUser(cid);
+    const lastLiveMessage = lastLiveByCustomer.get(cid) || null;
     return {
-      id: pid,
+      id: cid,
       email: u?.email,
       name: u?.name,
       lastBmi: bmis[0] || null,
       lastMood: moods[0] || null,
       lastLiveMessage,
-      needsReply: lastLiveMessage?.senderRole === 'patient',
+      needsReply: lastLiveMessage ? isCustomerSenderRole(lastLiveMessage.senderRole) : false,
     };
   });
   list.sort((a, b) => {
@@ -70,57 +82,83 @@ expertRouter.get('/patients', requireExpert, (req, res) => {
     if (tb !== ta) return tb - ta;
     return (a.name || '').localeCompare(b.name || '', 'vi');
   });
-  pushAudit({ actorId: expertId, role: 'expert', action: 'list_patients' });
-  res.json({ patients: list });
+  pushAudit({ actorId: expertId, role: 'expert', action: 'list_customers' });
+  res.json({ customers: list });
+}
+
+expertRouter.get('/customers', requireExpert, listCustomersHandler);
+expertRouter.get('/patients', requireExpert, listCustomersHandler);
+
+expertRouter.get('/customers/requests', requireExpert, (req, res) => {
+  const items = listPendingCustomersForExpert(req.user.sub);
+  res.json({ requests: items });
 });
 
-/** Đặt TRƯỚC GET /patients/:patientId để không khớp nhầm patientId = "assign" */
-expertRouter.post('/patients/assign', requireExpert, (req, res) => {
+/** Đặt TRƯỚC GET /customers/:customerId để không khớp nhầm customerId = "assign" */
+function assignCustomerHandler(req, res) {
   const expertId = req.user.sub;
   const email = String((req.body || {}).email || '').trim();
   if (!email) {
-    res.status(400).json({ error: 'Cần email bệnh nhân' });
+    res.status(400).json({ error: 'Cần email khách hàng' });
     return;
   }
   const u = findUserByEmail(email);
   if (!u || u.role !== 'user') {
-    res.status(404).json({ error: 'Không tìm thấy tài khoản bệnh nhân với email này' });
+    res.status(404).json({ error: 'Không tìm thấy tài khoản khách hàng với email này' });
     return;
   }
-  const r = assignExpertToPatient(expertId, u.id);
+  const r = assignExpertToCustomer(expertId, u.id);
   if (!r.ok) {
     const msg =
       r.error === 'invalid_expert'
         ? 'Phiên chuyên gia không hợp lệ. Hãy đăng xuất và đăng nhập lại.'
-        : r.error === 'invalid_patient'
-          ? 'Tài khoản bệnh nhân không hợp lệ.'
+        : r.error === 'invalid_customer'
+          ? 'Tài khoản khách hàng không hợp lệ.'
           : 'Không thể gán';
     res.status(400).json({ error: msg });
     return;
   }
-  pushAudit({ actorId: expertId, role: 'expert', action: 'assign_patient', patientId: u.id, meta: { email } });
-  res.status(201).json({ patient: { id: u.id, email: u.email, name: u.name } });
-});
+  pushAudit({ actorId: expertId, role: 'expert', action: 'assign_customer', customerId: u.id, meta: { email } });
+  res.status(201).json({ customer: { id: u.id, email: u.email, name: u.name } });
+}
 
-expertRouter.get('/patients/:patientId/live-messages', requireExpert, (req, res) => {
+expertRouter.post('/customers/assign', requireExpert, assignCustomerHandler);
+expertRouter.post('/patients/assign', requireExpert, assignCustomerHandler);
+function decideCustomerRequestHandler(action) {
+  return (req, res) => {
+    const customerId = customerIdFromReq(req);
+    const result = decideExpertAssignment(req.user.sub, customerId, action);
+    if (!result.ok) {
+      res.status(404).json({ error: 'Không tìm thấy yêu cầu gán cần xử lý' });
+      return;
+    }
+    res.json({ ok: true, status: action === 'approve' ? 'accepted' : 'rejected' });
+  };
+}
+
+/** Express 5 — không dùng :action(approve|reject) (path-to-regexp v8) */
+expertRouter.post('/customers/:customerId/requests/approve', requireExpert, decideCustomerRequestHandler('approve'));
+expertRouter.post('/customers/:customerId/requests/reject', requireExpert, decideCustomerRequestHandler('reject'));
+
+function liveMessagesGetHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không được truy cập' });
     return;
   }
   const since = req.query.since;
   const messages =
     since != null && since !== ''
-      ? listLiveMessagesForPatientSince(patientId, since)
-      : listLiveMessagesForPatient(patientId);
+      ? listLiveMessagesForCustomerSince(customerId, since)
+      : listLiveMessagesForCustomer(customerId);
   res.json({ messages });
-});
+}
 
-expertRouter.post('/patients/:patientId/live-messages', requireExpert, (req, res) => {
+function liveMessagesPostHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không được truy cập' });
     return;
   }
@@ -130,7 +168,7 @@ expertRouter.post('/patients/:patientId/live-messages', requireExpert, (req, res
     return;
   }
   const msg = sendLiveChatMessage({
-    patientId,
+    customerId,
     senderUserId: expertId,
     senderRole: 'expert',
     content: text,
@@ -139,47 +177,47 @@ expertRouter.post('/patients/:patientId/live-messages', requireExpert, (req, res
     res.status(400).json({ error: 'Không gửi được' });
     return;
   }
-  pushAudit({ actorId: expertId, role: 'expert', action: 'live_message', patientId });
+  pushAudit({ actorId: expertId, role: 'expert', action: 'live_message', customerId });
   res.status(201).json({ message: msg });
-});
+}
 
-expertRouter.delete('/patients/:patientId/assignment', requireExpert, (req, res) => {
+function unassignHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không có quyền gỡ gán' });
     return;
   }
-  removeExpertPatientAssignment(expertId, patientId);
-  pushAudit({ actorId: expertId, role: 'expert', action: 'unassign_patient', patientId });
+  removeExpertCustomerAssignment(expertId, customerId);
+  pushAudit({ actorId: expertId, role: 'expert', action: 'unassign_customer', customerId });
   res.json({ ok: true });
-});
+}
 
-expertRouter.get('/patients/:patientId/training-plan', requireExpert, (req, res) => {
+function trainingPlanGetHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không được truy cập' });
     return;
   }
-  const plan = getTrainingPlanForPatient(patientId);
+  const plan = getTrainingPlanForCustomer(customerId);
   res.json({ plan });
-});
+}
 
-expertRouter.put('/patients/:patientId/training-plan', requireExpert, (req, res) => {
+function trainingPlanPutHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không được truy cập' });
     return;
   }
   try {
-    const existing = getTrainingPlanForPatient(patientId);
+    const existing = getTrainingPlanForCustomer(customerId);
     if (!existing) {
-      res.status(404).json({ error: 'Bệnh nhân chưa có kế hoạch tập trên hệ thống' });
+      res.status(404).json({ error: 'Khách hàng chưa có kế hoạch tập trên hệ thống' });
       return;
     }
-    const { exercises, status, expertNote } = req.body || {};
+    const { exercises, status, expertNote, expectedUpdatedAt } = req.body || {};
     if (exercises != null && !Array.isArray(exercises)) {
       res.status(400).json({ error: 'exercises phải là mảng' });
       return;
@@ -197,16 +235,17 @@ expertRouter.put('/patients/:patientId/training-plan', requireExpert, (req, res)
                 : 'Theo kế hoạch',
             isPTLocked: ex.isPTLocked !== false,
           }));
-    const saved = updateTrainingPlanByExpert(patientId, expertId, {
+    const saved = updateTrainingPlanByExpert(customerId, expertId, {
       exercises: sanitized,
       status,
       expertNote,
+      expectedUpdatedAt,
     });
     pushAudit({
       actorId: expertId,
       role: 'expert',
       action: 'update_training_plan',
-      patientId,
+      customerId,
       meta: { status: saved?.status },
     });
     res.json({ plan: saved });
@@ -218,30 +257,106 @@ expertRouter.put('/patients/:patientId/training-plan', requireExpert, (req, res)
     }
     throw e;
   }
-});
+}
 
-expertRouter.get('/patients/:patientId', requireExpert, (req, res) => {
+function customerDetailHandler(req, res) {
   const expertId = req.user.sub;
-  const { patientId } = req.params;
-  if (!canExpertAccessPatient(expertId, patientId)) {
+  const customerId = customerIdFromReq(req);
+  if (!canExpertAccessCustomer(expertId, customerId)) {
     res.status(403).json({ error: 'Không được truy cập hồ sơ này' });
     return;
   }
-  const u = findUserById(patientId);
+  const u = findUserById(customerId);
   if (!u) {
     res.status(404).json({ error: 'Không tìm thấy' });
     return;
   }
-  const bmi = listBmiForUser(patientId).sort((a, b) => b.date.localeCompare(a.date));
-  const moods = listMoodsForUser(patientId).sort((a, b) => b.date.localeCompare(a.date));
-  const botMessages = listBotMessagesForUser(patientId);
-  const liveMessages = listLiveMessagesForPatient(patientId);
-  pushAudit({ actorId: expertId, role: 'expert', action: 'view_patient', patientId });
+  const bmi = listBmiForUser(customerId).sort((a, b) => b.date.localeCompare(a.date));
+  const moods = listMoodsForUser(customerId).sort((a, b) => b.date.localeCompare(a.date));
+  const botMessages = listBotMessagesForUser(customerId);
+  const liveMessages = listLiveMessagesForCustomer(customerId);
+  const healthProfile = getCustomerHealthProfile(customerId);
+  pushAudit({ actorId: expertId, role: 'expert', action: 'view_customer', customerId });
   res.json({
-    patient: { id: u.id, email: u.email, name: u.name },
+    customer: { id: u.id, email: u.email, name: u.name },
     bmi,
     moods,
     botMessages,
     liveMessages,
+    healthProfile,
   });
+}
+
+const moderationActor = (req) => ({ id: req.user.sub, role: req.dbUser.role });
+
+expertRouter.get('/community/posts', requireExpert, (req, res) => {
+  const topic = req.query.topic ? String(req.query.topic) : undefined;
+  const posts = adminManagementService.listPostsForModeration({
+    topic,
+    viewerId: req.user.sub,
+    limit: 50,
+  });
+  res.json({ posts });
 });
+
+expertRouter.patch('/community/posts/:postId', requireExpert, (req, res) => {
+  const status = String(req.body?.status || 'hidden').trim();
+  if (status !== 'hidden') {
+    res.status(400).json({ error: 'Chuyên gia chỉ có thể ẩn bài viết (status=hidden)' });
+    return;
+  }
+  const ok = adminManagementService.moderatePost(
+    moderationActor(req),
+    String(req.params.postId),
+    'hide',
+  );
+  if (!ok) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+expertRouter.delete('/community/posts/:postId', requireExpert, (req, res) => {
+  const ok = adminManagementService.moderatePost(
+    moderationActor(req),
+    String(req.params.postId),
+    'delete',
+  );
+  if (!ok) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+expertRouter.delete('/community/comments/:commentId', requireExpert, (req, res) => {
+  const commentId = String(req.params.commentId);
+  const postId = String(req.body?.postId || req.query.postId || '');
+  const ok = adminManagementService.moderateComment(
+    moderationActor(req),
+    commentId,
+    postId,
+    'delete',
+  );
+  if (!ok) {
+    res.status(404).json({ error: 'Không tìm thấy bình luận' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+for (const base of ['/customers', '/patients']) {
+  expertRouter.get(`${base}/:customerId/live-messages`, requireExpert, liveMessagesGetHandler);
+  expertRouter.get(`${base}/:patientId/live-messages`, requireExpert, liveMessagesGetHandler);
+  expertRouter.post(`${base}/:customerId/live-messages`, requireExpert, liveMessagesPostHandler);
+  expertRouter.post(`${base}/:patientId/live-messages`, requireExpert, liveMessagesPostHandler);
+  expertRouter.delete(`${base}/:customerId/assignment`, requireExpert, unassignHandler);
+  expertRouter.delete(`${base}/:patientId/assignment`, requireExpert, unassignHandler);
+  expertRouter.get(`${base}/:customerId/training-plan`, requireExpert, trainingPlanGetHandler);
+  expertRouter.get(`${base}/:patientId/training-plan`, requireExpert, trainingPlanGetHandler);
+  expertRouter.put(`${base}/:customerId/training-plan`, requireExpert, trainingPlanPutHandler);
+  expertRouter.put(`${base}/:patientId/training-plan`, requireExpert, trainingPlanPutHandler);
+  expertRouter.get(`${base}/:customerId`, requireExpert, customerDetailHandler);
+  expertRouter.get(`${base}/:patientId`, requireExpert, customerDetailHandler);
+}

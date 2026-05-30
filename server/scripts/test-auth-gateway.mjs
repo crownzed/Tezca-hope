@@ -17,17 +17,17 @@ const email = `gw${Date.now()}@test.tezca`;
 const password = 'TestAcc#99';
 
 const login = await post('/api/auth/gateway', {
-  op: 'patient-login',
+  op: 'customer-login',
   email: 'patient@tezca.vn',
   password: 'TezcaDemo#2026',
 });
-console.log('gateway patient-login', login.status, login.j.token ? 'ok' : login.j.error);
+console.log('gateway customer-login', login.status, login.j.token ? 'ok' : login.j.error);
 
 const reg = await post('/api/auth/gateway', { op: 'register', email, password, name: 'GW Test' });
 console.log('gateway register', reg.status, reg.j.token ? 'ok' : reg.j.error);
 
 const stripped = await post('/api', {
-  op: 'patient-login',
+  op: 'customer-login',
   email: 'patient@tezca.vn',
   password: 'TezcaDemo#2026',
 });

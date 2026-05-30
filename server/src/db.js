@@ -1,18 +1,54 @@
 /**
  * Facade DB — giữ export ổn định cho routes; logic nằm trong ./db/*
  */
+import bcrypt from 'bcryptjs';
 import { normalizeEmail } from './validate.js';
 import { DbError, mapSqliteError } from './dbErrors.js';
 import { getDb, initDb, runInTransaction, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID } from './db/connection.js';
 import { getDatabaseInfo, runDatabaseDiagnostics } from './db/health.js';
+import { grantUserRole } from './db/customerDomain.js';
 export {
   ensureTrainingPlanFromWorkout,
-  getTrainingPlanForPatient,
+  getTrainingPlanForCustomer,
   integrateTrainingPlanFromAi,
   syncTrainingPlanProgress,
   structureExercises,
   updateTrainingPlanByExpert,
 } from './db/repositories/trainingPlanRepository.js';
+
+export {
+  listLiveMessagesForCustomer,
+  listLiveMessagesForCustomerSince,
+  getExpertsForCustomer,
+  canExpertAccessCustomer,
+  getCustomerIdsForExpert,
+  assignExpertToCustomer,
+  removeExpertCustomerAssignment,
+  listAvailableExperts,
+  listExpertRequestsForCustomer,
+  requestExpertAssignment,
+  listPendingCustomersForExpert,
+  decideExpertAssignment,
+  getCustomerHealthProfile,
+  upsertCustomerHealthProfile,
+  listCustomersWithProfiles,
+  listExpertsWithProfiles,
+  listAssignmentRelations,
+  upsertCustomerProfile,
+  upsertExpertProfile,
+  createExpertAccount,
+  updateExpertAccount,
+  setExpertActive,
+  deleteExpertAccount,
+  deleteCustomerAccount,
+  isExpertAccountActive,
+  updateUserRole,
+  listUserGrantedRoles,
+  userHasRoleGrant,
+  userCanLoginAsRole,
+  grantUserRole,
+  revokeUserRole,
+} from './db/customerDomain.js';
 
 export { getDb, initDb, runInTransaction, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID, getDatabaseInfo, runDatabaseDiagnostics };
 
@@ -211,14 +247,124 @@ export function getLastLiveMessageMap(patientIds) {
   return map;
 }
 
-export function insertLiveMessage({ patientId, senderUserId, senderRole, content }) {
+export function insertLiveMessage({ patientId, customerId, senderUserId, senderRole, content }) {
+  const cid = customerId ?? patientId;
   const id = crypto.randomUUID();
   const ts = Date.now();
+  const role =
+    senderRole === 'patient' || senderRole === 'user' ? 'customer' : senderRole;
   getDb()
     .prepare(
       `INSERT INTO live_messages (id, patient_id, sender_user_id, sender_role, content, ts)
        VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, patientId, senderUserId, senderRole, content, ts);
-  return { id, patientId, senderUserId, senderRole, content, ts };
+    .run(id, cid, senderUserId, role, content, ts);
+  return { id, patientId: cid, customerId: cid, senderUserId, senderRole: role, content, ts };
 }
+
+/** Bootstrap admin — env ưu tiên; trên Vercel demo dùng admin@tezca.vn / TezcaDemo#2026. */
+export function ensureAdminFromEnv() {
+  const onVercel = Boolean(process.env.VERCEL);
+  const demoBootstrap = onVercel && process.env.TEZCA_SEED_DEMO !== '0';
+
+  let email = normalizeEmail(
+    process.env.TEZCA_ADMIN_EMAIL || process.env.ADMIN_EMAIL,
+  );
+  let password = process.env.TEZCA_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+
+  if (!email && demoBootstrap) {
+    email = normalizeEmail(process.env.TEZCA_DEMO_ADMIN_EMAIL || 'admin@tezca.vn');
+  }
+  if (!password && demoBootstrap) {
+    password = process.env.TEZCA_DEMO_PASSWORD || 'TezcaDemo#2026';
+  }
+  if (!email || !password) return;
+
+  const demoAdminEmail = normalizeEmail('admin@tezca.vn');
+  const name = String(process.env.TEZCA_ADMIN_NAME || 'Quản trị viên').trim().slice(0, 120);
+  const hash = bcrypt.hashSync(String(password), 10);
+  const syncPassword =
+    process.env.TEZCA_ADMIN_SYNC_PASSWORD === '1' ||
+    process.env.TEZCA_ADMIN_SYNC_PASSWORD === 'true' ||
+    (demoBootstrap && email === demoAdminEmail);
+
+  let user = findUserByEmail(email);
+  if (!user) {
+    const id =
+      email === demoAdminEmail ? 'tezca-demo-admin-0001' : crypto.randomUUID();
+    insertUser({ id, email, passwordHash: hash, role: 'admin', name });
+    user = findUserByEmail(email);
+  } else if (syncPassword) {
+    getDb()
+      .prepare(`UPDATE users SET password_hash = ? WHERE id = ?`)
+      .run(hash, user.id);
+  }
+
+  if (user) {
+    grantUserRole(user.id, 'admin');
+    if (user.role !== 'admin' && (process.env.TEZCA_ADMIN_PRIMARY_ROLE === 'admin' || email === demoAdminEmail)) {
+      getDb().prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(user.id);
+    }
+  }
+}
+
+/** Đăng ký nhận tin landing — trả { created: true } nếu email mới. */
+export function subscribeNewsletter(email, source = 'landing') {
+  const normalized = normalizeEmail(email);
+  if (!normalized) throw new DbError('INVALID_EMAIL', 'Email không hợp lệ', 400);
+  const now = Date.now();
+  try {
+    const result = getDb()
+      .prepare(
+        `INSERT INTO newsletter_subscribers (email, source, created_at) VALUES (?, ?, ?)`,
+      )
+      .run(normalized, String(source || 'landing').slice(0, 64), now);
+    return { created: result.changes > 0 };
+  } catch (err) {
+    if (err?.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return { created: false };
+    }
+    throw mapSqliteError(err);
+  }
+}
+
+export {
+  listCommunityPosts,
+  getCommunityPostById,
+  createCommunityPost,
+  deleteCommunityPost,
+  setCommunityPostStatus,
+  listCommunityComments,
+  createCommunityComment,
+  hideCommunityComment,
+  deleteCommunityComment,
+  getCommunityCommentById,
+  toggleCommunityPostLike,
+  createCommunityReport,
+  listCommunityReports,
+  updateCommunityReportStatus,
+  listCommunityRoomMessages,
+  insertCommunityRoomMessage,
+  listCommunityFeed,
+  followCommunityUser,
+  unfollowCommunityUser,
+  listFollowedCommunityUserIds,
+  isFollowingCommunityUser,
+  followCommunityTopic,
+  unfollowCommunityTopic,
+  listFollowedCommunityTopics,
+  listCommunityThreadReplies,
+  createCommunityThreadReply,
+} from './db/repositories/communityRepository.js';
+
+export {
+  listCommunityAnnouncementMessages,
+  insertCommunityAnnouncementMessage,
+  getOrCreateCommunityDmThread,
+  listCommunityDmThreads,
+  getCommunityDmThreadForUser,
+  listCommunityDmMessages,
+  insertCommunityDmMessage,
+  searchCommunityMembers,
+  listRoomMentionCandidates,
+} from './db/repositories/communityExtendedRepository.js';

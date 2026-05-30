@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { DEMO_EXPERT_ID, DEMO_PATIENT_ID } from './connection.js';
+import { DEMO_EXPERT_ID, DEMO_PATIENT_ID, DEMO_ADMIN_ID, DEMO_PASSWORD } from './connection.js';
 
 function addDays(isoDate, delta) {
   const d = new Date(isoDate);
@@ -15,9 +15,10 @@ function round1(n) {
  * @param {import('better-sqlite3').Database} db
  */
 export function seedDatabase(db) {
-  const hash = bcrypt.hashSync('TezcaDemo#2026', 10);
+  const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
   const expertId = DEMO_EXPERT_ID;
   const patientId = DEMO_PATIENT_ID;
+  const adminId = DEMO_ADMIN_ID;
   const today = new Date().toISOString().slice(0, 10);
   const now = Date.now();
 
@@ -38,6 +39,7 @@ export function seedDatabase(db) {
   db.transaction(() => {
     insUser.run(expertId, 'expert@tezca.vn', hash, 'expert', 'BS. Minh Anh', now);
     insUser.run(patientId, 'patient@tezca.vn', hash, 'user', 'Nguyễn Minh Khang', now);
+    insUser.run(adminId, 'admin@tezca.vn', hash, 'admin', 'Quản trị Tezca', now);
     insAssign.run(expertId, patientId);
 
     const bmis = [

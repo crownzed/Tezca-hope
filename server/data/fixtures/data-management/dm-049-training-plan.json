@@ -1,0 +1,33 @@
+{
+  "fileVersion": 1,
+  "recordType": "training_plan_export",
+  "label": "Kế hoạch tập kh-demo-004@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:14.004Z",
+  "tags": [
+    "data-management-demo",
+    "training_plan_export"
+  ],
+  "payload": {
+    "customerEmail": "kh-demo-004@tezca.vn",
+    "status": "approved",
+    "sourcePlanMd": "## Kế hoạch import demo 004\n- Khởi động\n- Tập chính\n- Giãn cơ",
+    "expertNote": "File fixture quản lý dữ liệu.",
+    "exercises": [
+      {
+        "id": 700004,
+        "title": "Plank",
+        "sets": 3,
+        "reps": "40 giây",
+        "isPTLocked": true
+      },
+      {
+        "id": 700104,
+        "title": "Squat",
+        "sets": 3,
+        "reps": 10,
+        "isPTLocked": true
+      }
+    ],
+    "dailyProgress": {}
+  }
+}

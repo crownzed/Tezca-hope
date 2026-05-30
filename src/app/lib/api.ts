@@ -18,20 +18,37 @@ function isLocalDevHost(): boolean {
   return h === 'localhost' || h === '127.0.0.1';
 }
 
-export type AuthGatewayOp = 'patient-login' | 'expert-login' | 'register' | 'login';
+export type AuthGatewayOp =
+  | 'customer-login'
+  | 'expert-login'
+  | 'admin-login'
+  | 'register'
+  | 'login'
+  | 'forgot-password'
+  | 'reset-password';
 
+/** Prefix API: '' hoặc '/tezca' khi build VITE_BASE_PATH=/tezca/ */
 export function apiBase(): string {
   const env = (import.meta as ViteEnv).env;
   const explicit = env.VITE_API_URL?.replace(/\/$/, '');
   if (explicit) return explicit;
-  return '';
+  const base = (env.BASE_URL || '/').replace(/\/$/, '');
+  return base && base !== '/' ? base : '';
+}
+
+export function apiUrl(path: string): string {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${apiBase()}${p}`;
 }
 
 function authOpForPath(path: string): AuthGatewayOp | null {
-  if (path.includes('patient/login')) return 'patient-login';
+  if (path.includes('patient/login') || path.includes('customer/login')) return 'customer-login';
   if (path.includes('expert/login')) return 'expert-login';
+  if (path.includes('admin/login')) return 'admin-login';
   if (path.includes('register')) return 'register';
   if (path.includes('/auth/login')) return 'login';
+  if (path.includes('forgot-password')) return 'forgot-password';
+  if (path.includes('reset-password')) return 'reset-password';
   return null;
 }
 
@@ -53,22 +70,30 @@ function authPostTargets(path: string): { url: string; gateway?: boolean }[] {
     const hostedTargets: { url: string; gateway?: boolean }[] = [...GATEWAY_TARGETS];
     if (op === 'expert-login') {
       hostedTargets.push({ url: '/api/auth/expert/login' });
-    } else if (op === 'patient-login') {
-      hostedTargets.push({ url: '/api/auth/patient/login' });
+    } else if (op === 'admin-login') {
+      hostedTargets.push({ url: '/api/auth/admin/login' });
+    } else if (op === 'customer-login') {
+      hostedTargets.push({ url: '/api/auth/customer/login' });
     }
     return hostedTargets;
   }
 
   const targets: { url: string; gateway?: boolean }[] = [...GATEWAY_TARGETS];
 
-  if (op === 'patient-login') {
-    targets.push({ url: '/api/auth/patient/login' }, { url: '/api/auth/login' });
+  if (op === 'customer-login') {
+    targets.push({ url: '/api/auth/customer/login' }, { url: '/api/auth/login' });
   } else if (op === 'expert-login') {
     targets.push({ url: '/api/auth/expert/login' }, { url: '/api/auth/login' });
+  } else if (op === 'admin-login') {
+    targets.push({ url: '/api/auth/admin/login' }, { url: '/api/auth/login' });
   } else if (op === 'register') {
     targets.push({ url: '/api/auth/register' }, { url: '/api/register' });
   } else if (op === 'login') {
     targets.push({ url: '/api/auth/login' });
+  } else if (op === 'forgot-password') {
+    targets.push({ url: '/api/auth/forgot-password' });
+  } else if (op === 'reset-password') {
+    targets.push({ url: '/api/auth/reset-password' });
   }
 
   return targets;
@@ -84,9 +109,13 @@ function devDirectApiBases(): string[] {
 async function parseErrorResponse(res: Response, path: string): Promise<never> {
   const err = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
   if (res.status === 405) {
+    const subpath = apiBase();
+    const apiHint = subpath
+      ? `proxy ${subpath}/api → Node (cổng 3001)`
+      : 'proxy /api → Node (cổng 3001)';
     throw new ApiError(
       err.error ||
-        'Máy chủ từ chối POST (405). Trên host cần proxy /api → Node (xem deploy/website/apache-snippet.conf). Local: chạy `npm run dev`.',
+        `Máy chủ từ chối POST (405). Trên host cần ${apiHint} — xem deploy/website/apache-snippet.conf. Local: chạy \`npm run dev:all\`.`,
       405,
     );
   }
@@ -97,6 +126,15 @@ async function parseErrorResponse(res: Response, path: string): Promise<never> {
     );
   }
   throw new ApiError(err.error || `${res.status} ${res.statusText}`, res.status);
+}
+
+function buildRequestUrl(base: string, apiPath: string): string {
+  if (/^https?:\/\//i.test(base)) {
+    return `${base.replace(/\/$/, '')}${apiPath}`;
+  }
+  const prefix = base || apiBase();
+  if (prefix) return `${prefix.replace(/\/$/, '')}${apiPath}`;
+  return apiPath;
 }
 
 async function doFetch(
@@ -115,7 +153,7 @@ async function doFetch(
       body = JSON.stringify({ op });
     }
   }
-  return fetch(`${base}${target.url}`, { ...init, headers, body });
+  return fetch(buildRequestUrl(base, target.url), { ...init, headers, body });
 }
 
 export async function apiFetch<T = unknown>(
@@ -180,8 +218,16 @@ export async function apiFetch<T = unknown>(
   throw new Error('Yêu cầu API thất bại');
 }
 
+/** Vercel/serverless không có WebSocket — dùng HTTP + polling. */
+export function canUseWebSocket(): boolean {
+  if (typeof window === 'undefined') return false;
+  return isLocalDevHost() || (import.meta as ViteEnv).env.DEV;
+}
+
 export function wsUrl(token: string): string {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const host = window.location.host;
-  return `${proto}://${host}/ws?token=${encodeURIComponent(token)}`;
+  const prefix = apiBase();
+  const path = prefix ? `${prefix}/ws` : '/ws';
+  return `${proto}://${host}${path}?token=${encodeURIComponent(token)}`;
 }

@@ -17,10 +17,18 @@
     "xampp:build": "npm run build && npm run xampp:sync",
     "build:website": "node scripts/deploy-website.mjs",
     "deploy:website": "node scripts/deploy-website.mjs",
+    "diagrams:export": "node scripts/export-plantuml.mjs",
     "preview": "vite preview",
-    "start": "npm run preview"
+    "start": "npm run preview",
+    "deploy:vercel": "vercel deploy --yes",
+    "deploy:vercel:prod": "vercel deploy --prod --yes"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@mui/icons-material": "7.3.5",

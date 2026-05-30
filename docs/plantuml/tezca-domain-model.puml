@@ -1,0 +1,518 @@
+@startuml Tezca_Domain_Model
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam dpi 160
+skinparam scale 0.85
+skinparam nodesep 35
+skinparam ranksep 45
+
+skinparam class {
+  BackgroundColor White
+  ArrowColor DimGray
+  BorderColor DarkCyan
+  HeaderBackgroundColor DarkCyan
+  HeaderFontColor White
+}
+
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 12
+
+title Mô hình lớp miền — Tezca Health\n(dọc)
+
+package "1. Quản lý Người dùng" {
+
+  abstract class User <<Abstract>> {
+    +id: string [PK]
+    +email: string [UK]
+    +password_hash: string
+    +name: string
+    +created_at: datetime
+    +role: enum(USER, EXPERT, ADMIN)
+  }
+
+  class Admin <<users.role = admin>> {
+    Quản lý hệ thống
+    Cấp quyền chuyên gia
+    Kiểm duyệt diễn đàn
+  }
+
+  class Expert <<users.role = expert>> {
+    Gán bệnh nhân
+    Duyệt kế hoạch, chat
+  }
+
+  class Patient <<users.role = user>> {
+    Theo dõi BMI, mood
+    Chat AI, kế hoạch tập
+  }
+
+  User <|-- Admin
+  User <|-- Expert
+  User <|-- Patient
+
+  class PasswordResetToken {
+    +token_hash: string [PK]
+    +user_id: string [FK]
+    +expires_at: datetime
+    +created_at: datetime
+  }
+
+  User "1" *-- "0..*" PasswordResetToken
+}
+
+package "2. Nghiệp vụ Chính" {
+
+  class Assignment {
+    +expert_id: string [PK, FK]
+    +patient_id: string [PK, FK]
+    --
+    Quan hệ đồng hành N-N
+  }
+
+  class TrainingPlan {
+    +patient_id: string [PK, FK]
+    +source_plan_md: text
+    +exercises_json: text
+    +daily_progress_json: text
+    +expert_note: text
+    +integrated_at: datetime
+    +updated_at: datetime
+    +updated_by: string [FK Expert]
+    +progress_updated_at: datetime
+    +status: enum(PENDING_REVIEW, APPROVED)
+  }
+
+  class Exercise {
+    +id: int
+    +title: string
+    +sets: int
+    +reps: string
+    +isPTLocked: boolean
+    +completed: boolean
+    +actualWeight: string
+  }
+
+  Expert "1" -- "0..*" Assignment
+  Patient "1" -- "0..*" Assignment : được gán <
+  Patient "1" -- "0..1" TrainingPlan : thực hiện >
+  Expert "1" -- "0..*" TrainingPlan : chỉnh sửa / duyệt >
+  TrainingPlan "1" *-- "1..*" Exercise : chứa (JSON)
+}
+
+package "3. Dữ liệu & Nhật ký" {
+
+  class AuditLog {
+    +id: string [PK]
+    +ts: datetime
+    +actor_id: string
+    +role: string
+    +action: string
+    +patient_id: string [FK?]
+    +meta: text
+  }
+
+  Admin "1" -- "0..*" AuditLog : ghi nhận >
+  Expert "1" -- "0..*" AuditLog : ghi nhận >
+
+  class LiveMessage {
+    +id: string [PK]
+    +patient_id: string [FK]
+    +sender_user_id: string
+    +content: text
+    +ts: datetime
+    +sender_role: enum(PATIENT, EXPERT)
+  }
+
+  Expert "1" -- "0..*" LiveMessage : gửi tin >
+  Patient "1" -- "0..*" LiveMessage : gửi tin >
+
+  class BotMessage {
+    +id: string [PK]
+    +user_id: string [FK]
+    +content: text
+    +ts: datetime
+    +role: enum(USER, ASSISTANT)
+  }
+
+  Patient "1" -- "0..*" BotMessage : chat AI >
+
+  class BmiEntry {
+    +id: string [PK]
+    +user_id: string [FK]
+    +date: date
+    +height_cm: float
+    +weight_kg: float
+    +bmi: float
+  }
+
+  Patient "1" *-- "0..*" BmiEntry : ghi đo >
+
+  class MoodEntry {
+    +id: string [PK]
+    +user_id: string [FK]
+    +date: date
+    +mood_label: string
+    +mood_score: int (1..5)
+    +note: text
+  }
+
+  Patient "1" *-- "0..*" MoodEntry : ghi nhật ký >
+}
+
+package "4. Cộng đồng (Mới)" {
+
+  class Post {
+    +id: string [PK]
+    +user_id: string [FK]
+    +content: text
+    +image_url: string
+    +likes_count: int
+    +created_at: datetime
+  }
+
+  class Comment {
+    +id: string [PK]
+    +post_id: string [FK]
+    +user_id: string [FK]
+    +content: text
+    +created_at: datetime
+  }
+
+  User "1" -- "0..*" Post : đăng bài >
+  User "1" -- "0..*" Comment : bình luận >
+  Post "1" *-- "0..*" Comment : chứa >
+}
+
+@enduml
+@startuml Tezca_Domain_Model
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam dpi 160
+skinparam scale 0.85
+skinparam nodesep 35
+skinparam ranksep 45
+
+skinparam class {
+  BackgroundColor White
+  ArrowColor DimGray
+  BorderColor DarkCyan
+  HeaderBackgroundColor DarkCyan
+  HeaderFontColor White
+}
+
+skinparam note {
+  BackgroundColor LightYellow
+  BorderColor GoldenRod
+}
+
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 11
+
+title Mô hình lớp miền — Tezca Health\n(dọc)
+
+' ============================================================
+' 1) Quản lý Người dùng
+' ============================================================
+package "1. Quản lý Người dùng" {
+
+  abstract class User <<Abstract>> {
+    +id: string [PK]
+    +email: string [UK]
+    +password_hash: string
+    +name: string
+    +created_at: datetime
+    +role: enum(USER, EXPERT, ADMIN)
+  }
+
+  note left of User
+    Đã cập nhật:
+    Hệ thống hiện tại có 3 role rõ ràng.
+  end note
+
+  class Admin <<users.role = admin>> {
+    Quản lý hệ thống
+    Cấp quyền chuyên gia
+    Kiểm duyệt diễn đàn
+  }
+
+  class Expert <<users.role = expert>> {
+    Gán bệnh nhân
+    Duyệt kế hoạch, chat
+  }
+
+  class Patient <<users.role = user>> {
+    Theo dõi BMI, mood
+    Chat AI, kế hoạch tập
+  }
+
+  User <|-- Admin
+  User <|-- Expert
+  User <|-- Patient
+
+  class PasswordResetToken {
+    +token_hash: string [PK]
+    +user_id: string [FK]
+    +expires_at: datetime
+    +created_at: datetime
+  }
+
+  User "1" *-- "0..*" PasswordResetToken
+}
+
+' ============================================================
+' 2) Nghiệp vụ Chính
+' ============================================================
+package "2. Nghiệp vụ Chính" {
+
+  class Assignment {
+    +expert_id: string [PK, FK]
+    +patient_id: string [PK, FK]
+    --
+    Quan hệ đồng hành N-N
+  }
+
+  note right of Assignment
+    Đã cập nhật:
+    Một chuyên gia có nhiều khách hàng.
+    Một khách hàng có nhiều chuyên gia.
+  end note
+
+  class TrainingPlan {
+    +patient_id: string [PK, FK]
+    +source_plan_md: text
+    +exercises_json: text
+    +daily_progress_json: text
+    +expert_note: text
+    +integrated_at: datetime
+    +updated_at: datetime
+    +updated_by: string [FK Expert]
+    +progress_updated_at: datetime
+    +status: enum(PENDING_REVIEW, APPROVED)
+  }
+
+  Expert "1" -- "0..*" Assignment
+  Patient "1" -- "0..*" Assignment : được gán <
+  Patient "1" -- "0..1" TrainingPlan : thực hiện >
+  Expert "1" -- "0..*" TrainingPlan : chỉnh sửa / duyệt >
+
+  class Exercise {
+    +id: int
+    +title: string
+    +sets: int
+    +reps: string
+    +isPTLocked: boolean
+    +completed: boolean
+    +actualWeight: string
+  }
+
+  note bottom of Exercise
+    Không có bảng exercises riêng.
+    Lớp logic - serialize JSON
+    trong patient_training_plans.
+  end note
+
+  TrainingPlan "1" *-- "1..*" Exercise : chứa (JSON)
+}
+
+' ============================================================
+' 3) Dữ liệu & Nhật ký
+' ============================================================
+package "3. Dữ liệu & Nhật ký" {
+
+  class AuditLog {
+    +id: string [PK]
+    +ts: datetime
+    +actor_id: string
+    +role: string
+    +action: string
+    +patient_id: string [FK?]
+    +meta: text
+  }
+
+  Admin "1" -- "0..*" AuditLog : ghi nhận >
+  Expert "1" -- "0..*" AuditLog : ghi nhận >
+
+  class LiveMessage {
+    +id: string [PK]
+    +patient_id: string [FK]
+    +sender_user_id: string
+    +content: text
+    +ts: datetime
+    +sender_role: enum(PATIENT, EXPERT)
+  }
+
+  Expert "1" -- "0..*" LiveMessage : gửi tin >
+  Patient "1" -- "0..*" LiveMessage : gửi tin >
+
+  class BotMessage {
+    +id: string [PK]
+    +user_id: string [FK]
+    +content: text
+    +ts: datetime
+    +role: enum(USER, ASSISTANT)
+  }
+
+  Patient "1" -- "0..*" BotMessage : chat AI >
+
+  class BmiEntry {
+    +id: string [PK]
+    +user_id: string [FK]
+    +date: date
+    +height_cm: float
+    +weight_kg: float
+    +bmi: float
+  }
+
+  Patient "1" *-- "0..*" BmiEntry : ghi đo >
+
+  class MoodEntry {
+    +id: string [PK]
+    +user_id: string [FK]
+    +date: date
+    +mood_label: string
+    +mood_score: int (1..5)
+    +note: text
+  }
+
+  Patient "1" *-- "0..*" MoodEntry : ghi nhật ký >
+}
+
+' ============================================================
+' 4) Cộng đồng (Mới)
+' ============================================================
+package "4. Cộng đồng (Mới)" {
+
+  class Post {
+    +id: string [PK]
+    +user_id: string [FK]
+    +content: text
+    +image_url: string
+    +likes_count: int
+    +created_at: datetime
+  }
+
+  class Comment {
+    +id: string [PK]
+    +post_id: string [FK]
+    +user_id: string [FK]
+    +content: text
+    +created_at: datetime
+  }
+
+  User "1" -- "0..*" Post : đăng bài >
+  User "1" -- "0..*" Comment : bình luận >
+  Post "1" *-- "0..*" Comment : chứa >
+}
+
+@enduml
+
+@startuml Tezca_Domain_Model
+top to bottom direction
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam dpi 200
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 15
+skinparam nodesep 50
+skinparam ranksep 60
+
+' Cấu hình chung
+skinparam class {
+    BackgroundColor White
+    BorderColor #042e5a
+    ArrowColor DimGray
+    HeaderBackgroundColor #042e5a
+    HeaderFontColor White
+    FontSize 15
+}
+skinparam package {
+    BorderColor #042e5a
+    FontColor #042e5a
+    FontStyle bold
+    FontSize 16
+}
+
+title Mô hình lớp miền (theo gói) — Tezca Health
+
+package "1. Quản lý Người dùng" {
+    class User {
+        +id: string [PK]
+        +email: string
+        +role: enum
+    }
+    class Admin
+    class Expert
+    class Patient
+    User <|-- Admin
+    User <|-- Expert
+    User <|-- Patient
+}
+
+package "2. Nghiệp vụ Chính" {
+    class Assignment {
+        +expert_id, patient_id [PK]
+    }
+    class TrainingPlan {
+        +patient_id [PK]
+        +status: enum
+    }
+    Expert "1" -- "0..*" Assignment
+    Patient "1" -- "0..*" Assignment
+    Patient "1" -- "0..1" TrainingPlan
+}
+
+package "3. Dữ liệu & Nhật ký" {
+    class BmiEntry {
+        +id [PK]
+        +user_id [FK]
+    }
+    class MoodEntry {
+        +id [PK]
+        +user_id [FK]
+    }
+    class BotMessage {
+        +id [PK]
+        +user_id [FK]
+    }
+    class LiveMessage {
+        +id [PK]
+        +patient_id [FK]
+    }
+    class AuditLog {
+        +id [PK]
+        +actor_id [FK]
+    }
+
+    Patient "1" *-- "0..*" BmiEntry
+    Patient "1" *-- "0..*" MoodEntry
+    Patient "1" *-- "0..*" BotMessage
+}
+
+package "4. Cộng đồng (Mới)" {
+    class Post {
+        +id [PK]
+        +user_id [FK]
+    }
+    class Comment {
+        +id [PK]
+        +post_id [FK]
+    }
+
+    User "1" -- "0..*" Post
+    Post "1" *-- "0..*" Comment
+    User "1" -- "0..*" Comment
+}
+
+' Kết nối Log
+Admin "1" -- "0..*" AuditLog
+Expert "1" -- "0..*" AuditLog
+
+@enduml

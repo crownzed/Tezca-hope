@@ -13,7 +13,12 @@ const dataDir =
 export const DB_FILE = path.join(dataDir, 'tezca.sqlite');
 
 export const DEMO_EXPERT_ID = 'tezca-demo-expert-0001';
-export const DEMO_PATIENT_ID = 'tezca-demo-patient-0001';
+export const DEMO_CUSTOMER_ID = 'tezca-demo-patient-0001';
+export const DEMO_ADMIN_ID = 'tezca-demo-admin-0001';
+/** @deprecated */ export const DEMO_PATIENT_ID = DEMO_CUSTOMER_ID;
+
+export const DEMO_PASSWORD = 'TezcaDemo#2026';
+export const DEMO_ADMIN_EMAIL = 'admin@tezca.vn';
 
 /** @type {Database.Database | null} */
 let dbInstance = null;

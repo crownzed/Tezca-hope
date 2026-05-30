@@ -27,8 +27,10 @@ export function assertProductionSecrets() {
   if (!isProduction()) return;
 
   if (getJwtSecret() === DEV_JWT) {
-    console.error('[security] Production yêu cầu JWT_SECRET (không dùng giá trị mặc định).');
-    process.exit(1);
+    console.error(
+      '[security] Production yêu cầu JWT_SECRET (không dùng giá trị mặc định). Đặt trong Vercel Environment Variables.',
+    );
+    // Không process.exit — serverless (Vercel) sẽ crash toàn bộ FUNCTION_INVOCATION_FAILED.
   }
 
   const key = getGeminiApiKey();

@@ -12,7 +12,7 @@ const MAX_EXERCISES = 20;
 const DAILY_HISTORY_DAYS = 120;
 
 const SELECT_PLAN = `
-  SELECT patient_id AS patientId,
+  SELECT patient_id AS customerId,
          source_plan_md AS sourcePlanMd,
          status,
          exercises_json AS exercisesJson,
@@ -25,13 +25,13 @@ const SELECT_PLAN = `
   FROM patient_training_plans
   WHERE patient_id = ?`;
 
-function assertPatientRole(patientId) {
-  const id = assertNonEmptyId(patientId, 'patientId');
+function assertCustomerRole(customerId) {
+  const id = assertNonEmptyId(customerId, 'customerId');
   const row = getDb()
     .prepare(`SELECT role FROM users WHERE id = ?`)
     .get(id);
   if (!row || row.role !== 'user') {
-    throw new DbError('INVALID_PATIENT', 'Tài khoản bệnh nhân không hợp lệ', 400);
+    throw new DbError('INVALID_CUSTOMER', 'Tài khoản khách hàng không hợp lệ', 400);
   }
   return id;
 }
@@ -102,7 +102,7 @@ function mapPlanRow(row) {
   dailyProgress = migrateLegacyProgressToDaily(rawExercises, dailyProgress);
   dailyProgress = pruneDailyProgress(dailyProgress);
   return {
-    patientId: row.patientId,
+    customerId: row.customerId,
     sourcePlanMd: row.sourcePlanMd,
     status: row.status,
     exercises: structureExercises(rawExercises),
@@ -115,13 +115,13 @@ function mapPlanRow(row) {
   };
 }
 
-export function getTrainingPlanForPatient(patientId) {
-  const id = assertNonEmptyId(patientId, 'patientId');
+export function getTrainingPlanForCustomer(customerId) {
+  const id = assertNonEmptyId(customerId, 'customerId');
   const row = getDb().prepare(SELECT_PLAN).get(id);
   return mapPlanRow(row);
 }
 
-function insertPlanRow(patientId, fields) {
+function insertPlanRow(customerId, fields) {
   const now = Date.now();
   getDb()
     .prepare(
@@ -131,7 +131,7 @@ function insertPlanRow(patientId, fields) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
-      patientId,
+      customerId,
       fields.sourcePlanMd ?? '',
       fields.status ?? 'pending_review',
       fields.exercisesJson,
@@ -144,16 +144,16 @@ function insertPlanRow(patientId, fields) {
     );
 }
 
-function ensureTrainingPlanFromWorkoutInTx(patientId, exercises) {
-  const id = assertPatientRole(patientId);
-  const existing = getTrainingPlanForPatient(id);
+function ensureTrainingPlanFromWorkoutInTx(customerId, exercises) {
+  const id = assertCustomerRole(customerId);
+  const existing = getTrainingPlanForCustomer(id);
   if (existing) return existing;
 
   const structured = structureExercises(exercises);
   if (!structured.length) return null;
 
   const still = getDb().prepare(`SELECT 1 FROM patient_training_plans WHERE patient_id = ?`).get(id);
-  if (still) return getTrainingPlanForPatient(id);
+  if (still) return getTrainingPlanForCustomer(id);
 
   const now = Date.now();
   insertPlanRow(id, {
@@ -165,16 +165,16 @@ function ensureTrainingPlanFromWorkoutInTx(patientId, exercises) {
     updatedAt: now,
     progressUpdatedAt: 0,
   });
-  return getTrainingPlanForPatient(id);
+  return getTrainingPlanForCustomer(id);
 }
 
 /** Tạo kế hoạch từ dashboard khi chưa có bản AI. */
-export function ensureTrainingPlanFromWorkout(patientId, exercises) {
-  return runInTransaction(() => ensureTrainingPlanFromWorkoutInTx(patientId, exercises));
+export function ensureTrainingPlanFromWorkout(customerId, exercises) {
+  return runInTransaction(() => ensureTrainingPlanFromWorkoutInTx(customerId, exercises));
 }
 
-export function integrateTrainingPlanFromAi(patientId, sourcePlanMd, exercises) {
-  const id = assertPatientRole(patientId);
+export function integrateTrainingPlanFromAi(customerId, sourcePlanMd, exercises) {
+  const id = assertCustomerRole(customerId);
   const structured = structureExercises(exercises);
   const planMd = String(sourcePlanMd || '').slice(0, JSON_LIMITS.sourcePlanMd);
   const exercisesJson = stringifyJsonColumn(structured, JSON_LIMITS.exercises);
@@ -206,20 +206,39 @@ export function integrateTrainingPlanFromAi(patientId, sourcePlanMd, exercises) 
         )
         .run(planMd, exercisesJson, now, now, id);
     }
-    return getTrainingPlanForPatient(id);
+    return getTrainingPlanForCustomer(id);
   });
 }
 
-export function updateTrainingPlanByExpert(patientId, expertId, { exercises, status, expertNote }) {
-  const pid = assertNonEmptyId(patientId, 'patientId');
+export function updateTrainingPlanByExpert(
+  customerId,
+  expertId,
+  { exercises, status, expertNote, expectedUpdatedAt },
+) {
+  const pid = assertNonEmptyId(customerId, 'customerId');
   const eid = assertNonEmptyId(expertId, 'expertId');
 
-  const existing = getTrainingPlanForPatient(pid);
+  const existing = getTrainingPlanForCustomer(pid);
   if (!existing) return null;
 
   const expert = getDb().prepare(`SELECT role FROM users WHERE id = ?`).get(eid);
   if (!expert || expert.role !== 'expert') {
     throw new DbError('INVALID_EXPERT', 'Phiên chuyên gia không hợp lệ', 400);
+  }
+
+  const lockAt =
+    expectedUpdatedAt != null && expectedUpdatedAt !== ''
+      ? Number(expectedUpdatedAt)
+      : existing.updatedAt;
+  if (!Number.isFinite(lockAt) || lockAt <= 0) {
+    throw new DbError('INVALID_VERSION', 'Phiên bản kế hoạch không hợp lệ', 400);
+  }
+  if (Number(lockAt) !== Number(existing.updatedAt)) {
+    throw new DbError(
+      'PLAN_CONFLICT',
+      'Kế hoạch đã được cập nhật ở nơi khác. Tải lại trước khi lưu.',
+      409,
+    );
   }
 
   const nextStatus =
@@ -249,7 +268,7 @@ export function updateTrainingPlanByExpert(patientId, expertId, { exercises, sta
   const now = Date.now();
 
   return runInTransaction(() => {
-    getDb()
+    const result = getDb()
       .prepare(
         `UPDATE patient_training_plans SET
            exercises_json = ?,
@@ -258,7 +277,7 @@ export function updateTrainingPlanByExpert(patientId, expertId, { exercises, sta
            expert_note = ?,
            updated_at = ?,
            updated_by = ?
-         WHERE patient_id = ?`,
+         WHERE patient_id = ? AND updated_at = ?`,
       )
       .run(
         stringifyJsonColumn(merged, JSON_LIMITS.exercises),
@@ -268,13 +287,21 @@ export function updateTrainingPlanByExpert(patientId, expertId, { exercises, sta
         now,
         eid,
         pid,
+        lockAt,
       );
-    return getTrainingPlanForPatient(pid);
+    if (result.changes === 0) {
+      throw new DbError(
+        'PLAN_CONFLICT',
+        'Kế hoạch đã được cập nhật ở nơi khác. Tải lại trước khi lưu.',
+        409,
+      );
+    }
+    return getTrainingPlanForCustomer(pid);
   });
 }
 
-export function syncTrainingPlanProgress(patientId, dateIso, items, bootstrapWorkout) {
-  const pid = assertPatientRole(patientId);
+export function syncTrainingPlanProgress(customerId, dateIso, items, bootstrapWorkout) {
+  const pid = assertCustomerRole(customerId);
   const date = assertIsoDate(dateIso);
 
   const patchById = new Map(
@@ -291,7 +318,7 @@ export function syncTrainingPlanProgress(patientId, dateIso, items, bootstrapWor
   }
 
   return runInTransaction(() => {
-    let existing = getTrainingPlanForPatient(pid);
+    let existing = getTrainingPlanForCustomer(pid);
     if (!existing) {
       existing = ensureTrainingPlanFromWorkoutInTx(pid, bootstrapWorkout);
       if (!existing) return null;
@@ -331,6 +358,6 @@ export function syncTrainingPlanProgress(patientId, dateIso, items, bootstrapWor
         pid,
       );
 
-    return getTrainingPlanForPatient(pid);
+    return getTrainingPlanForCustomer(pid);
   });
 }

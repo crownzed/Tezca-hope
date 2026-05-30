@@ -6,18 +6,25 @@ import {
   upsertMoodEntry,
   listBotMessagesForUser,
   replaceBotMessagesForUser,
-  listLiveMessagesForPatient,
-  listLiveMessagesForPatientSince,
-  getExpertsForPatient,
-  getTrainingPlanForPatient,
+  listLiveMessagesForCustomer,
+  listLiveMessagesForCustomerSince,
+  getExpertsForCustomer,
+  listAvailableExperts,
+  listExpertRequestsForCustomer,
+  requestExpertAssignment,
+  getCustomerHealthProfile,
+  upsertCustomerHealthProfile,
+  getTrainingPlanForCustomer,
   integrateTrainingPlanFromAi,
   syncTrainingPlanProgress,
 } from '../db.js';
 import { parseExercisesFromPlanMarkdown } from '../planToExercises.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { authMiddleware } from '../auth.js';
-import { aiChat, aiChatStream, isAiConfigured } from '../ai.js';
+import { aiChat, isAiConfigured } from '../ai.js';
 import { polishAiText } from '../polishAiText.js';
+import { getLastUserMessage } from '../chatIntent.js';
+import { planChatTurn, runChatTurn, runChatTurnStream } from '../chatTurn.js';
 import { aiChatLimiter, aiPlanLimiter } from '../rateLimit.js';
 import { sanitizeClientError } from '../secrets.js';
 import { DbError, mapDbDomainError } from '../dbErrors.js';
@@ -34,7 +41,7 @@ userRouter.get('/me', requireUser, (req, res) => {
 
 /** Chuyên gia được gán (để BN biết ai đồng hành + bật chat) */
 userRouter.get('/me/care-team', requireUser, (req, res) => {
-  const experts = getExpertsForPatient(req.user.sub);
+  const experts = getExpertsForCustomer(req.user.sub);
   res.json({ experts, primary: experts[0] || null });
 });
 
@@ -67,7 +74,7 @@ userRouter.get('/me/moods', requireUser, (req, res) => {
 });
 
 userRouter.post('/me/moods', requireUser, (req, res) => {
-  const { date, moodLabel, moodScore, note } = req.body || {};
+  const { date, moodLabel, moodScore, moodEmoji, moodKey, freeText } = req.body || {};
   if (!date || moodLabel == null || moodScore == null) {
     res.status(400).json({ error: 'Thiếu trường bắt buộc' });
     return;
@@ -76,12 +83,48 @@ userRouter.post('/me/moods', requireUser, (req, res) => {
     id: crypto.randomUUID(),
     userId: req.user.sub,
     date: String(date),
-    moodLabel: String(moodLabel),
+    moodLabel: String(moodLabel).slice(0, 64),
     moodScore: Number(moodScore),
-    note: note != null ? String(note) : '',
+    moodEmoji: String(moodEmoji || '').slice(0, 16),
+    moodKey: moodKey ? String(moodKey).slice(0, 32) : undefined,
+    freeText: freeText != null ? String(freeText).trim().slice(0, 2000) : '',
   };
   upsertMoodEntry(row);
   res.status(201).json({ entry: row });
+});
+
+userRouter.get('/me/experts', requireUser, (_req, res) => {
+  const experts = listAvailableExperts();
+  res.json({ experts });
+});
+
+userRouter.post('/me/experts/:expertId/request', requireUser, (req, res) => {
+  const expertId = String(req.params.expertId || '').trim();
+  if (!expertId) {
+    res.status(400).json({ error: 'Thiếu chuyên gia cần chọn' });
+    return;
+  }
+  const result = requestExpertAssignment(req.user.sub, expertId);
+  if (!result.ok) {
+    res.status(400).json({ error: 'Không thể gửi yêu cầu chọn chuyên gia' });
+    return;
+  }
+  res.status(201).json({ ok: true });
+});
+
+userRouter.get('/me/experts/requests', requireUser, (req, res) => {
+  const requests = listExpertRequestsForCustomer(req.user.sub);
+  res.json({ requests });
+});
+
+userRouter.get('/me/health-profile', requireUser, (req, res) => {
+  const profile = getCustomerHealthProfile(req.user.sub);
+  res.json({ profile: profile || null });
+});
+
+userRouter.put('/me/health-profile', requireUser, (req, res) => {
+  upsertCustomerHealthProfile(req.user.sub, req.body || {});
+  res.json({ ok: true });
 });
 
 userRouter.get('/me/bot-messages', requireUser, (req, res) => {
@@ -103,8 +146,8 @@ userRouter.get('/me/live-messages', requireUser, (req, res) => {
   const since = req.query.since;
   const list =
     since != null && since !== ''
-      ? listLiveMessagesForPatientSince(req.user.sub, since)
-      : listLiveMessagesForPatient(req.user.sub);
+      ? listLiveMessagesForCustomerSince(req.user.sub, since)
+      : listLiveMessagesForCustomer(req.user.sub);
   res.json({ messages: list });
 });
 
@@ -115,9 +158,9 @@ userRouter.post('/me/live-messages', requireUser, (req, res) => {
     return;
   }
   const msg = sendLiveChatMessage({
-    patientId: req.user.sub,
+    customerId: req.user.sub,
     senderUserId: req.user.sub,
-    senderRole: 'patient',
+    senderRole: 'customer',
     content: text,
   });
   if (!msg) {
@@ -129,15 +172,19 @@ userRouter.post('/me/live-messages', requireUser, (req, res) => {
 
 const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca — trò chuyện trực tiếp bằng tiếng Việt (Việt Nam).
 
-Cách viết:
-- Giọng ấm, đồng cảm, không phán xét; câu ngắn vừa phải, nối ý tự nhiên như đang chat.
-- Không bullet/đánh số trừ khi người dùng xin danh sách hoặc kế hoạch từng bước.
-- Tránh mở đầu lặp ("Chào bạn", "Cảm ơn câu hỏi") nếu đã chào gần đây trong hội thoại.
-- Một nhắc ngắn "tham khảo, không thay khám" ở cuối khi cần — không lặp sau mỗi câu.
-- Độ dài: 3–8 câu; chi tiết hơn chỉ khi được yêu cầu.
+Độ dài (ưu tiên cao):
+- Mặc định **1–3 câu ngắn**; chỉ mở rộng khi người dùng xin chi tiết, danh sách, hoặc kế hoạch từng bước.
+- Chào / cảm ơn / xác nhận đơn giản → **một câu** là đủ.
+- Không lặp lại câu hỏi; không mở đầu dài ("Cảm ơn bạn đã hỏi…").
 
-Phạm vi: dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress/cảm xúc — giáo dục sức khỏe, không chẩn đoán, không kê đơn, không đổi thuốc.
-Khẩn cấp / ý định tự hại / đau ngực khó thở / co giật / yếu nửa người đột ngột → yêu cầu gọi 115 hoặc cấp cứu ngay.`;
+Cách viết:
+- Giọng ấm, đồng cảm; nối ý tự nhiên như chat.
+- Không bullet/đánh số trừ khi được yêu cầu.
+- Tránh mở đầu lặp ("Chào bạn") nếu vừa chào trong hội thoại.
+- Disclaimer "tham khảo, không thay khám" chỉ khi khuyên sức khỏe cụ thể — tối đa một cụm ngắn cuối, không lặp mỗi lượt.
+
+Phạm vi: dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress — giáo dục, không chẩn đoán/kê đơn.
+Khẩn cấp / tự hại / đau ngực khó thở / co giật / yếu nửa người → gọi 115 hoặc cấp cứu ngay (ngắn, rõ).`;
 
 function trimChatMessages(messages) {
   if (!Array.isArray(messages) || messages.length === 0) return null;
@@ -152,21 +199,25 @@ function trimChatMessages(messages) {
 }
 
 userRouter.post('/me/ai-chat', requireUser, aiChatLimiter, async (req, res) => {
-  if (!isAiConfigured()) {
-    res.status(503).json({
-      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
-    });
-    return;
-  }
   const trimmed = trimChatMessages(req.body?.messages);
   if (!trimmed) {
     res.status(400).json({ error: 'Không có tin nhắn hợp lệ' });
     return;
   }
+  const plan = planChatTurn(getLastUserMessage(trimmed));
+  if (plan.mode === 'llm' && !isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
+    return;
+  }
   try {
-    const payload = [{ role: 'system', content: CHAT_SYSTEM }, ...trimmed];
-    const reply = await aiChat(payload, { max_tokens: 900, temperature: 0.62 });
-    res.json({ content: polishAiText(reply) });
+    const result = await runChatTurn({ systemBase: CHAT_SYSTEM, messages: trimmed, plan });
+    res.json({
+      content: result.content,
+      intent: result.intent,
+      source: result.source,
+    });
   } catch (e) {
     const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
     res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
@@ -175,15 +226,16 @@ userRouter.post('/me/ai-chat', requireUser, aiChatLimiter, async (req, res) => {
 
 /** SSE: data: {"delta":"..."} rồi data: {"done":true,"content":"..."} */
 userRouter.post('/me/ai-chat/stream', requireUser, aiChatLimiter, async (req, res) => {
-  if (!isAiConfigured()) {
-    res.status(503).json({
-      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
-    });
-    return;
-  }
   const trimmed = trimChatMessages(req.body?.messages);
   if (!trimmed) {
     res.status(400).json({ error: 'Không có tin nhắn hợp lệ' });
+    return;
+  }
+  const plan = planChatTurn(getLastUserMessage(trimmed));
+  if (plan.mode === 'llm' && !isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI chưa được cấu hình (GOOGLE_GENERATIVE_AI_API_KEY).',
+    });
     return;
   }
 
@@ -197,14 +249,12 @@ userRouter.post('/me/ai-chat/stream', requireUser, aiChatLimiter, async (req, re
   };
 
   try {
-    const payload = [{ role: 'system', content: CHAT_SYSTEM }, ...trimmed];
-    let raw = '';
-    for await (const delta of aiChatStream(payload, { max_tokens: 900, temperature: 0.62 })) {
-      raw += delta;
-      send({ delta });
-    }
-    const content = polishAiText(raw);
-    send({ done: true, content });
+    await runChatTurnStream({
+      systemBase: CHAT_SYSTEM,
+      messages: trimmed,
+      plan,
+      send,
+    });
     res.end();
   } catch (e) {
     send({ error: sanitizeClientError(e, 'Lỗi AI') });
@@ -276,7 +326,7 @@ Markdown gọn: tiêu đề ##, đoạn ngắn, bullet khi cần danh sách; câ
 
 /** Kế hoạch tập luyện tích hợp từ AI (Chiến dịch tập luyện) */
 userRouter.get('/me/training-plan', requireUser, (req, res) => {
-  const plan = getTrainingPlanForPatient(req.user.sub);
+  const plan = getTrainingPlanForCustomer(req.user.sub);
   res.json({ plan });
 });
 

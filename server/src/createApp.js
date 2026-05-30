@@ -1,7 +1,7 @@
 import { loadEnv } from './loadEnv.js';
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './db.js';
+import { initDb, ensureAdminFromEnv } from './db.js';
 import { assertProductionSecrets } from './secrets.js';
 import { securityHeaders, corsOriginCallback, errorHandler } from './security.js';
 import { vercelApiPathPrefix, inferAuthOpFromPath } from './vercelPath.js';
@@ -15,6 +15,7 @@ import {
   registerHandler,
   customerLoginHandler,
   expertLoginHandler,
+  adminLoginHandler,
   legacyLoginHandler,
   authGatewayWithLimits,
   forgotPasswordHandler,
@@ -23,12 +24,22 @@ import {
 import { registerLimiter, forgotPasswordLimiter, loginLimiter, resetPasswordLimiter } from './rateLimit.js';
 import { userRouter } from './routes/user.js';
 import { expertRouter } from './routes/expert.js';
+import { adminRouter } from './routes/admin.js';
+import { communityRouter } from './routes/community.js';
 import { maybeSeedDemoBulk } from './db/seedDemoRuntime.js';
 
 /** Express app dùng chung: Node local, Docker, Vercel serverless (`api/index.js`). */
 export function createApp() {
   initDb();
-  maybeSeedDemoBulk();
+  ensureAdminFromEnv();
+  // Seed demo nặng — chạy nền để không chặn cold start / health check trên Vercel.
+  setImmediate(() => {
+    try {
+      maybeSeedDemoBulk();
+    } catch (err) {
+      console.error('[tezca] demo bulk seed failed', err);
+    }
+  });
 
   const app = express();
   const corsDev = process.env.NODE_ENV !== 'production';
@@ -65,6 +76,7 @@ export function createApp() {
   app.options('/api/auth/customer/login', authOpt);
   app.options('/api/auth/patient/login', authOpt);
   app.options('/api/auth/expert/login', authOpt);
+  app.options('/api/auth/admin/login', authOpt);
   app.options('/api/auth/login', authOpt);
   app.options('/api/register', authOpt);
   app.options('/api/auth/gateway', authOpt);
@@ -78,6 +90,7 @@ export function createApp() {
   app.post('/api/auth/customer/login', loginLimiter, customerLoginHandler);
   app.post('/api/auth/patient/login', loginLimiter, customerLoginHandler);
   app.post('/api/auth/expert/login', loginLimiter, expertLoginHandler);
+  app.post('/api/auth/admin/login', loginLimiter, adminLoginHandler);
   app.post('/api/auth/login', loginLimiter, legacyLoginHandler);
   app.post('/api/auth/register', registerLimiter, registerHandler);
   app.post('/api/auth/forgot-password', forgotPasswordLimiter, forgotPasswordHandler);
@@ -92,11 +105,14 @@ export function createApp() {
   app.post('/auth/customer/login', loginLimiter, customerLoginHandler);
   app.post('/auth/patient/login', loginLimiter, customerLoginHandler);
   app.post('/auth/expert/login', loginLimiter, expertLoginHandler);
+  app.post('/auth/admin/login', loginLimiter, adminLoginHandler);
   app.post('/auth/login', loginLimiter, legacyLoginHandler);
 
   app.use('/api', publicApiRouter);
   app.use('/api', userRouter);
   app.use('/api/expert', expertRouter);
+  app.use('/api/admin', adminRouter);
+  app.use('/api/community', communityRouter);
 
   /** POST /api + body.op — khi rewrite chỉ còn /api (không còn segment) */
   app.post('/api', authGatewayWithLimits);

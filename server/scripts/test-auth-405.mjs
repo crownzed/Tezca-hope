@@ -19,7 +19,7 @@ const opt = await req('OPTIONS', '/api/auth/register');
 checks.push(['OPTIONS register', opt.status === 204, opt.status]);
 
 const gw = await req('POST', '/api/auth/gateway', {
-  op: 'patient-login',
+  op: 'customer-login',
   email: 'patient@tezca.vn',
   password: 'TezcaDemo#2026',
 });
@@ -29,7 +29,7 @@ const email = `r405${Date.now()}@test.tezca`;
 const reg = await req('POST', '/api/auth/gateway', { op: 'register', email, password: 'TestAcc#99' });
 checks.push(['POST gateway register', reg.status === 201 && reg.j.token, reg.status]);
 
-const rest = await req('POST', '/api/auth/patient/login', {
+const rest = await req('POST', '/api/auth/customer/login', {
   email: 'patient@tezca.vn',
   password: 'TezcaDemo#2026',
 });

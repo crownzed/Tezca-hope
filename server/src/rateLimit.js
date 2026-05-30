@@ -60,3 +60,27 @@ export const registerLimiter = createRateLimiter({
   max: Number(process.env.AUTH_RATE_LIMIT_REGISTER) || 12,
   message: 'Quá nhiều lần đăng ký từ địa chỉ này. Vui lòng thử lại sau.',
 });
+
+export const forgotPasswordLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_FORGOT) || 8,
+  message: 'Quá nhiều yêu cầu đặt lại mật khẩu. Vui lòng thử lại sau.',
+});
+
+export const loginLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_LOGIN) || 20,
+  message: 'Quá nhiều lần đăng nhập. Vui lòng thử lại sau 15 phút.',
+});
+
+export const resetPasswordLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_RESET) || 10,
+  message: 'Quá nhiều lần đặt lại mật khẩu. Vui lòng thử lại sau.',
+});
+
+export const newsletterLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.NEWSLETTER_RATE_LIMIT) || 6,
+  message: 'Quá nhiều lần đăng ký nhận tin. Vui lòng thử lại sau.',
+});

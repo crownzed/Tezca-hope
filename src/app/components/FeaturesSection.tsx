@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { MessageCircle, TrendingUp, Calendar, Heart, ArrowRight } from 'lucide-react';
+import { MessageCircle, TrendingUp, Calendar, Heart, ArrowRight, Users } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ROUTES } from '../routes';
 import { LandingReveal } from './landing/LandingReveal';
@@ -41,6 +41,15 @@ const features = [
     cta: 'Mở nhật ký cảm xúc',
     variant: 'gradient' as const,
     preview: 'mood' as const,
+  },
+  {
+    to: ROUTES.app.community,
+    col: 'md:col-span-12',
+    icon: Users,
+    title: 'Cộng đồng sức khỏe',
+    cta: 'Khám phá diễn đàn & phòng chat',
+    variant: 'white' as const,
+    preview: 'community' as const,
   },
 ];
 
@@ -144,6 +153,37 @@ function FeaturePreview({ type }: { type: (typeof features)[number]['preview'] }
       </div>
     );
   }
+  if (type === 'community') {
+    return (
+      <div className="grid sm:grid-cols-3 gap-3">
+        {[
+          { badge: 'Dinh dưỡng', text: 'Chia sẻ thực đơn tuần này của mọi người thế nào?' },
+          { badge: 'Tâm lý', text: 'Cảm ơn cộng đồng đã lắng nghe — mình thấy nhẹ hơn rồi.' },
+          { badge: 'Phòng chat', text: 'Chào mọi người! Ai đang tập phục hồi vai gáy?' },
+        ].map((item, i) => (
+          <motion.div
+            key={item.badge}
+            className="p-4 rounded-2xl"
+            style={{ backgroundColor: 'rgba(45, 212, 191, 0.06)', border: '1px solid rgba(45, 212, 191, 0.15)' }}
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={viewportOnce}
+            transition={{ delay: 0.08 * i, duration: 0.4, ease: landingEase }}
+          >
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full inline-block mb-2"
+              style={{ backgroundColor: 'rgba(45, 212, 191, 0.2)', color: '#0F766E' }}
+            >
+              {item.badge}
+            </span>
+            <p className="text-sm m-0 opacity-80" style={{ color: '#1A202C' }}>
+              {item.text}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+    );
+  }
   return (
     <>
       <div className="text-5xl mb-6">🧘‍♀️</div>
@@ -189,7 +229,7 @@ export function FeaturesSection() {
             const Icon = f.icon;
             const isGradient = f.variant === 'gradient';
             return (
-              <motion.div key={f.to} variants={staggerItem} className={f.col}>
+              <motion.div key={f.title} variants={staggerItem} className={f.col}>
                 <motion.div
                   variants={cardHover}
                   initial="rest"

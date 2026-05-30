@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-001@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.922Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-001@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "3aaa7ee6-10c1-4087-831a-314609189ac3",
+      "email": "kh-demo-001@tezca.vn",
+      "name": "Nguyễn Văn An",
+      "role": "user",
+      "createdAt": 1779624233710
+    },
+    "assignments": [
+      {
+        "expertId": "f01632b9-e1a0-4e6c-a4f8-ce83cc10f227",
+        "expertEmail": "expert@tezca.vn",
+        "expertName": "BS. Minh Anh"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "1c1ad651-c159-4390-ab8c-ab2feeabdc84",
+        "userId": "3aaa7ee6-10c1-4087-831a-314609189ac3",
+        "date": "2026-05-24",
+        "heightCm": 156,
+        "weightKg": 49,
+        "bmi": 20.1
+      }
+    ],
+    "moods": [
+      {
+        "id": "19f7ddab-7e79-44f2-aa0d-be8981bbf388",
+        "userId": "3aaa7ee6-10c1-4087-831a-314609189ac3",
+        "date": "2026-05-24",
+        "moodLabel": "Bình thường",
+        "moodScore": 3,
+        "note": ""
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "3aaa7ee6-10c1-4087-831a-314609189ac3",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Nguyễn Văn An\nChuyên gia phụ trách: BS. Minh Anh\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900010,
+          "title": "Squat tại chỗ",
+          "sets": 3,
+          "reps": "12",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900011,
+          "title": "Đi bộ nhẹ",
+          "sets": 1,
+          "reps": "15 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900012,
+          "title": "Thở 4-7-8",
+          "sets": 2,
+          "reps": "4 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515348,
+      "updatedAt": 1779624515351,
+      "progressUpdatedAt": 0,
+      "updatedBy": "f01632b9-e1a0-4e6c-a4f8-ce83cc10f227"
+    }
+  }
+}

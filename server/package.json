@@ -12,7 +12,11 @@
     "seed:demo-experts-work": "node scripts/seed-demo-experts-work.mjs",
     "seed:all-demo": "node scripts/seed-all-demo.mjs",
     "seed:demo-health-30d": "node scripts/seed-demo-health-30d.mjs",
-    "generate:data-management-files": "node scripts/generate-data-management-fixtures.mjs"
+    "generate:data-management-files": "node scripts/generate-data-management-fixtures.mjs",
+    "chat:scenarios:build": "node scripts/build-chat-scenarios.mjs",
+    "chat:scenarios:validate": "node scripts/validate-chat-scenarios.mjs",
+    "chat:scenarios:test": "node scripts/test-chat-intent.mjs",
+    "chat:scenarios:quality": "node scripts/test-chat-scenarios-quality.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

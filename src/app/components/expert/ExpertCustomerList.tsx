@@ -1,8 +1,8 @@
 import { Link } from 'react-router';
-import { AlertCircle, Search, UserPlus } from 'lucide-react';
-import { ROUTES } from '../../routes';
+import { Search, UserPlus } from 'lucide-react';
+import { ROUTES, expertCustomerPath } from '../../routes';
 
-export type ExpertPatientInboxRow = {
+export type ExpertCustomerInboxRow = {
   id: string;
   email: string;
   name: string;
@@ -12,7 +12,7 @@ export type ExpertPatientInboxRow = {
     id: string;
     content: string;
     ts: number;
-    senderRole: 'expert' | 'patient';
+    senderRole: 'expert' | 'customer';
   } | null;
   needsReply?: boolean;
 };
@@ -24,19 +24,7 @@ function initials(name: string) {
   return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
 }
 
-function formatRelative(ts: number) {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Vừa xong';
-  if (mins < 60) return `${mins} phút`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} giờ`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days} ngày`;
-  return new Date(ts).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' });
-}
-
-function previewText(row: ExpertPatientInboxRow) {
+function previewText(row: ExpertCustomerInboxRow) {
   const m = row.lastLiveMessage;
   if (!m) return 'Chưa có tin nhắn';
   const prefix = m.senderRole === 'expert' ? 'Bạn: ' : '';
@@ -45,8 +33,8 @@ function previewText(row: ExpertPatientInboxRow) {
 }
 
 type Props = {
-  patients: ExpertPatientInboxRow[];
-  activePatientId?: string;
+  customers: ExpertCustomerInboxRow[];
+  activeCustomerId?: string;
   search: string;
   onSearchChange: (q: string) => void;
   loading?: boolean;
@@ -54,8 +42,8 @@ type Props = {
 };
 
 export function ExpertCustomerList({
-  patients,
-  activePatientId,
+  customers,
+  activeCustomerId,
   search,
   onSearchChange,
   loading,
@@ -63,10 +51,8 @@ export function ExpertCustomerList({
 }: Props) {
   const q = search.trim().toLowerCase();
   const filtered = q
-    ? patients.filter((p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
-    : patients;
-
-  const needsReplyCount = patients.filter((p) => p.needsReply).length;
+    ? customers.filter((p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+    : customers;
 
   return (
     <aside
@@ -76,14 +62,8 @@ export function ExpertCustomerList({
       <div className="shrink-0 px-3 pt-3 pb-2 border-b border-slate-100">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h2 className="text-sm font-semibold text-slate-800 m-0">Khách hàng</h2>
-          <span className="text-[11px] text-slate-500 tabular-nums">{patients.length}</span>
+          <span className="text-[11px] text-slate-500 tabular-nums">{customers.length}</span>
         </div>
-        {needsReplyCount > 0 && (
-          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 m-0 mb-2 flex items-center gap-1">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            {needsReplyCount} cần phản hồi
-          </p>
-        )}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
@@ -108,23 +88,23 @@ export function ExpertCustomerList({
             </p>
             {!q && (
               <Link
-                to={ROUTES.expert.root}
+                to={ROUTES.expert.customers.root}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                Gán bệnh nhân
+                Gán khách hàng
               </Link>
             )}
           </div>
         )}
         <ul className="p-2 space-y-0.5 m-0 list-none">
           {filtered.map((p) => {
-            const active = p.id === activePatientId;
+            const active = p.id === activeCustomerId;
             const urgent = (p.lastMood?.moodScore ?? 99) <= 2;
             return (
               <li key={p.id}>
                 <Link
-                  to={`${ROUTES.expert.doctorDesk}/${p.id}`}
+                  to={expertCustomerPath(p.id)}
                   className={`block rounded-xl px-3 py-2.5 transition-colors no-underline ${
                     active ? 'bg-teal-50 ring-1 ring-teal-200/80' : 'hover:bg-slate-50'
                   }`}
@@ -142,13 +122,7 @@ export function ExpertCustomerList({
                         <span className={`text-sm font-semibold truncate m-0 ${active ? 'text-teal-900' : 'text-slate-800'}`}>
                           {p.name}
                         </span>
-                        {p.lastLiveMessage && (
-                          <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">
-                            {formatRelative(p.lastLiveMessage.ts)}
-                          </span>
-                        )}
                       </div>
-                      <p className="text-[11px] text-slate-500 truncate m-0 mt-0.5">{p.email}</p>
                       <p className={`text-xs truncate m-0 mt-1 ${p.needsReply ? 'text-slate-800 font-medium' : 'text-slate-500'}`}>
                         {previewText(p)}
                       </p>

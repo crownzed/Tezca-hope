@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
   Activity,
@@ -7,8 +7,6 @@ import {
   Loader2,
   MessageSquare,
   ChevronLeft,
-  Send,
-  Stethoscope,
   UtensilsCrossed,
   Wind,
 } from 'lucide-react';
@@ -26,25 +24,25 @@ import { useLiveChat, type LiveMessage } from '../../lib/liveChat';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES } from '../../routes';
 import { tezcaTheme } from '../../lib/tezcaTheme';
-import { ExpertCustomerList, type ExpertPatientInboxRow } from '../../components/expert/ExpertCustomerList';
+import { ExpertCustomerList, type ExpertCustomerInboxRow } from '../../components/expert/ExpertCustomerList';
+import { LiveChatPanel } from '../../components/LiveChatPanel';
 
-type PatientDetail = {
-  patient: { id: string; email: string; name: string };
+type CustomerDetail = {
+  customer: { id: string; email: string; name: string };
   bmi: { id: string; date: string; heightCm: number; weightKg: number; bmi: number }[];
   moods: { id: string; date: string; moodLabel: string; moodScore: number; note: string }[];
   botMessages: { id: string; role: string; content: string; ts: number }[];
   liveMessages: LiveMessage[];
+  healthProfile?: {
+    currentConditions?: string;
+    medicalHistory?: string;
+    allergies?: string;
+    medications?: string;
+    contraindications?: string;
+  } | null;
 };
 
-type PatientRow = ExpertPatientInboxRow;
-
-type ChatRole = 'patient' | 'doctor';
-
-type ChatMsg = { id: string; role: ChatRole; text: string; time: string };
-
-function formatClock(ts: number) {
-  return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
+type CustomerRow = ExpertCustomerInboxRow;
 
 function formatShortDate(iso: string) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -52,18 +50,9 @@ function formatShortDate(iso: string) {
   return `${d}/${m}`;
 }
 
-function liveToChatMsg(l: LiveMessage): ChatMsg {
-  return {
-    id: `l-${l.id}`,
-    role: l.senderRole === 'expert' ? 'doctor' : 'patient',
-    text: l.content,
-    time: formatClock(l.ts),
-  };
-}
-
-function bumpPatientPreview(list: PatientRow[], msg: LiveMessage): PatientRow[] {
+function bumpCustomerPreview(list: CustomerRow[], msg: LiveMessage): CustomerRow[] {
   const next = list.map((p) =>
-    p.id === msg.patientId
+    p.id === msg.customerId
       ? {
           ...p,
           lastLiveMessage: {
@@ -72,7 +61,7 @@ function bumpPatientPreview(list: PatientRow[], msg: LiveMessage): PatientRow[] 
             ts: msg.ts,
             senderRole: msg.senderRole,
           },
-          needsReply: msg.senderRole === 'patient',
+          needsReply: msg.senderRole === 'customer',
         }
       : p,
   );
@@ -85,7 +74,7 @@ function bumpPatientPreview(list: PatientRow[], msg: LiveMessage): PatientRow[] 
   return next;
 }
 
-function buildWeightSeries(bmi: PatientDetail['bmi']) {
+function buildWeightSeries(bmi: CustomerDetail['bmi']) {
   const sorted = [...bmi].sort((a, b) => a.date.localeCompare(b.date));
   const last = sorted.slice(-12);
   return last.map((e) => ({
@@ -96,7 +85,7 @@ function buildWeightSeries(bmi: PatientDetail['bmi']) {
 }
 
 /** 30 ngày kết thúc hôm nay — map moodScore 1–5 → màu heat */
-function buildMoodHeatmap(moods: PatientDetail['moods']): { key: string; cls: string; label: string }[] {
+function buildMoodHeatmap(moods: CustomerDetail['moods']): { key: string; cls: string; label: string }[] {
   const byDate = new Map<string, number>();
   for (const m of moods) {
     byDate.set(m.date, m.moodScore);
@@ -122,41 +111,40 @@ function buildMoodHeatmap(moods: PatientDetail['moods']): { key: string; cls: st
   return out;
 }
 
-function countUrgentPatients(patients: PatientRow[]) {
-  return patients.filter((p) => (p.lastMood?.moodScore ?? 99) <= 2).length;
+function countUrgentCustomers(customers: CustomerRow[]) {
+  return customers.filter((p) => (p.lastMood?.moodScore ?? 99) <= 2).length;
 }
 
 export function DoctorDashboardPage() {
-  const { patientId } = useParams<{ patientId?: string }>();
+  const { customerId } = useParams<{ customerId?: string }>();
   const { token, user } = useExpertAuth();
-  const [detail, setDetail] = useState<PatientDetail | null>(null);
+  const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAiContext, setShowAiContext] = useState(false);
   const [draft, setDraft] = useState('');
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const live = useLiveChat({
     token,
-    patientId,
-    historyUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
-    sendUrl: patientId ? `/api/expert/patients/${encodeURIComponent(patientId)}/live-messages` : '',
+    customerId,
+    historyUrl: customerId ? `/api/expert/customers/${encodeURIComponent(customerId)}/live-messages` : '',
+    sendUrl: customerId ? `/api/expert/customers/${encodeURIComponent(customerId)}/live-messages` : '',
     senderRole: 'expert',
-    enabled: Boolean(token && patientId),
-    onIncoming: (m) => setPatientList((prev) => bumpPatientPreview(prev, m)),
+    enabled: Boolean(token && customerId),
+    onIncoming: (m) => setCustomerList((prev) => bumpCustomerPreview(prev, m)),
   });
-  const [patientList, setPatientList] = useState<PatientRow[]>([]);
+  const [customerList, setCustomerList] = useState<CustomerRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const loadDetail = useCallback(() => {
-    if (!token || !patientId) {
+    if (!token || !customerId) {
       setDetail(null);
       setLoadError('');
       return;
     }
     setLoading(true);
-    apiFetch<PatientDetail>(`/api/expert/patients/${patientId}`, { token })
+    apiFetch<CustomerDetail>(`/api/expert/customers/${customerId}`, { token })
       .then((d) => {
         setDetail(d);
         setLoadError('');
@@ -166,7 +154,7 @@ export function DoctorDashboardPage() {
         setLoadError(e instanceof Error ? e.message : 'Không tải được hồ sơ');
       })
       .finally(() => setLoading(false));
-  }, [token, patientId]);
+  }, [token, customerId]);
 
   useEffect(() => {
     loadDetail();
@@ -175,40 +163,34 @@ export function DoctorDashboardPage() {
   useEffect(() => {
     setDraft('');
     setShowAiContext(false);
-  }, [patientId]);
+  }, [customerId]);
 
-  const loadPatientList = useCallback(() => {
+  const loadCustomerList = useCallback(() => {
     if (!token) return;
     setListLoading(true);
-    apiFetch<{ patients: PatientRow[] }>('/api/expert/patients', { token })
-      .then((r) => setPatientList(r.patients || []))
-      .catch(() => setPatientList([]))
+    apiFetch<{ customers: CustomerRow[] }>('/api/expert/customers', { token })
+      .then((r) => setCustomerList(r.customers || []))
+      .catch(() => setCustomerList([]))
       .finally(() => setListLoading(false));
   }, [token]);
 
   useEffect(() => {
-    loadPatientList();
-  }, [loadPatientList]);
+    loadCustomerList();
+  }, [loadCustomerList]);
 
   useEffect(() => {
     if (!token) return;
     const refreshList = () => {
       if (document.visibilityState === 'hidden') return;
-      apiFetch<{ patients: PatientRow[] }>('/api/expert/patients', { token })
-        .then((r) => setPatientList(r.patients || []))
+      apiFetch<{ customers: CustomerRow[] }>('/api/expert/customers', { token })
+        .then((r) => setCustomerList(r.customers || []))
         .catch(() => {});
     };
     const id = window.setInterval(refreshList, 15000);
     return () => clearInterval(id);
   }, [token]);
 
-  const emergencyCount = useMemo(() => countUrgentPatients(patientList), [patientList]);
-
-  const messages = useMemo(() => live.messages.map(liveToChatMsg), [live.messages]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, patientId]);
+  const emergencyCount = useMemo(() => countUrgentCustomers(customerList), [customerList]);
 
   const weightSeries = useMemo(() => {
     if (detail?.bmi?.length) return buildWeightSeries(detail.bmi);
@@ -239,8 +221,8 @@ export function DoctorDashboardPage() {
     };
   }, [detail?.bmi]);
 
-  const liveMode = Boolean(patientId && detail);
-  const patientLabel = detail?.patient.name ?? (patientId ? `BN ${patientId.slice(0, 8)}…` : 'Chưa chọn khách hàng');
+  const liveMode = Boolean(customerId && detail);
+  const customerLabel = detail?.customer.name ?? (customerId ? `KH ${customerId.slice(0, 8)}…` : 'Chưa chọn khách hàng');
 
   const sendDoctor = async () => {
     const t = draft.trim();
@@ -263,20 +245,17 @@ export function DoctorDashboardPage() {
         className="lg:hidden shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 border-b"
         style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
       >
-        <span className="text-sm font-semibold truncate" style={{ color: tezcaTheme.text }}>
-          Tezca · Doctor Desk
-        </span>
-        <Link to={ROUTES.expert.root} className="text-xs font-medium shrink-0" style={{ color: tezcaTheme.accent }}>
-          Danh sách
+        <Link to={ROUTES.home} className="text-sm font-semibold truncate no-underline" style={{ color: tezcaTheme.text }}>
+          Tezca
+        </Link>
+        <Link to={ROUTES.expert.customers.root} className="text-xs font-medium shrink-0" style={{ color: tezcaTheme.accent }}>
+          Danh sách khách hàng
         </Link>
       </div>
       <div className="flex flex-1 min-h-0 flex-col min-w-0">
           <header className="h-16 shrink-0 flex items-center gap-3 md:gap-4 px-3 md:px-6 bg-white border-b border-slate-200/90 shadow-sm">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 m-0 truncate">Live chat · Doctor Desk</p>
-              <p className="text-[11px] text-slate-500 m-0 truncate hidden sm:block">
-                Danh sách khách hàng · {live.transportLabel}
-              </p>
+              <p className="text-sm font-semibold text-slate-800 m-0 truncate">Doctor Desk</p>
             </div>
             <button
               type="button"
@@ -291,10 +270,6 @@ export function DoctorDashboardPage() {
             <div className="flex items-center gap-3 pl-2 border-l border-slate-200 shrink-0">
               <div className="text-right hidden sm:block min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate m-0 max-w-[140px]">{user?.name ?? 'Bác sĩ'}</p>
-                <p className="text-[11px] text-emerald-600 font-medium flex items-center justify-end gap-1.5 m-0">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" aria-hidden />
-                  Đang trực tuyến
-                </p>
               </div>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 text-white text-sm font-semibold flex items-center justify-center ring-2 ring-white shadow">
                 {(user?.name ?? 'BS').slice(0, 2)}
@@ -310,25 +285,25 @@ export function DoctorDashboardPage() {
 
           <div className="flex-1 flex min-h-0">
             <ExpertCustomerList
-              patients={patientList}
-              activePatientId={patientId}
+              customers={customerList}
+              activeCustomerId={customerId}
               search={search}
               onSearchChange={setSearch}
               loading={listLoading}
               className={`w-full max-w-md mx-auto lg:max-w-none lg:w-80 shrink-0 ${
-                patientId ? 'hidden lg:flex' : 'flex'
+                customerId ? 'hidden lg:flex' : 'flex'
               }`}
             />
 
             <div
               className={`flex-1 flex min-h-0 flex-col xl:flex-row min-w-0 ${
-                patientId ? 'flex' : 'hidden lg:flex'
+                customerId ? 'flex' : 'hidden lg:flex'
               }`}
             >
-            <section className="w-full xl:w-[42%] shrink-0 flex flex-col min-h-0 bg-white border-b xl:border-b-0 xl:border-r border-slate-200">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 shrink-0">
+            <section className="w-full xl:w-[42%] shrink-0 flex flex-col min-h-0 bg-white border-b xl:border-b-0 xl:border-r border-slate-200 p-3 md:p-4">
+              <div className="shrink-0 flex items-center justify-between gap-2 mb-3">
                 <div className="min-w-0 flex items-center gap-2">
-                  {patientId && (
+                  {customerId && (
                     <Link
                       to={ROUTES.expert.doctorDesk}
                       className="lg:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 shrink-0"
@@ -337,144 +312,85 @@ export function DoctorDashboardPage() {
                       <ChevronLeft className="w-5 h-5" />
                     </Link>
                   )}
-                  <div className="min-w-0">
                   <h1 className="text-sm font-semibold text-slate-800 m-0 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-teal-600 shrink-0" />
-                    Live Chat
+                    Chat trực tiếp
                   </h1>
-                  <p className="text-xs text-slate-500 m-0 mt-0.5">
-                    {liveMode ? (
-                      <>
-                        {live.transportLabel}
-                        {live.ready ? (
-                          <span className="text-emerald-600 font-medium"> · sẵn sàng</span>
-                        ) : (
-                          <span className="text-amber-600"> · đang tải…</span>
-                        )}
-                      </>
-                    ) : (
-                      'Chọn khách hàng để bắt đầu'
-                    )}
-                  </p>
-                  </div>
                 </div>
-                <Link to={ROUTES.expert.root} className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0 hidden sm:inline">
-                  Gán BN
+                <Link to={ROUTES.expert.customers.root} className="text-xs font-medium text-teal-700 hover:text-teal-800 shrink-0">
+                  Gán KH
                 </Link>
               </div>
 
-              <div className="mx-3 mt-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 flex items-center gap-3 shrink-0">
-                <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-slate-600">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Stethoscope className="w-4 h-4" />}
+              {!customerId ? (
+                <div className="flex-1 flex items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
+                  <p className="text-sm text-slate-500 m-0">Chọn khách hàng bên trái để bắt đầu trò chuyện.</p>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-800 truncate m-0">{patientLabel}</p>
-                  <p className="text-[11px] text-slate-500 m-0 truncate">
-                    {detail?.patient.email ?? 'Mở từ danh sách để đồng bộ hồ sơ'}
-                  </p>
-                </div>
-                {detail && (
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-teal-700 bg-teal-50 border border-teal-100 px-2 py-1 rounded-md shrink-0">
-                    Live
-                  </span>
-                )}
-              </div>
-
-              {detail && detail.botMessages.length > 0 && (
-                <div className="mx-3 mt-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowAiContext((v) => !v)}
-                    className="w-full text-left text-xs font-medium px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 inline-flex items-center gap-2"
-                  >
-                    <Bot className="w-3.5 h-3.5" />
-                    {showAiContext ? 'Ẩn' : 'Xem'} ngữ cảnh Tezca AI ({detail.botMessages.length})
-                  </button>
-                  {showAiContext && (
-                    <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-2">
-                      {detail.botMessages.slice(-6).map((b) => (
-                        <p key={b.id} className="text-[11px] text-slate-600 m-0 leading-snug">
-                          <span className="font-semibold text-slate-500">{b.role === 'assistant' ? 'AI' : 'BN'}:</span>{' '}
-                          {b.content.length > 120 ? `${b.content.slice(0, 120)}…` : b.content}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              ) : (
+                <LiveChatPanel
+                  className="flex-1 min-h-0"
+                  messages={live.messages}
+                  loading={live.loading}
+                  ready={live.ready && liveMode}
+                  sending={live.sending}
+                  sendError={live.sendError}
+                  draft={draft}
+                  onDraftChange={setDraft}
+                  onSend={sendDoctor}
+                  viewer="expert"
+                  myUserId={user?.id}
+                  placeholder="Nhắn cho khách hàng…"
+                  header={{
+                    peerName: customerLabel,
+                    peerEmail: detail?.customer.email,
+                    transportLabel: live.transportLabel,
+                    onRefresh: live.refresh,
+                  }}
+                  toolbar={
+                    detail && detail.botMessages.length > 0 ? (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAiContext((v) => !v)}
+                          className="w-full text-left text-xs font-medium px-3 py-2 rounded-xl border inline-flex items-center gap-2 hover:opacity-90"
+                          style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.surface, color: tezcaTheme.textMuted }}
+                        >
+                          <Bot className="w-3.5 h-3.5" />
+                          {showAiContext ? 'Ẩn' : 'Xem'} ngữ cảnh Tezca AI ({detail.botMessages.length})
+                        </button>
+                        {showAiContext && (
+                          <div
+                            className="mt-2 max-h-32 overflow-y-auto rounded-xl border p-2 space-y-2"
+                            style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.subtleBg }}
+                          >
+                            {detail.botMessages.slice(-6).map((b) => (
+                              <p key={b.id} className="text-[11px] m-0 leading-snug" style={{ color: tezcaTheme.textMuted }}>
+                                <span className="font-semibold">{b.role === 'assistant' ? 'AI' : 'KH'}:</span>{' '}
+                                {b.content.length > 120 ? `${b.content.slice(0, 120)}…` : b.content}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null
+                  }
+                  emptyTitle="Chưa có tin nhắn"
+                  emptyHint="Gửi lời nhắn hoặc chọn mẫu trả lời nhanh."
+                  quickReplies={[
+                    {
+                      label: 'Gửi thực đơn',
+                      text: 'Bác sĩ gửi thực đơn mẫu trong ngày — em xem và phản hồi nhé.',
+                      icon: <UtensilsCrossed className="w-3.5 h-3.5" />,
+                    },
+                    {
+                      label: 'Bài tập thở',
+                      text: 'Nhắc bài tập thở 4-7-8 (4 phút) — làm tối nay trước khi ngủ.',
+                      icon: <Wind className="w-3.5 h-3.5" />,
+                    },
+                  ]}
+                  onQuickReply={quickReply}
+                />
               )}
-
-              <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-3" key={patientId ?? 'none'}>
-                {live.loading && (
-                  <p className="text-sm text-slate-500 text-center py-8 m-0 flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Đang tải lịch sử chat…
-                  </p>
-                )}
-                {messages.length === 0 && !live.loading && (
-                  <p className="text-sm text-slate-500 text-center py-8 m-0">Chưa có tin nhắn trong hồ sơ này.</p>
-                )}
-                {messages.map((m) => (
-                  <div key={m.id} className={m.role === 'doctor' ? 'flex justify-end' : 'flex justify-start'}>
-                    {m.role === 'patient' && (
-                      <div className="max-w-[92%] rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
-                        <p className="text-sm text-slate-800 m-0 leading-relaxed">{m.text}</p>
-                        <p className="text-[10px] text-slate-400 mt-1.5 m-0">{m.time}</p>
-                      </div>
-                    )}
-                    {m.role === 'doctor' && (
-                      <div className="max-w-[92%] rounded-2xl rounded-tr-sm bg-blue-500 text-white px-3.5 py-2.5 shadow-sm">
-                        <p className="text-sm m-0 leading-relaxed">{m.text}</p>
-                        <p className="text-[10px] text-blue-100 mt-1.5 m-0">{m.time}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
-                {live.sendError && <p className="text-xs text-rose-600 mb-2 m-0">{live.sendError}</p>}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => quickReply('Bác sĩ gửi thực đơn mẫu trong ngày — em xem và phản hồi nhé.')}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-teal-200 bg-white text-teal-800 hover:bg-teal-50 inline-flex items-center gap-1.5 disabled:opacity-40"
-                    disabled={!liveMode || !live.ready || live.sending}
-                  >
-                    <UtensilsCrossed className="w-3.5 h-3.5" />
-                    Gửi thực đơn
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => quickReply('Nhắc bài tập thở 4-7-8 (4 phút) — làm tối nay trước khi ngủ.')}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-teal-200 bg-white text-teal-800 hover:bg-teal-50 inline-flex items-center gap-1.5 disabled:opacity-40"
-                    disabled={!liveMode || !live.ready || live.sending}
-                  >
-                    <Wind className="w-3.5 h-3.5" />
-                    Bài tập thở
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendDoctor())}
-                    placeholder={liveMode ? 'Nhắn cho bệnh nhân…' : 'Chọn khách hàng để nhắn…'}
-                    className="flex-1 min-w-0 h-11 px-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/25 bg-white disabled:bg-slate-100"
-                    disabled={!liveMode || !live.ready || live.sending}
-                  />
-                  <button
-                    type="button"
-                    onClick={sendDoctor}
-                    className="h-11 w-11 shrink-0 rounded-xl text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40"
-                    style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
-                    aria-label="Gửi"
-                    disabled={!liveMode || !live.ready || live.sending}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
             </section>
 
             <section className="flex-1 min-h-0 overflow-y-auto bg-slate-50 p-4 md:p-5 space-y-5">
@@ -488,9 +404,6 @@ export function DoctorDashboardPage() {
                 <div className="flex items-start justify-between gap-2 mb-4">
                   <div>
                     <h2 className="text-sm font-semibold text-slate-800 m-0">Xu hướng cân nặng</h2>
-                    <p className="text-xs text-slate-500 m-0 mt-0.5">
-                      {detail?.bmi?.length ? 'Theo dữ liệu BMI đã lưu' : 'Chọn khách hàng để xem'}
-                    </p>
                   </div>
                   <Activity className="w-5 h-5 text-teal-600 shrink-0" aria-hidden />
                 </div>
@@ -533,10 +446,7 @@ export function DoctorDashboardPage() {
               </div>
 
               <div className="rounded-xl bg-white border border-slate-200/80 shadow-sm p-4 md:p-5">
-                <h2 className="text-sm font-semibold text-slate-800 m-0 mb-1">Emotion Heatmap</h2>
-                <p className="text-xs text-slate-500 m-0 mb-3">
-                  30 ngày gần nhất — theo điểm cảm xúc (1–5) trong nhật ký
-                </p>
+                <h2 className="text-sm font-semibold text-slate-800 m-0 mb-3">Emotion Heatmap</h2>
                 {heatCells.length === 0 ? (
                   <p className="text-sm text-slate-500 m-0">Chưa có nhật ký cảm xúc.</p>
                 ) : (
@@ -550,20 +460,21 @@ export function DoctorDashboardPage() {
                   ))}
                 </div>
                 )}
-                <div className="flex flex-wrap gap-3 mt-4 text-[10px] text-slate-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-sm bg-emerald-500" /> 4–5
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-sm bg-slate-300" /> 3
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-sm bg-rose-700" /> 1–2
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-sm bg-slate-200" /> Chưa ghi
-                  </span>
-                </div>
+              </div>
+
+              <div className="rounded-xl bg-white border border-slate-200/80 shadow-sm p-4 md:p-5">
+                <h2 className="text-sm font-semibold text-slate-800 m-0 mb-3">Hồ sơ bệnh lý</h2>
+                {detail?.healthProfile ? (
+                  <div className="space-y-2 text-sm text-slate-700">
+                    <p className="m-0"><strong>Tình trạng hiện tại:</strong> {detail.healthProfile.currentConditions || 'Chưa cập nhật'}</p>
+                    <p className="m-0"><strong>Tiền sử:</strong> {detail.healthProfile.medicalHistory || 'Chưa cập nhật'}</p>
+                    <p className="m-0"><strong>Dị ứng:</strong> {detail.healthProfile.allergies || 'Chưa cập nhật'}</p>
+                    <p className="m-0"><strong>Thuốc:</strong> {detail.healthProfile.medications || 'Chưa cập nhật'}</p>
+                    <p className="m-0"><strong>Chống chỉ định:</strong> {detail.healthProfile.contraindications || 'Chưa cập nhật'}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 m-0">Khách hàng chưa cập nhật hồ sơ bệnh lý.</p>
+                )}
               </div>
             </section>
             </div>

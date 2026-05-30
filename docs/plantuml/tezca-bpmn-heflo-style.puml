@@ -1,0 +1,98 @@
+@startuml Tezca_BPMN_HEFLO_Style
+
+' ===== HEFLO STYLE CONFIGURATION =====
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", sans-serif
+skinparam linetype ortho
+skinparam roundcorner 6
+skinparam ArrowColor #78909C
+skinparam ArrowFontColor #546E7A
+
+' Định dạng chuẩn Task (Hoạt động) của HEFLO
+skinparam Activity {
+    BackgroundColor #FFFFFF
+    BorderColor #1976D2
+    BorderThickness 1.5
+    FontColor #263238
+    FontSize 13
+}
+
+' Định dạng chuẩn Gateway (Rẽ nhánh) của HEFLO
+skinparam ActivityDiamond {
+    BackgroundColor #FFF9C4
+    BorderColor #F57F17
+    BorderThickness 1.5
+    FontColor #263238
+    FontSize 12
+}
+
+' Định dạng chuẩn Pool/Swimlane của HEFLO
+skinparam Swimlane {
+    BorderColor #CFD8DC
+    BorderThickness 1.5
+    TitleBackgroundColor #F4F8FB
+    TitleFontColor #0D47A1
+    TitleFontSize 14
+    TitleFontStyle bold
+}
+
+' Định dạng Event (Bắt đầu / Kết thúc)
+skinparam ActivityStartColor #43A047
+skinparam ActivityEndColor #E53935
+
+title Sơ đồ BPMN (HEFLO Form) - Lộ trình Tập luyện Tezca Health\n
+
+' ===== SWIMLANES (LANES) =====
+|Khách hàng (Client)|
+|Hệ thống Tezca (API & AI)|
+|Chuyên gia (Doctor Desk)|
+
+' ===== QUY TRÌNH NGHIỆP VỤ =====
+|Khách hàng (Client)|
+start
+:Nhập thông số thể trạng\nvà bệnh lý nền;
+:Click "Yêu cầu tạo lộ trình mới";
+
+|Hệ thống Tezca (API & AI)|
+:Đóng gói dữ liệu Prompt;
+:Gửi HTTPS Request\ntới Google Gemini API;
+:Parse JSON & Lưu lộ trình\n(Trạng thái: Pending);
+:Gửi Notification\nyêu cầu duyệt giáo án;
+
+|Chuyên gia (Doctor Desk)|
+:Nhận thông báo & Truy cập\nmàn hình quản lý;
+:Xem chi tiết giáo án\ndo AI đề xuất;
+
+if (Cần điều chỉnh chuyên môn?) then (Có)
+    :Sửa đổi bài tập, sets, reps;
+    :Thêm ghi chú y khoa\n(Expert Note);
+else (Không)
+endif
+
+:Click "Phê duyệt lộ trình";
+
+|Hệ thống Tezca (API & AI)|
+:Cập nhật trạng thái "Approved"\nvà lưu dấu vết Audit Log;
+:Emit WebSocket Event\nđồng bộ xuống Mobile App;
+
+|Khách hàng (Client)|
+:Nhận thông báo giáo án mới;
+
+fork
+    :Thực hiện tập luyện\n& Đánh dấu hoàn thành;
+fork again
+    :Đo lường & Cập nhật BMI;
+fork again
+    :Ghi nhận nhật ký cảm xúc;
+end merge
+
+|Hệ thống Tezca (API & AI)|
+:Lưu trữ dữ liệu (Upsert)\nvào SQLite;
+:Tổng hợp & Tính toán\nchỉ số thống kê tuần;
+
+|Chuyên gia (Doctor Desk)|
+:Truy cập Dashboard\nBáo cáo tuần;
+:Đánh giá tiến độ\nvà đưa ra chẩn đoán;
+stop
+
+@enduml

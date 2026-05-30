@@ -12,11 +12,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.chdir(path.join(__dirname, '..'));
 
-const { initDb, findUserByEmail, insertUser, assignExpertToPatient, getDb } = await import('../src/db.js');
+const { initDb, findUserByEmail, insertUser, assignExpertToPatient, getDb, grantUserRole } =
+  await import('../src/db.js');
 
 const DEMO_PASSWORD = 'TezcaDemo#2026';
 const EXPERT_EMAIL = 'expert@tezca.vn';
 const PATIENT_EMAIL = 'patient@tezca.vn';
+const ADMIN_EMAIL = 'admin@tezca.vn';
 
 const resetPassword = process.argv.includes('--reset-password');
 
@@ -46,6 +48,9 @@ initDb();
 
 const r1 = upsertUser({ email: EXPERT_EMAIL, role: 'expert', name: 'BS. Minh Anh' });
 const r2 = upsertUser({ email: PATIENT_EMAIL, role: 'user', name: 'Nguyễn Minh Khang' });
+const r3 = upsertUser({ email: ADMIN_EMAIL, role: 'admin', name: 'Quản trị Tezca' });
+const adminUser = findUserByEmail(ADMIN_EMAIL);
+if (adminUser) grantUserRole(adminUser.id, 'admin');
 
 const expert = findUserByEmail(EXPERT_EMAIL);
 const patient = findUserByEmail(PATIENT_EMAIL);
@@ -53,10 +58,13 @@ if (expert && patient) {
   assignExpertToPatient(expert.id, patient.id);
 }
 
-console.log(JSON.stringify({ expert: r1, patient: r2, assignment: !!(expert && patient) }, null, 2));
-console.log('\n--- Đăng nhập test (app bệnh nhân + dashboard chuyên gia) ---');
+console.log(
+  JSON.stringify({ expert: r1, patient: r2, admin: r3, assignment: !!(expert && patient) }, null, 2),
+);
+console.log('\n--- Đăng nhập test ---');
 console.log(`  Chuyên gia:  ${EXPERT_EMAIL}`);
 console.log(`  Bệnh nhân:   ${PATIENT_EMAIL}`);
+console.log(`  Quản trị:   ${ADMIN_EMAIL}`);
 console.log(`  Mật khẩu:    ${DEMO_PASSWORD}`);
 if (!resetPassword) {
   console.log('  (Nếu sai mật khẩu, chạy lại với: npm run seed:test-users -- --reset-password)\n');

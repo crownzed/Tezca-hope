@@ -3,8 +3,8 @@ import type { DayExerciseProgress } from './trainingDayProgress';
 
 export type TrainingPlanStatus = 'pending_review' | 'approved';
 
-export type PatientTrainingPlan = {
-  patientId: string;
+export type CustomerTrainingPlan = {
+  customerId: string;
   sourcePlanMd: string;
   status: TrainingPlanStatus;
   exercises: DashboardExercise[];
@@ -16,5 +16,5 @@ export type PatientTrainingPlan = {
 };
 
 export type TrainingPlanResponse = {
-  plan: PatientTrainingPlan | null;
+  plan: CustomerTrainingPlan | null;
 };

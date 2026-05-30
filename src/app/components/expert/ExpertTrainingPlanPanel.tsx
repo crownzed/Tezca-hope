@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../../lib/api';
+import { isApiError } from '../../lib/apiError';
 import type { DashboardExercise } from '../../lib/dashboardStorage';
-import type { PatientTrainingPlan, TrainingPlanResponse } from '../../lib/trainingPlan';
+import type { CustomerTrainingPlan, TrainingPlanResponse } from '../../lib/trainingPlan';
 import {
   applyDayProgress,
   buildWeekDaysWithIso,
@@ -18,13 +19,13 @@ const inputStyle = {
 
 type Props = {
   token: string;
-  patientId: string;
+  customerId: string;
 };
 
-export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
-  const [plan, setPlan] = useState<PatientTrainingPlan | null>(null);
+export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
+  const [plan, setPlan] = useState<CustomerTrainingPlan | null>(null);
   const [structure, setStructure] = useState<DashboardExercise[]>([]);
-  const [dailyProgress, setDailyProgress] = useState<PatientTrainingPlan['dailyProgress']>({});
+  const [dailyProgress, setDailyProgress] = useState<CustomerTrainingPlan['dailyProgress']>({});
   const [viewIso, setViewIso] = useState(() => {
     const d = new Date();
     const y = d.getFullYear();
@@ -51,10 +52,10 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
   );
 
   const load = useCallback(() => {
-    if (!token || !patientId) return;
+    if (!token || !customerId) return;
     setLoading(true);
     apiFetch<TrainingPlanResponse>(
-      `/api/expert/patients/${encodeURIComponent(patientId)}/training-plan`,
+      `/api/expert/customers/${encodeURIComponent(customerId)}/training-plan`,
       { token },
     )
       .then((r) => {
@@ -66,7 +67,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
       })
       .catch((e) => setToast(e instanceof Error ? e.message : 'Không tải được kế hoạch tập'))
       .finally(() => setLoading(false));
-  }, [token, patientId]);
+  }, [token, customerId]);
 
   useEffect(() => {
     load();
@@ -78,18 +79,28 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
     setToast('');
     try {
       const r = await apiFetch<TrainingPlanResponse>(
-        `/api/expert/patients/${encodeURIComponent(patientId)}/training-plan`,
+        `/api/expert/customers/${encodeURIComponent(customerId)}/training-plan`,
         {
           method: 'PUT',
           token,
-          body: JSON.stringify({ exercises: structure, status, expertNote: expertNote.trim() }),
+          body: JSON.stringify({
+            exercises: structure,
+            status,
+            expertNote: expertNote.trim(),
+            expectedUpdatedAt: plan.updatedAt,
+          }),
         },
       );
       setPlan(r.plan);
       setStructure(r.plan?.exercises ?? []);
       setDailyProgress(r.plan?.dailyProgress ?? {});
-      setToast(status === 'approved' ? 'Đã duyệt — bệnh nhân thấy trên Chiến dịch tập luyện.' : 'Đã lưu chỉnh sửa.');
+      setToast(status === 'approved' ? 'Đã duyệt — khách hàng thấy trên Chiến dịch tập luyện.' : 'Đã lưu chỉnh sửa.');
     } catch (e) {
+      if (isApiError(e) && e.status === 409) {
+        setToast('Xung đột dữ liệu: kế hoạch đã thay đổi. Đang tải lại bản mới nhất…');
+        load();
+        return;
+      }
       setToast(e instanceof Error ? e.message : 'Không lưu được');
     } finally {
       setBusy(false);
@@ -136,7 +147,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
           Kế hoạch tập luyện (Trung tâm kỷ luật)
         </h2>
         <p className="text-xs mt-2 m-0" style={{ color: tezcaTheme.textMuted }}>
-          Chưa có kế hoạch trên server. Bệnh nhân có thể đánh dấu bài trên dashboard (tự tạo kế hoạch) hoặc tích hợp
+          Chưa có kế hoạch trên server. Khách hàng có thể đánh dấu bài trên dashboard (tự tạo kế hoạch) hoặc tích hợp
           từ trang <strong>Kế hoạch</strong> AI.
         </p>
       </section>
@@ -225,7 +236,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
       )}
 
       <p className="text-[10px] m-0" style={{ color: tezcaTheme.textMuted }}>
-        Tiến độ hoàn thành / tạ thực tế do bệnh nhân nhập — chỉ xem theo ngày, không sửa tại đây.
+        Tiến độ hoàn thành / tạ thực tế do khách hàng nhập — chỉ xem theo ngày, không sửa tại đây.
       </p>
 
       <div className="space-y-2">
@@ -268,7 +279,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
                 style={inputStyle}
                 aria-label="Lặp hoặc thời lượng"
               />
-              <span className="md:col-span-2 text-xs truncate opacity-70" title="Tạ BN ghi nhận">
+              <span className="md:col-span-2 text-xs truncate opacity-70" title="Tạ khách hàng ghi nhận">
                 {view?.actualWeight ? `BN: ${view.actualWeight}` : '—'}
               </span>
               <label className="md:col-span-2 flex items-center gap-2 text-xs opacity-70">
@@ -297,7 +308,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
       </div>
 
       <label className="block text-xs opacity-80">
-        Ghi chú cho bệnh nhân
+        Ghi chú cho khách hàng
         <textarea
           value={expertNote}
           onChange={(e) => setExpertNote(e.target.value)}
@@ -325,7 +336,7 @@ export function ExpertTrainingPlanPanel({ token, patientId }: Props) {
           className="rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:opacity-90"
           style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
         >
-          Duyệt & gửi cho bệnh nhân
+          Duyệt & gửi cho khách hàng
         </button>
       </div>
     </section>

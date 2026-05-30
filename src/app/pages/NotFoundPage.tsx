@@ -22,7 +22,7 @@ export function NotFoundPage() {
           Trang chủ
         </Link>
         <Link
-          to={ROUTES.app.root}
+          to={ROUTES.app.dashboard}
           className="inline-flex justify-center rounded-full px-6 py-3 text-sm font-semibold border"
           style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
         >

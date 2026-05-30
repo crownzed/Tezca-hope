@@ -54,6 +54,6 @@ export function maybeSeedDemoBulk() {
   } catch (err) {
     bulkDemoSeedStarted = false;
     console.error('[tezca] demo bulk seed failed', err);
-    throw err;
+    return null;
   }
 }

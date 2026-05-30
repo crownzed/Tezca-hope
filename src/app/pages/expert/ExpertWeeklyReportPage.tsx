@@ -15,16 +15,16 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
-import { ROUTES, expertPatientPath } from '../../routes';
+import { ROUTES, expertCustomerPath, expertDoctorDeskPath } from '../../routes';
 import { tezcaTheme } from '../../lib/tezcaTheme';
 
 type WeeklyReport = {
   period: { from: string; to: string; weekStart: string; label: string };
   summary: {
-    patientCount: number;
-    activePatients: number;
+    customerCount: number;
+    activeCustomers: number;
     liveMessagesTotal: number;
-    liveFromPatients: number;
+    liveFromCustomers: number;
     liveFromExpert: number;
     bmiEntries: number;
     moodEntries: number;
@@ -32,13 +32,13 @@ type WeeklyReport = {
     needsReplyCount: number;
     lowMoodCount: number;
   };
-  patients: {
+  customers: {
     id: string;
     name: string;
     email: string;
     stats: {
       liveMessages: number;
-      liveFromPatient: number;
+      liveFromCustomer: number;
       liveFromExpert: number;
       bmiEntries: number;
       moodEntries: number;
@@ -110,8 +110,8 @@ export function ExpertWeeklyReportPage() {
     const s = report.summary;
     const lines = [
       `Báo cáo tuần Tezca — ${report.period.label}`,
-      `Bệnh nhân gán: ${s.patientCount} · Hoạt động: ${s.activePatients}`,
-      `Chat live: ${s.liveMessagesTotal} (BN ${s.liveFromPatients} / CG ${s.liveFromExpert})`,
+      `Khách hàng gán: ${s.customerCount} · Hoạt động: ${s.activeCustomers}`,
+      `Chat live: ${s.liveMessagesTotal} (KH ${s.liveFromCustomers} / CG ${s.liveFromExpert})`,
       `BMI: ${s.bmiEntries} · Nhật ký cảm xúc: ${s.moodEntries} · Tezca AI: ${s.botMessages}`,
       `Cần phản hồi: ${s.needsReplyCount} · Tâm trạng thấp: ${s.lowMoodCount}`,
     ];
@@ -134,7 +134,7 @@ export function ExpertWeeklyReportPage() {
               Báo cáo theo tuần
             </h1>
             <p className="text-sm mt-2 m-0 max-w-xl" style={{ color: tezcaTheme.textMuted }}>
-              Tổng hợp hoạt động bệnh nhân được gán trong tuần (Thứ Hai – Chủ Nhật): chat, BMI, nhật ký cảm xúc và Tezca AI.
+              Tổng hợp hoạt động khách hàng được gán trong tuần (Thứ Hai – Chủ Nhật): chat, BMI, nhật ký cảm xúc và Tezca AI.
               Dùng để theo dõi đồng hành — không thay cho khám trực tiếp.
             </p>
           </div>
@@ -211,8 +211,8 @@ export function ExpertWeeklyReportPage() {
       {!loading && report && (
         <>
           <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <SummaryCard icon={Activity} label="BN hoạt động" value={`${report.summary.activePatients}/${report.summary.patientCount}`} />
-            <SummaryCard icon={MessageSquare} label="Tin chat live" value={String(report.summary.liveMessagesTotal)} sub={`BN ${report.summary.liveFromPatients} · CG ${report.summary.liveFromExpert}`} />
+            <SummaryCard icon={Activity} label="KH hoạt động" value={`${report.summary.activeCustomers}/${report.summary.customerCount}`} />
+            <SummaryCard icon={MessageSquare} label="Tin chat live" value={String(report.summary.liveMessagesTotal)} sub={`KH ${report.summary.liveFromCustomers} · CG ${report.summary.liveFromExpert}`} />
             <SummaryCard icon={Scale} label="Ghi BMI" value={String(report.summary.bmiEntries)} />
             <SummaryCard icon={Heart} label="Nhật ký cảm xúc" value={String(report.summary.moodEntries)} />
             <SummaryCard icon={Bot} label="Tin Tezca AI" value={String(report.summary.botMessages)} />
@@ -226,21 +226,21 @@ export function ExpertWeeklyReportPage() {
           >
             <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: tezcaTheme.border }}>
               <ClipboardList size={18} style={{ color: tezcaTheme.accent }} />
-              <h2 className="text-sm font-semibold m-0">Chi tiết theo bệnh nhân</h2>
+              <h2 className="text-sm font-semibold m-0">Chi tiết theo khách hàng</h2>
             </div>
-            {report.patients.length === 0 ? (
+            {report.customers.length === 0 ? (
               <p className="text-sm px-4 py-8 m-0 text-center" style={{ color: tezcaTheme.textMuted }}>
-                Chưa có bệnh nhân được gán.
+                Chưa có khách hàng được gán.
               </p>
             ) : (
               <ul className="divide-y list-none m-0 p-0" style={{ borderColor: tezcaTheme.border }}>
-                {report.patients.map((p) => (
+                {report.customers.map((p) => (
                   <li key={p.id} className="px-4 py-4 hover:opacity-95 transition-colors" style={{ borderColor: tezcaTheme.border }}>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                         <div>
                           <Link
-                            to={expertPatientPath(p.id)}
+                            to={expertCustomerPath(p.id)}
                             className="font-semibold hover:underline"
                             style={{ color: tezcaTheme.text }}
                           >
@@ -280,7 +280,7 @@ export function ExpertWeeklyReportPage() {
                       )}
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         <Link
-                          to={`${ROUTES.expert.doctorDesk}/${encodeURIComponent(p.id)}`}
+                          to={expertDoctorDeskPath(p.id)}
                           className="font-medium hover:underline"
                           style={{ color: tezcaTheme.accentDark }}
                         >

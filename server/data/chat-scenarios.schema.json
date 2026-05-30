@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tezca chat scenarios",
+  "type": "object",
+  "required": ["version", "scenarios"],
+  "properties": {
+    "version": { "type": "integer" },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "maxTokens": { "type": "integer", "minimum": 50, "maximum": 4096 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 }
+      }
+    },
+    "emptyMessage": {
+      "type": "object",
+      "required": ["intent", "mode", "reply"],
+      "properties": {
+        "intent": { "type": "string" },
+        "mode": { "enum": ["instant", "llm"] },
+        "reply": { "type": "string" }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "weight", "mode", "match"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "label": { "type": "string" },
+          "weight": { "type": "integer", "minimum": 0, "maximum": 200 },
+          "mode": { "enum": ["instant", "llm"] },
+          "reply": { "type": "string" },
+          "match": { "type": "object" },
+          "llm": {
+            "type": "object",
+            "properties": {
+              "systemAddon": { "type": "string" },
+              "maxTokens": { "type": "integer" },
+              "temperature": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

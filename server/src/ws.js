@@ -1,27 +1,39 @@
 import { verifyToken } from './auth.js';
-import { canExpertAccessPatient } from './db.js';
+import { canExpertAccessCustomer, findUserById } from './db.js';
+import { addCommunityPresence, removeCommunityPresence } from './communityPresence.js';
 import { registerLiveRoomBroadcast, sendLiveChatMessage } from './liveChatDelivery.js';
+import {
+  registerCommunityChannelBroadcast,
+  setCommunityDefaultBroadcaster,
+  forumChannel,
+  roomChannel,
+  announcementsChannel,
+} from './communityDelivery.js';
+import { getCommunityDmThreadForUser } from './db.js';
+import { isValidRoomTopic } from './communityTopics.js';
 
 /** @type {Map<string, Set<import('ws').WebSocket>>} */
-const rooms = new Map();
+const liveRooms = new Map();
 
-function joinRoom(patientId, ws) {
-  if (!rooms.has(patientId)) rooms.set(patientId, new Set());
-  rooms.get(patientId).add(ws);
-  ws.__patientId = patientId;
+/** @type {Map<string, Set<import('ws').WebSocket>>} */
+const communityChannels = new Map();
+
+function joinMap(map, key, ws) {
+  if (!map.has(key)) map.set(key, new Set());
+  map.get(key).add(ws);
 }
 
-function leaveRoom(ws) {
-  const pid = ws.__patientId;
-  if (pid && rooms.has(pid)) {
-    rooms.get(pid).delete(ws);
-    if (rooms.get(pid).size === 0) rooms.delete(pid);
+function leaveMap(map, ws, keyField) {
+  const key = ws[keyField];
+  if (key && map.has(key)) {
+    map.get(key).delete(ws);
+    if (map.get(key).size === 0) map.delete(key);
   }
-  ws.__patientId = undefined;
+  ws[keyField] = undefined;
 }
 
-function broadcast(patientId, payload, exceptWs) {
-  const set = rooms.get(patientId);
+function broadcastMap(map, key, payload, exceptWs) {
+  const set = map.get(key);
   if (!set) return;
   const raw = JSON.stringify(payload);
   for (const client of set) {
@@ -29,7 +41,80 @@ function broadcast(patientId, payload, exceptWs) {
   }
 }
 
-registerLiveRoomBroadcast(broadcast);
+function joinLiveRoom(customerId, ws) {
+  leaveLiveRoom(ws);
+  joinMap(liveRooms, customerId, ws);
+  ws.__customerId = customerId;
+}
+
+function leaveLiveRoom(ws) {
+  leaveMap(liveRooms, ws, '__customerId');
+}
+
+function broadcastLive(customerId, payload, exceptWs) {
+  broadcastMap(liveRooms, customerId, payload, exceptWs);
+}
+
+function joinCommunityChannel(channel, ws) {
+  leaveCommunityChannel(ws);
+  joinMap(communityChannels, channel, ws);
+  ws.__communityChannel = channel;
+}
+
+function leaveCommunityChannel(ws) {
+  const channel = ws.__communityChannel;
+  const user = ws.__communityUser;
+  if (channel && user?.userId) {
+    const members = removeCommunityPresence(channel, user.userId);
+    if (channel.startsWith('room:')) {
+      broadcastCommunity(channel, { type: 'community_presence', members });
+    }
+  }
+  ws.__communityUser = undefined;
+  leaveMap(communityChannels, ws, '__communityChannel');
+}
+
+function setCommunityWsUser(ws, userId, role) {
+  const dbUser = findUserById(userId);
+  ws.__communityUser = {
+    userId,
+    userName: dbUser?.name || 'Thành viên',
+    role: role || dbUser?.role || 'user',
+  };
+}
+
+function announceRoomPresence(channel, ws) {
+  const user = ws.__communityUser;
+  if (!user || !channel.startsWith('room:')) return;
+  const members = addCommunityPresence(channel, user);
+  broadcastCommunity(channel, { type: 'community_presence', members });
+  ws.send(JSON.stringify({ type: 'community_presence', members }));
+}
+
+function broadcastCommunity(channel, payload, exceptWs) {
+  broadcastMap(communityChannels, channel, payload, exceptWs);
+}
+
+registerLiveRoomBroadcast(broadcastLive);
+registerCommunityChannelBroadcast(forumChannel(), (payload, exceptWs) =>
+  broadcastCommunity(forumChannel(), payload, exceptWs),
+);
+
+for (const topic of ['nutrition', 'psychology', 'musculoskeletal']) {
+  registerCommunityChannelBroadcast(roomChannel(topic), (payload, exceptWs) =>
+    broadcastCommunity(roomChannel(topic), payload, exceptWs),
+  );
+}
+
+registerCommunityChannelBroadcast(announcementsChannel(), (payload, exceptWs) =>
+  broadcastCommunity(announcementsChannel(), payload, exceptWs),
+);
+
+setCommunityDefaultBroadcaster(broadcastCommunity);
+
+function roomIdFromPayload(data) {
+  return data.customerId ?? data.patientId;
+}
 
 export function attachWebSocketServer(wss) {
   wss.on('connection', (ws, req) => {
@@ -52,28 +137,81 @@ export function attachWebSocketServer(wss) {
       const userId = payload.sub;
       const role = payload.role;
 
+      if (data.type === 'community_join') {
+        leaveLiveRoom(ws);
+        leaveCommunityChannel(ws);
+        const channel = String(data.channel || '');
+        if (channel === 'forum') {
+          setCommunityWsUser(ws, userId, role);
+          joinCommunityChannel(forumChannel(), ws);
+          ws.send(JSON.stringify({ type: 'community_joined', channel: 'forum' }));
+          return;
+        }
+        if (channel.startsWith('room:')) {
+          const topic = channel.slice(5);
+          if (!isValidRoomTopic(topic)) return;
+          setCommunityWsUser(ws, userId, role);
+          const roomKey = roomChannel(topic);
+          joinCommunityChannel(roomKey, ws);
+          announceRoomPresence(roomKey, ws);
+          ws.send(JSON.stringify({ type: 'community_joined', channel: `room:${topic}` }));
+          return;
+        }
+        if (channel === announcementsChannel()) {
+          setCommunityWsUser(ws, userId, role);
+          joinCommunityChannel(announcementsChannel(), ws);
+          ws.send(JSON.stringify({ type: 'community_joined', channel: announcementsChannel() }));
+          return;
+        }
+        if (channel.startsWith('dm:')) {
+          const threadId = channel.slice(3);
+          const thread = getCommunityDmThreadForUser(threadId, userId);
+          if (!thread) return;
+          setCommunityWsUser(ws, userId, role);
+          joinCommunityChannel(channel, ws);
+          ws.send(JSON.stringify({ type: 'community_joined', channel }));
+          return;
+        }
+        return;
+      }
+
+      if (data.type === 'community_typing') {
+        const channel = ws.__communityChannel;
+        const user = ws.__communityUser;
+        if (!channel || !user) return;
+        if (!channel.startsWith('room:') && !channel.startsWith('dm:')) return;
+        broadcastCommunity(channel, {
+          type: 'community_typing',
+          userId: user.userId,
+          userName: user.userName,
+        }, ws);
+        return;
+      }
+
       if (data.type === 'join') {
-        leaveRoom(ws);
-        const { patientId } = data;
-        if (!patientId) return;
-        if (role === 'user' && patientId !== userId) return;
-        if (role === 'expert' && !canExpertAccessPatient(userId, patientId)) return;
-        joinRoom(patientId, ws);
-        ws.send(JSON.stringify({ type: 'joined', patientId }));
+        leaveCommunityChannel(ws);
+        leaveLiveRoom(ws);
+        const customerId = roomIdFromPayload(data);
+        if (!customerId) return;
+        if (role === 'user' && customerId !== userId) return;
+        if (role === 'expert' && !canExpertAccessCustomer(userId, customerId)) return;
+        joinLiveRoom(customerId, ws);
+        ws.send(JSON.stringify({ type: 'joined', customerId }));
         return;
       }
 
       if (data.type === 'message') {
-        const { patientId, text } = data;
-        if (!patientId || !text || typeof text !== 'string') return;
-        if (!ws.__patientId || ws.__patientId !== patientId) return;
-        if (role === 'user' && patientId !== userId) return;
-        if (role === 'expert' && !canExpertAccessPatient(userId, patientId)) return;
+        const customerId = roomIdFromPayload(data);
+        const { text } = data;
+        if (!customerId || !text || typeof text !== 'string') return;
+        if (!ws.__customerId || ws.__customerId !== customerId) return;
+        if (role === 'user' && customerId !== userId) return;
+        if (role === 'expert' && !canExpertAccessCustomer(userId, customerId)) return;
 
-        const senderRole = role === 'expert' ? 'expert' : 'patient';
+        const senderRole = role === 'expert' ? 'expert' : 'customer';
         const msg = sendLiveChatMessage(
           {
-            patientId,
+            customerId,
             senderUserId: userId,
             senderRole,
             content: text,
@@ -83,10 +221,12 @@ export function attachWebSocketServer(wss) {
         if (msg) {
           ws.send(JSON.stringify({ type: 'live_message', message: msg }));
         }
-        return;
       }
     });
 
-    ws.on('close', () => leaveRoom(ws));
+    ws.on('close', () => {
+      leaveLiveRoom(ws);
+      leaveCommunityChannel(ws);
+    });
   });
 }

@@ -1,4 +1,4 @@
-import { apiBase } from './api';
+import { apiBase, apiUrl } from './api';
 import { polishAiText } from './polishAiText';
 
 export type StreamAiChatOptions = {
@@ -19,11 +19,12 @@ export async function streamAiChat({
   onDelta,
   signal,
 }: StreamAiChatOptions): Promise<string> {
-  const bases = [apiBase(), ''].filter((b, i, arr) => arr.indexOf(b) === i);
+  const urls = apiBase()
+    ? [apiUrl('/api/me/ai-chat/stream'), '/api/me/ai-chat/stream']
+    : [apiUrl('/api/me/ai-chat/stream')];
   let lastRes: Response | null = null;
 
-  for (const base of bases) {
-    const url = `${base}/api/me/ai-chat/stream`;
+  for (const url of urls) {
     try {
       const res = await fetch(url, {
         method: 'POST',

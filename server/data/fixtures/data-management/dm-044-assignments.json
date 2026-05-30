@@ -1,0 +1,45 @@
+{
+  "fileVersion": 1,
+  "recordType": "assignment_import_batch",
+  "label": "Lô gán CG–KH #4",
+  "generatedAt": "2026-05-24T12:13:13.996Z",
+  "tags": [
+    "data-management-demo",
+    "assignment_import_batch"
+  ],
+  "payload": {
+    "rows": [
+      {
+        "customerEmail": "kh-demo-025@tezca.vn",
+        "expertEmail": "expert@tezca.vn",
+        "action": "assign"
+      },
+      {
+        "customerEmail": "kh-demo-026@tezca.vn",
+        "expertEmail": "cg-demo-02@tezca.vn",
+        "action": "assign"
+      },
+      {
+        "customerEmail": "kh-demo-027@tezca.vn",
+        "expertEmail": "cg-demo-03@tezca.vn",
+        "action": "assign"
+      },
+      {
+        "customerEmail": "kh-demo-028@tezca.vn",
+        "expertEmail": "cg-demo-04@tezca.vn",
+        "action": "assign"
+      },
+      {
+        "customerEmail": "kh-demo-029@tezca.vn",
+        "expertEmail": "expert@tezca.vn",
+        "action": "assign"
+      },
+      {
+        "customerEmail": "kh-demo-030@tezca.vn",
+        "expertEmail": "cg-demo-02@tezca.vn",
+        "action": "assign"
+      }
+    ],
+    "importMode": "insert_or_ignore"
+  }
+}

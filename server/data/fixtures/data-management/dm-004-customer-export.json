@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-004@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.925Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-004@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "5292c456-8b47-4d33-8908-97812006faba",
+      "email": "kh-demo-004@tezca.vn",
+      "name": "Phạm Văn Dũng",
+      "role": "user",
+      "createdAt": 1779624233713
+    },
+    "assignments": [
+      {
+        "expertId": "044fe0c5-1dce-4434-8040-738d7e42dd19",
+        "expertEmail": "cg-demo-04@tezca.vn",
+        "expertName": "BS. Lan Phương"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "f5dcb49c-2a2a-43a0-ba5a-c5e6d7356a3d",
+        "userId": "5292c456-8b47-4d33-8908-97812006faba",
+        "date": "2026-05-24",
+        "heightCm": 159,
+        "weightKg": 52,
+        "bmi": 20.6
+      }
+    ],
+    "moods": [
+      {
+        "id": "56b87f75-05bb-40ed-8099-f605df54a2ba",
+        "userId": "5292c456-8b47-4d33-8908-97812006faba",
+        "date": "2026-05-24",
+        "moodLabel": "Căng thẳng",
+        "moodScore": 2,
+        "note": ""
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "5292c456-8b47-4d33-8908-97812006faba",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Phạm Văn Dũng\nChuyên gia phụ trách: BS. Lan Phương\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900040,
+          "title": "Giãn cơ vai",
+          "sets": 2,
+          "reps": "30 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900041,
+          "title": "Nâng gối",
+          "sets": 3,
+          "reps": "10",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900042,
+          "title": "Plank",
+          "sets": 3,
+          "reps": "45 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515359,
+      "updatedAt": 1779624515359,
+      "progressUpdatedAt": 0,
+      "updatedBy": "044fe0c5-1dce-4434-8040-738d7e42dd19"
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-010@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.931Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-010@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "25731418-7741-4d57-9bdf-8af858552f32",
+      "email": "kh-demo-010@tezca.vn",
+      "name": "Đặng Văn Linh",
+      "role": "user",
+      "createdAt": 1779624233716
+    },
+    "assignments": [
+      {
+        "expertId": "9c78e77e-fb79-494c-972a-4744f2dfa358",
+        "expertEmail": "cg-demo-02@tezca.vn",
+        "expertName": "BS. Thu Hà"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "7db491c0-5872-41f5-a751-cf43957befb7",
+        "userId": "25731418-7741-4d57-9bdf-8af858552f32",
+        "date": "2026-05-24",
+        "heightCm": 165,
+        "weightKg": 58,
+        "bmi": 21.3
+      }
+    ],
+    "moods": [
+      {
+        "id": "05c426a2-0912-4de7-b5d4-e4f54dfa7578",
+        "userId": "25731418-7741-4d57-9bdf-8af858552f32",
+        "date": "2026-05-24",
+        "moodLabel": "Ổn",
+        "moodScore": 4,
+        "note": "Dữ liệu thử nghiệm Tezca."
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "25731418-7741-4d57-9bdf-8af858552f32",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Đặng Văn Linh\nChuyên gia phụ trách: BS. Thu Hà\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900100,
+          "title": "Giãn cơ vai",
+          "sets": 2,
+          "reps": "30 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900101,
+          "title": "Nâng gối",
+          "sets": 3,
+          "reps": "10",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900102,
+          "title": "Plank",
+          "sets": 3,
+          "reps": "45 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515371,
+      "updatedAt": 1779624515371,
+      "progressUpdatedAt": 0,
+      "updatedBy": "9c78e77e-fb79-494c-972a-4744f2dfa358"
+    }
+  }
+}

@@ -96,15 +96,21 @@ export function TrustDisclaimerSection() {
         </LandingReveal>
 
         <LandingReveal delay={0.15} className="text-center mt-12">
-          <p className="text-sm m-0">
-            <Link to={ROUTES.legal.privacy} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
-              Chính sách bảo mật
+          <p className="text-sm m-0 flex flex-wrap justify-center gap-x-3 gap-y-1">
+            <Link to={ROUTES.legal.root} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
+              Trung tâm pháp lý
             </Link>
-            <span className="mx-2 opacity-30" style={{ color: tezcaTheme.text }}>
-              ·
-            </span>
+            <span className="opacity-30">·</span>
+            <Link to={ROUTES.legal.privacy} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
+              Bảo mật
+            </Link>
+            <span className="opacity-30">·</span>
             <Link to={ROUTES.legal.terms} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
-              Điều khoản sử dụng
+              Điều khoản
+            </Link>
+            <span className="opacity-30">·</span>
+            <Link to={ROUTES.legal.community} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
+              Cộng đồng
             </Link>
           </p>
         </LandingReveal>

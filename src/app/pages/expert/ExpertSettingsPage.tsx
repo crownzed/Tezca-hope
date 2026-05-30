@@ -15,12 +15,12 @@ export function ExpertSettingsPage() {
   return (
     <div className="p-4 md:p-8 max-w-xl mx-auto space-y-6" style={{ color: tezcaTheme.text }}>
       <Link
-        to={ROUTES.expert.root}
+        to={ROUTES.expert.customers.root}
         className="inline-flex items-center gap-2 text-sm opacity-70 hover:opacity-100"
         style={{ color: tezcaTheme.text }}
       >
         <ArrowLeft size={18} />
-        Danh sách bệnh nhân
+        Danh sách khách hàng
       </Link>
 
       <div>
@@ -45,10 +45,10 @@ export function ExpertSettingsPage() {
       <nav className="rounded-2xl border divide-y overflow-hidden" style={cardStyle}>
         {[
           { to: ROUTES.expert.weeklyReport, icon: CalendarRange, label: 'Báo cáo theo tuần', sub: 'Tổng hợp hoạt động' },
-          { to: ROUTES.expert.doctorDesk, icon: MessageSquare, label: 'Doctor Desk', sub: 'Live chat & chỉ số' },
-          { to: ROUTES.expert.root, icon: LayoutGrid, label: 'Bệnh nhân được gán', sub: '' },
-          { to: ROUTES.legal.terms, icon: Shield, label: 'Điều khoản sử dụng', sub: '' },
-          { to: ROUTES.legal.privacy, icon: Shield, label: 'Chính sách bảo mật', sub: '' },
+          { to: ROUTES.expert.doctorDesk, icon: MessageSquare, label: 'Doctor Desk', sub: 'Chat & chỉ số' },
+          { to: ROUTES.expert.customers.root, icon: LayoutGrid, label: 'Khách hàng được gán', sub: '' },
+          { to: ROUTES.legal.root, icon: Shield, label: 'Trung tâm pháp lý', sub: 'Bảo mật, điều khoản, GDPR' },
+          { to: ROUTES.legal.community, icon: Shield, label: 'Quy tắc cộng đồng', sub: '' },
         ].map(({ to, icon: Icon, label, sub }) => (
           <Link
             key={to}

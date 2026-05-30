@@ -1,18 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import {
-  Sparkles,
-  Send,
-  Trash2,
-  LogIn,
-  ShieldAlert,
-  Zap,
-  Cpu,
-  User,
-  History,
-  CloudOff,
-  Lock,
-} from 'lucide-react';
+import { Sparkles, Send, Trash2, LogIn, User, History } from 'lucide-react';
 import {
   loadAiChatForUser,
   saveAiChatForUser,
@@ -29,22 +17,9 @@ import { mockAiReply } from '../../lib/mockAi';
 import { apiFetch } from '../../lib/api';
 import { polishAiText } from '../../lib/polishAiText';
 import { simulateTextStream, streamAiChat } from '../../lib/streamAiChat';
-import { usePatientSession } from '../../lib/patientSessionGate';
+import { useCustomerSession } from '../../lib/customerSessionGate';
 import { ROUTES } from '../../routes';
 import { ChatHistoryPanel } from '../../components/ChatHistoryPanel';
-
-function formatTime(ts: number): string {
-  try {
-    return new Intl.DateTimeFormat('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      day: '2-digit',
-      month: '2-digit',
-    }).format(new Date(ts));
-  } catch {
-    return '';
-  }
-}
 
 const SUGGESTIONS = [
   'Hôm nay mình khó ngủ — có gợi ý thư giãn trước khi đi ngủ không?',
@@ -54,7 +29,7 @@ const SUGGESTIONS = [
 ];
 
 export function AiChatPage() {
-  const { token, user, sessionReady, isAuthenticated } = usePatientSession();
+  const { token, user, sessionReady, isAuthenticated } = useCustomerSession();
   const userId = user?.id ?? null;
   const canPersist = isAuthenticated;
 
@@ -282,8 +257,6 @@ export function AiChatPage() {
             dayTurnGroups={dayTurnGroups}
             historyLoading={historyLoading}
             messageCount={messages.length}
-            userName={user?.name}
-            userEmail={user?.email}
             onScrollTo={scrollToMessage}
             onDeleteTurn={deleteTurn}
           />
@@ -309,39 +282,9 @@ export function AiChatPage() {
               <Sparkles className="text-white" size={28} strokeWidth={2} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                <h1 className="text-2xl md:text-3xl font-bold m-0 tracking-tight" style={{ color: '#1A202C' }}>
-                  Tezca AI
-                </h1>
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  style={{
-                    backgroundColor: liveMode ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.12)',
-                    color: liveMode ? '#047857' : '#475569',
-                  }}
-                >
-                  {liveMode ? (
-                    <>
-                      <Zap size={12} /> Gemini · có lịch sử
-                    </>
-                  ) : (
-                    <>
-                      <Cpu size={12} /> Phiên tạm
-                    </>
-                  )}
-                </span>
-              </div>
-              <p className="text-sm opacity-75 mt-2 m-0 leading-relaxed" style={{ color: '#1A202C' }}>
-                {liveMode
-                  ? `Lịch sử riêng của ${user?.name || 'bạn'} — đồng bộ server, không chia sẻ tài khoản khác. Xóa từng đoạn ở panel lịch sử hoặc từng tin trong khung chat.`
-                  : 'Bạn có thể hỏi ngay không cần đăng nhập. Tin nhắn chỉ tồn tại trong phiên này — đóng trang hoặc tải lại sẽ mất.'}
-              </p>
-              {liveMode && (
-                <p className="text-xs mt-2 m-0 flex items-center gap-1.5 opacity-70" style={{ color: '#0F766E' }}>
-                  <Lock size={12} />
-                  Chỉ bạn ({user?.email}) xem được lịch sử này
-                </p>
-              )}
+              <h1 className="text-2xl md:text-3xl font-bold m-0 tracking-tight" style={{ color: '#1A202C' }}>
+                Tezca AI
+              </h1>
               {!liveMode && (
                 <Link
                   to={ROUTES.app.login}
@@ -349,32 +292,10 @@ export function AiChatPage() {
                   style={{ color: '#0F766E' }}
                 >
                   <LogIn size={16} />
-                  Đăng nhập để lưu lịch sử &amp; dùng Gemini
+                  Đăng nhập
                 </Link>
               )}
             </div>
-          </div>
-
-          {!liveMode && (
-            <div
-              className="relative mt-4 flex items-start gap-2 text-xs rounded-xl px-3 py-2.5"
-              style={{ backgroundColor: 'rgba(100, 116, 139, 0.08)', color: '#475569' }}
-            >
-              <CloudOff size={14} className="shrink-0 mt-0.5" />
-              <span>
-                <strong>Không lưu lịch sử</strong> khi chưa đăng nhập. Phản hồi demo trên thiết bị — không đồng bộ server.
-              </span>
-            </div>
-          )}
-
-          <div
-            className="relative mt-4 flex flex-wrap items-center gap-2 text-xs rounded-xl px-3 py-2.5"
-            style={{ backgroundColor: 'rgba(26, 32, 44, 0.04)', color: '#475569' }}
-          >
-            <ShieldAlert size={14} className="shrink-0 text-amber-600/90" />
-            <span>
-              Nội dung chỉ mang tính thông tin. Cấp cứu / ý định tự hại — gọi <strong>115</strong> hoặc đến cơ sở y tế.
-            </span>
           </div>
         </div>
 
@@ -402,9 +323,6 @@ export function AiChatPage() {
           <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5">
             {messages.length === 0 && !historyLoading && (
               <div className="text-center py-6 md:py-10 px-2">
-                <p className="text-sm font-medium m-0 mb-4" style={{ color: '#1A202C' }}>
-                  Bắt đầu nhanh — chạm một gợi ý hoặc gõ câu hỏi:
-                </p>
                 <div className="flex flex-col gap-2 max-w-md mx-auto">
                   {SUGGESTIONS.map((s) => (
                     <button
@@ -495,12 +413,6 @@ export function AiChatPage() {
                       />
                     )}
                   </div>
-                  <p className="text-[11px] opacity-45 mt-1.5 m-0 px-1" style={{ color: '#1A202C' }}>
-                    {m.role === 'user' ? 'Bạn' : 'Tezca AI'} · {formatTime(m.ts)}
-                    {liveMode && (
-                      <span className="opacity-70"> · đã lưu</span>
-                    )}
-                  </p>
                 </div>
               </div>
             ))}
@@ -546,11 +458,7 @@ export function AiChatPage() {
                   void send();
                 }
               }}
-              placeholder={
-                canPersist
-                  ? 'Nhập tin nhắn — sẽ lưu vào lịch sử tài khoản…'
-                  : 'Hỏi Tezca AI (phiên tạm, không lưu)…'
-              }
+              placeholder="Nhập tin nhắn…"
               disabled={pending || historyLoading}
               className="flex-1 rounded-xl px-4 py-3 text-sm border resize-y min-h-[48px] max-h-36 outline-none focus:ring-2 focus:ring-teal-400/40 disabled:opacity-55"
               style={{ borderColor: 'rgba(26, 32, 44, 0.12)', backgroundColor: 'white', color: '#1A202C' }}
@@ -584,8 +492,6 @@ export function AiChatPage() {
                 dayTurnGroups={dayTurnGroups}
                 historyLoading={historyLoading}
                 messageCount={messages.length}
-                userName={user?.name}
-                userEmail={user?.email}
                 onScrollTo={scrollToMessage}
                 onDeleteTurn={deleteTurn}
               />

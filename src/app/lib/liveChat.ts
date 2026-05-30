@@ -1,28 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiFetch, wsUrl } from './api';
+import { apiFetch, canUseWebSocket, wsUrl } from './api';
 
 export type LiveMessage = {
   id: string;
-  patientId: string;
+  customerId: string;
   senderUserId: string;
-  senderRole: 'expert' | 'patient';
+  senderRole: 'expert' | 'customer';
   content: string;
   ts: number;
 };
 
 export type LiveChatTransport = 'ws' | 'poll' | 'connecting';
-
-function isLocalDevHost(): boolean {
-  if (typeof window === 'undefined') return false;
-  const h = window.location.hostname;
-  return h === 'localhost' || h === '127.0.0.1';
-}
-
-/** Vercel/serverless không có WebSocket — dùng HTTP + polling. */
-export function canUseWebSocket(): boolean {
-  if (typeof window === 'undefined') return false;
-  return isLocalDevHost() || import.meta.env.DEV;
-}
 
 function mergeMessages(prev: LiveMessage[], incoming: LiveMessage[]): LiveMessage[] {
   if (!incoming.length) return prev;
@@ -37,17 +25,17 @@ function maxTs(msgs: LiveMessage[]): number {
 
 type UseLiveChatOptions = {
   token: string | null;
-  patientId: string | undefined;
+  customerId: string | undefined;
   historyUrl: string;
   sendUrl: string;
-  senderRole: 'patient' | 'expert';
+  senderRole: 'customer' | 'expert';
   enabled?: boolean;
   onIncoming?: (message: LiveMessage) => void;
 };
 
 export function useLiveChat({
   token,
-  patientId,
+  customerId,
   historyUrl,
   sendUrl,
   senderRole,
@@ -61,47 +49,47 @@ export function useLiveChat({
   const [sendError, setSendError] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
   const sinceRef = useRef(0);
-  const patientIdRef = useRef(patientId);
-  patientIdRef.current = patientId;
+  const customerIdRef = useRef(customerId);
+  customerIdRef.current = customerId;
   const onIncomingRef = useRef(onIncoming);
   onIncomingRef.current = onIncoming;
 
   const appendMessages = useCallback((incoming: LiveMessage[]) => {
-    const activePatientId = patientIdRef.current;
-    if (!activePatientId || !incoming.length) return;
-    const forPatient = incoming.filter((m) => m.patientId === activePatientId);
-    if (!forPatient.length) return;
+    const activeCustomerId = customerIdRef.current;
+    if (!activeCustomerId || !incoming.length) return;
+    const forCustomer = incoming.filter((m) => m.customerId === activeCustomerId);
+    if (!forCustomer.length) return;
     setMessages((prev) => {
-      const base = prev.filter((m) => m.patientId === activePatientId);
-      const next = mergeMessages(base, forPatient);
+      const base = prev.filter((m) => m.customerId === activeCustomerId);
+      const next = mergeMessages(base, forCustomer);
       sinceRef.current = maxTs(next);
       return next;
     });
-    for (const m of forPatient) onIncomingRef.current?.(m);
+    for (const m of forCustomer) onIncomingRef.current?.(m);
   }, []);
 
   const loadHistory = useCallback(async () => {
-    if (!token || !patientId || !enabled) return;
-    const loadFor = patientId;
+    if (!token || !customerId || !enabled) return;
+    const loadFor = customerId;
     setLoading(true);
     try {
       const r = await apiFetch<{ messages: LiveMessage[] }>(historyUrl, { token });
-      if (patientIdRef.current !== loadFor) return;
-      const list = (r.messages || []).filter((m) => m.patientId === loadFor);
+      if (customerIdRef.current !== loadFor) return;
+      const list = (r.messages || []).filter((m) => m.customerId === loadFor);
       setMessages(list);
       sinceRef.current = maxTs(list);
       setSendError('');
     } catch {
-      if (patientIdRef.current !== loadFor) return;
+      if (customerIdRef.current !== loadFor) return;
       setMessages([]);
       sinceRef.current = 0;
     } finally {
-      if (patientIdRef.current === loadFor) setLoading(false);
+      if (customerIdRef.current === loadFor) setLoading(false);
     }
-  }, [token, patientId, historyUrl, enabled]);
+  }, [token, customerId, historyUrl, enabled]);
 
   useEffect(() => {
-    if (!enabled || !token || !patientId) {
+    if (!enabled || !token || !customerId) {
       setMessages([]);
       sinceRef.current = 0;
       setLoading(false);
@@ -113,18 +101,18 @@ export function useLiveChat({
     setSendError('');
     setLoading(true);
     loadHistory();
-  }, [enabled, token, patientId, loadHistory]);
+  }, [enabled, token, customerId, loadHistory]);
 
-  /** Đổi phòng WS khi chuyên gia chọn bệnh nhân khác (không cần reconnect). */
+  /** Đổi phòng WS khi chuyên gia chọn khách hàng khác (không cần reconnect). */
   useEffect(() => {
     const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN && patientId) {
-      ws.send(JSON.stringify({ type: 'join', patientId }));
+    if (ws?.readyState === WebSocket.OPEN && customerId) {
+      ws.send(JSON.stringify({ type: 'join', customerId }));
     }
-  }, [patientId]);
+  }, [customerId]);
 
   const poll = useCallback(async () => {
-    if (!token || !patientId || !enabled) return;
+    if (!token || !customerId || !enabled) return;
     const since = sinceRef.current;
     const url = since > 0 ? `${historyUrl}?since=${since}` : historyUrl;
     try {
@@ -133,10 +121,10 @@ export function useLiveChat({
     } catch {
       /* ignore transient poll errors */
     }
-  }, [token, patientId, historyUrl, enabled, appendMessages]);
+  }, [token, customerId, historyUrl, enabled, appendMessages]);
 
   useEffect(() => {
-    if (!enabled || !token || !patientId) return;
+    if (!enabled || !token || !customerId) return;
 
     if (!canUseWebSocket()) {
       setTransport('poll');
@@ -164,7 +152,7 @@ export function useLiveChat({
         window.clearTimeout(connectTimeout);
         attempts = 0;
         setTransport('ws');
-        ws.send(JSON.stringify({ type: 'join', patientId }));
+        ws.send(JSON.stringify({ type: 'join', customerId }));
       };
 
       ws.onmessage = (ev) => {
@@ -203,10 +191,10 @@ export function useLiveChat({
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [enabled, token, patientId, appendMessages]);
+  }, [enabled, token, customerId, appendMessages]);
 
   useEffect(() => {
-    if (!enabled || !token || !patientId) return;
+    if (!enabled || !token || !customerId) return;
     if (transport !== 'poll' && transport !== 'ws') return;
 
     const intervalMs = transport === 'poll' ? 3000 : 12000;
@@ -226,19 +214,19 @@ export function useLiveChat({
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [enabled, token, patientId, transport, poll]);
+  }, [enabled, token, customerId, transport, poll]);
 
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || !token || !patientId || !enabled) return false;
+      if (!trimmed || !token || !customerId || !enabled) return false;
       setSending(true);
       setSendError('');
 
       const optimisticId = `opt-${Date.now()}`;
       const optimistic: LiveMessage = {
         id: optimisticId,
-        patientId,
+        customerId,
         senderUserId: '',
         senderRole,
         content: trimmed,
@@ -252,10 +240,10 @@ export function useLiveChat({
           token,
           body: JSON.stringify({ text: trimmed }),
         });
-        if (r.message.patientId !== patientIdRef.current) return true;
+        if (r.message.customerId !== customerIdRef.current) return true;
         setMessages((prev) => {
-          const pid = patientIdRef.current;
-          const withoutOpt = prev.filter((m) => m.id !== optimisticId && m.patientId === pid);
+          const pid = customerIdRef.current;
+          const withoutOpt = prev.filter((m) => m.id !== optimisticId && m.customerId === pid);
           return mergeMessages(withoutOpt, [r.message]);
         });
         sinceRef.current = Math.max(sinceRef.current, r.message.ts);
@@ -268,10 +256,10 @@ export function useLiveChat({
         setSending(false);
       }
     },
-    [token, patientId, enabled, sendUrl, appendMessages],
+    [token, customerId, enabled, sendUrl, appendMessages],
   );
 
-  const ready = Boolean(patientId && token && (transport === 'ws' || transport === 'poll') && !loading);
+  const ready = Boolean(customerId && token && (transport === 'ws' || transport === 'poll') && !loading);
 
   const transportLabel =
     transport === 'ws'

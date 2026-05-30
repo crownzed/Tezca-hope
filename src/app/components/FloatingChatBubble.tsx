@@ -53,10 +53,7 @@ export function FloatingChatBubble() {
               <div className="w-11 h-11 rounded-xl bg-white/95 flex items-center justify-center shrink-0 shadow-sm">
                 <Sparkles className="text-teal-600" size={22} strokeWidth={2} />
               </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white truncate">Tezca AI</div>
-                <div className="text-xs text-white/85 truncate">Trò chuyện trên ứng dụng</div>
-              </div>
+              <div className="text-sm font-semibold text-white truncate">Tezca AI</div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -79,13 +76,6 @@ export function FloatingChatBubble() {
           </div>
 
           <div className="p-5 space-y-4">
-            <div className="text-sm" style={{ color: '#1A202C' }}>
-              <p className="mb-2 font-medium m-0">Xin chào!</p>
-              <p className="opacity-70 m-0 leading-relaxed">
-                Tezca AI hỗ trợ gợi ý sức khỏe chung (không phải tư vấn y khoa). Chưa đăng nhập: hỏi được nhưng không lưu lịch sử.
-              </p>
-            </div>
-
             <div className="space-y-2">
               {QUICK_TOPICS.map((item) => (
                 <Link
@@ -100,7 +90,6 @@ export function FloatingChatBubble() {
                   onClick={() => setIsExpanded(false)}
                 >
                   <span className="text-sm font-medium">{item.label}</span>
-                  <span className="block text-xs opacity-55 mt-1 leading-snug line-clamp-2">{item.q}</span>
                 </Link>
               ))}
             </div>
@@ -134,7 +123,10 @@ export function FloatingChatBubble() {
           aria-label="Mở Tezca AI"
         >
           <MessageCircle size={28} style={{ color: 'white' }} strokeWidth={2} />
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-[#1A202C] text-teal-300 shadow">
+          <span
+            className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow border"
+            style={{ backgroundColor: 'white', color: '#0F766E', borderColor: 'rgba(45, 212, 191, 0.35)' }}
+          >
             AI
           </span>
         </motion.button>

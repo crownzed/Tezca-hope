@@ -4,14 +4,15 @@ import { generatePersonalizedPlan, type PlanInput } from '../../lib/planGenerato
 import { ROUTES } from '../../routes';
 import { recordPlanGenerated } from '../../lib/gamification';
 import { apiFetch } from '../../lib/api';
-import { usePatientAuth } from '../../context/PatientAuthContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { parseExercisesFromPlanMarkdown } from '../../lib/planToExercises';
 import { saveDashboardExercises } from '../../lib/dashboardStorage';
 import { adoptGuestDisciplineDataIntoAccount } from '../../lib/disciplineDataScope';
 import { simulateTextStream } from '../../lib/streamAiChat';
+import { FormAlert } from '../../components/tezca/FormAlert';
 
 export function PlansPage() {
-  const { token, user } = usePatientAuth();
+  const { token, user } = useCustomerAuth();
   const navigate = useNavigate();
   const [age, setAge] = useState('28');
   const [goal, setGoal] = useState<PlanInput['goal']>('maintain');
@@ -22,6 +23,7 @@ export function PlansPage() {
   const [planSource, setPlanSource] = useState<'ai' | 'local' | null>(null);
   const [integrating, setIntegrating] = useState(false);
   const [integrateMsg, setIntegrateMsg] = useState('');
+  const [formError, setFormError] = useState('');
 
   const previewExercises = useMemo(
     () => (plan ? parseExercisesFromPlanMarkdown(plan) : []),
@@ -29,9 +31,10 @@ export function PlansPage() {
   );
 
   const generate = async () => {
+    setFormError('');
     const a = parseInt(age, 10);
     if (!a || a < 14 || a > 100) {
-      alert('Vui lòng nhập độ tuổi hợp lệ (14–100).');
+      setFormError('Nhập độ tuổi từ 14 đến 100.');
       return;
     }
     const input: PlanInput = {
@@ -117,7 +120,7 @@ export function PlansPage() {
             <>
               Chưa đăng nhập: chỉ có bản gợi ý cố định trên máy.{' '}
               <Link to={ROUTES.app.login} style={{ color: '#0F766E', fontWeight: 600 }}>
-                Đăng nhập bệnh nhân
+                Đăng nhập khách hàng
               </Link>{' '}
               để sinh kế hoạch bằng AI.
             </>
@@ -196,11 +199,12 @@ export function PlansPage() {
           />
         </label>
 
+        {formError && <FormAlert>{formError}</FormAlert>}
         <button
           type="button"
           onClick={() => void generate()}
           disabled={pending}
-          className="rounded-full px-8 py-3 font-semibold text-white disabled:opacity-60"
+          className="rounded-full px-8 py-3 font-semibold text-white disabled:opacity-60 border-0 cursor-pointer disabled:cursor-not-allowed"
           style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
         >
           {pending ? 'Đang sinh…' : token ? 'Sinh kế hoạch (AI)' : 'Sinh kế hoạch (gợi ý nhanh)'}
@@ -246,7 +250,7 @@ export function PlansPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate(ROUTES.app.root)}
+                  onClick={() => navigate(ROUTES.app.dashboard)}
                   className="rounded-full px-6 py-2.5 text-sm font-medium border"
                   style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
                 >

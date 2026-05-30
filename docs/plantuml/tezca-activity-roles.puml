@@ -1,0 +1,54 @@
+@startuml Tezca_Activity_Roles
+skinparam activity {
+  BackgroundColor #FEFECE
+  BorderColor #A80036
+  ArrowColor #A80036
+}
+
+title Luồng nghiệp vụ theo vai trò — Tezca Health
+
+|Quản trị viên (Admin)|
+start
+:Đăng nhập hệ thống;
+if (Nội dung bị báo cáo?) then (Có)
+  :Kiểm duyệt (Duyệt/Xóa bài);
+  :Ghi vết AuditLogs;
+else (Không)
+  :Quản lý tài khoản (Thêm/Khóa Expert);
+endif
+stop
+
+|Khách hàng (Client)|
+start
+:Đăng ký/Đăng nhập;
+fork
+  :Nhập BMI & Bệnh lý & Cảm xúc;
+fork again
+  :Chatbot AI (Gemini);
+fork again
+  :Chọn Chuyên gia đồng hành;
+fork again
+  :Tham gia thảo luận (Đăng bài/Bình luận);
+fork again
+  :Chat nhóm cộng đồng (Socket.io);
+end fork
+:Cập nhật lộ trình tập luyện;
+stop
+
+|Chuyên gia (Expert)|
+start
+:Đăng nhập;
+:Truy cập Doctor Desk;
+fork
+  :Phân tích báo cáo tuần;
+fork again
+  :Chỉnh sửa & Phê duyệt kế hoạch;
+fork again
+  :Tư vấn 1-1 (Live Chat);
+fork again
+  :Kiểm duyệt bài viết cộng đồng;
+end fork
+:Kết thúc phiên làm việc;
+stop
+
+@enduml

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../../lib/api';
-import { usePatientAuth } from '../../context/PatientAuthContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   LineChart,
   Line,
@@ -18,16 +18,23 @@ import {
   idealWeightRangeKg,
   type BmiEntry,
 } from '../../lib/healthStorage';
+import { HealthProfileForm } from '../../components/HealthProfileForm';
+import { FormAlert } from '../../components/tezca/FormAlert';
+import { SessionLoading } from '../../components/tezca/SessionLoading';
+import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 export function BmiPage() {
-  const { token } = usePatientAuth();
+  const { token } = useCustomerAuth();
   const [entries, setEntries] = useState<BmiEntry[]>(() => loadBmiEntries());
   const [heightCm, setHeightCm] = useState('165');
   const [weightKg, setWeightKg] = useState('60');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formError, setFormError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!token) return;
+    setLoading(true);
     apiFetch<{ entries: BmiEntry[] }>('/api/me/bmi', { token })
       .then((r) => {
         const sorted = [...r.entries].sort((a, b) => b.date.localeCompare(a.date));
@@ -36,7 +43,8 @@ export function BmiPage() {
       })
       .catch(() => {
         /* API chưa chạy — giữ local */
-      });
+      })
+      .finally(() => setLoading(false));
   }, [token]);
 
   const chartData = useMemo(
@@ -48,10 +56,11 @@ export function BmiPage() {
   );
 
   const addEntry = () => {
+    setFormError('');
     const h = parseFloat(heightCm.replace(',', '.'));
     const w = parseFloat(weightKg.replace(',', '.'));
     if (!h || !w || h < 50 || h > 250 || w < 20 || w > 300) {
-      alert('Vui lòng nhập chiều cao (cm) và cân nặng (kg) hợp lệ.');
+      setFormError('Nhập chiều cao 50–250 cm và cân nặng 20–300 kg.');
       return;
     }
     const bmi = calcBmi(h, w);
@@ -77,6 +86,10 @@ export function BmiPage() {
     }
   };
 
+  if (loading && token && entries.length === 0) {
+    return <SessionLoading title="Đang tải chỉ số BMI…" minHeight="50vh" hint="" />;
+  }
+
   const latest = entries[0];
   const idealKg = latest ? idealWeightRangeKg(latest.heightCm) : null;
 
@@ -84,10 +97,10 @@ export function BmiPage() {
     <div className="max-w-4xl mx-auto space-y-10">
       <div>
         <h1 className="text-3xl font-bold" style={{ color: '#1A202C' }}>
-          Theo dõi BMI
+          Theo dõi sức khỏe
         </h1>
         <p className="mt-2 opacity-70" style={{ color: '#1A202C' }}>
-          Nhập chiều cao và cân nặng theo ngày. BMI = cân nặng (kg) / (chiều cao (m))² — chỉ mang tính sàng lọc ban đầu.
+          Ghi BMI theo ngày và cập nhật hồ sơ bệnh lý trên cùng một màn hình — làm cơ sở cho AI và chuyên gia tư vấn chính xác hơn.
         </p>
       </div>
 
@@ -128,11 +141,12 @@ export function BmiPage() {
               style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
             />
           </label>
+          {formError && <FormAlert>{formError}</FormAlert>}
           <button
             type="button"
             onClick={addEntry}
-            className="w-full md:w-auto rounded-full px-8 py-3 font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
+            className="w-full md:w-auto rounded-full px-8 py-3 font-semibold text-white border-0 cursor-pointer"
+            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
           >
             Lưu chỉ số
           </button>
@@ -170,11 +184,11 @@ export function BmiPage() {
         </div>
       </div>
 
-      {chartData.length > 0 && (
-        <div className="rounded-2xl p-6 border" style={{ backgroundColor: 'white', borderColor: 'rgba(26, 32, 44, 0.08)' }}>
-          <h2 className="text-lg font-semibold mb-4" style={{ color: '#1A202C' }}>
-            Xu hướng BMI
-          </h2>
+      <div className="rounded-2xl p-6 border" style={tezcaCardStyle}>
+        <h2 className="text-lg font-semibold mb-4 m-0" style={{ color: tezcaTheme.text }}>
+          Xu hướng BMI
+        </h2>
+        {chartData.length > 0 ? (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -186,8 +200,25 @@ export function BmiPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm m-0 opacity-60" style={{ color: tezcaTheme.text }}>
+            Thêm ít nhất hai lần đo (ngày khác nhau) để xem biểu đồ xu hướng.
+          </p>
+        )}
+      </div>
+
+      <div
+        className="rounded-2xl p-6 md:p-8 border"
+        style={{ backgroundColor: 'white', borderColor: 'rgba(26, 32, 44, 0.08)' }}
+      >
+        <h2 className="text-lg font-semibold mb-1 m-0" style={{ color: tezcaTheme.text }}>
+          Hồ sơ bệnh lý
+        </h2>
+        <p className="text-xs opacity-60 mb-6 m-0" style={{ color: tezcaTheme.text }}>
+          Bổ sung bên cạnh chỉ số BMI — không thay cho khám trực tiếp.
+        </p>
+        <HealthProfileForm token={token} compact />
+      </div>
 
       {entries.length > 0 && (
         <div className="rounded-2xl border overflow-hidden" style={{ backgroundColor: 'white', borderColor: 'rgba(26, 32, 44, 0.08)' }}>

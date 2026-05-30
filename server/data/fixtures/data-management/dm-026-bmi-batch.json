@@ -1,0 +1,50 @@
+{
+  "fileVersion": 1,
+  "recordType": "bmi_import_batch",
+  "label": "Lô BMI #6",
+  "generatedAt": "2026-05-24T12:13:13.957Z",
+  "tags": [
+    "data-management-demo",
+    "bmi_import_batch"
+  ],
+  "payload": {
+    "rows": [
+      {
+        "date": "2026-05-18",
+        "heightCm": 164,
+        "weightKg": 62,
+        "bmi": 23.1,
+        "customerEmail": "kh-demo-007@tezca.vn"
+      },
+      {
+        "date": "2026-05-17",
+        "heightCm": 165,
+        "weightKg": 63,
+        "bmi": 23.1,
+        "customerEmail": "kh-demo-008@tezca.vn"
+      },
+      {
+        "date": "2026-05-16",
+        "heightCm": 166,
+        "weightKg": 64,
+        "bmi": 23.2,
+        "customerEmail": "kh-demo-009@tezca.vn"
+      },
+      {
+        "date": "2026-05-15",
+        "heightCm": 167,
+        "weightKg": 65,
+        "bmi": 23.3,
+        "customerEmail": "kh-demo-010@tezca.vn"
+      },
+      {
+        "date": "2026-05-14",
+        "heightCm": 168,
+        "weightKg": 66,
+        "bmi": 23.4,
+        "customerEmail": "kh-demo-011@tezca.vn"
+      }
+    ],
+    "importMode": "upsert_by_customer_date"
+  }
+}

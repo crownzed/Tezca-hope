@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Link, NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { ROUTES } from '../routes';
 import {
   Flame,
@@ -10,21 +10,35 @@ import {
   ClipboardList,
   Home,
   Stethoscope,
-  LogIn,
   Trophy,
-  Lock,
+  ShieldPlus,
+  Users,
 } from 'lucide-react';
-import { usePatientSession } from '../lib/patientSessionGate';
+import { useCustomerSession } from '../lib/customerSessionGate';
+import { AccountProfileButton } from '../components/AccountProfileRail';
+import { MobileBottomNav, type MobileNavItem } from '../components/tezca/MobileBottomNav';
+import { PageBreadcrumb } from '../components/tezca/PageBreadcrumb';
 import { tezcaTheme } from '../lib/tezcaTheme';
 
 const nav = [
-  { to: ROUTES.app.root, end: true, label: 'Trung tâm Kỷ luật', icon: Flame },
-  { to: ROUTES.app.bmi, label: 'Chỉ số BMI', icon: Scale },
+  { to: ROUTES.app.dashboard, end: true, label: 'Trung tâm Kỷ luật', icon: Flame },
+  { to: ROUTES.app.bmi, label: 'Theo dõi sức khỏe', icon: Scale },
   { to: ROUTES.app.mood, label: 'Nhật ký cảm xúc', icon: Heart },
   { to: ROUTES.app.chat, label: 'Tezca AI', icon: MessageCircle },
   { to: ROUTES.app.expertChat, label: 'Chat chuyên gia', icon: Stethoscope },
+  { to: ROUTES.app.chooseExpert, label: 'Chọn chuyên gia', icon: ShieldPlus },
   { to: ROUTES.app.plans, label: 'Kế hoạch', icon: ClipboardList },
+  { to: ROUTES.community.forum, label: 'Cộng đồng', icon: Users },
   { to: ROUTES.app.rewards, label: 'Phần thưởng', icon: Trophy },
+];
+
+const mobileNav: MobileNavItem[] = [
+  { to: ROUTES.app.dashboard, end: true, label: 'Trung tâm', shortLabel: 'Trung tâm', icon: Flame },
+  { to: ROUTES.app.bmi, label: 'BMI', shortLabel: 'BMI', icon: Scale },
+  { to: ROUTES.app.chat, label: 'Tezca AI', shortLabel: 'AI', icon: MessageCircle },
+  { to: ROUTES.app.expertChat, label: 'Chat chuyên gia', shortLabel: 'Chuyên gia', icon: Stethoscope },
+  { to: ROUTES.app.chooseExpert, label: 'Chọn chuyên gia', shortLabel: 'Chọn CG', icon: ShieldPlus },
+  { to: ROUTES.app.plans, label: 'Kế hoạch', shortLabel: 'Kế hoạch', icon: ClipboardList },
 ];
 
 function SidebarLink({
@@ -47,11 +61,11 @@ function SidebarLink({
           }`}
           style={
             isActive
-              ? { background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)', color: '#1A202C' }
-              : { color: '#1A202C' }
+              ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
+              : { color: tezcaTheme.text }
           }
         >
-          <Icon size={20} />
+          <Icon size={20} aria-hidden />
           <span className="whitespace-nowrap">{label}</span>
         </span>
       )}
@@ -59,97 +73,73 @@ function SidebarLink({
   );
 }
 
-function userInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
-}
-
 export function UserAppLayout() {
-  const { user, token, sessionReady, isAuthenticated, isVerifying, logout } = usePatientSession();
+  const { user, token, sessionReady, isAuthenticated, isVerifying, logout } = useCustomerSession();
+  const { pathname } = useLocation();
+  const whiteShell =
+    pathname === ROUTES.app.dashboard ||
+    pathname === ROUTES.app.root ||
+    pathname === ROUTES.app.expertChat;
+  const pageBg = whiteShell ? tezcaTheme.surface : tezcaTheme.bg;
+
+  const profileProps = {
+    role: 'customer' as const,
+    user: isAuthenticated && user ? { name: user.name, email: user.email } : null,
+    isVerifying,
+    onLogout: logout,
+  };
 
   useEffect(() => {
     if (sessionReady && token && !user) logout();
   }, [sessionReady, token, user, logout]);
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row" style={{ backgroundColor: tezcaTheme.bg }}>
+    <div className="min-h-screen flex flex-col xl:flex-row" style={{ backgroundColor: pageBg }}>
       <aside
-        className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r px-4 py-4 md:py-8"
-        style={{ borderColor: 'rgba(26, 32, 44, 0.08)', backgroundColor: 'rgba(255,255,255,0.9)' }}
+        className="hidden xl:flex xl:w-64 shrink-0 flex-col border-b xl:border-b-0 xl:border-r px-4 py-4 xl:py-8"
+        style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.sidebarSurface }}
       >
         <Link
           to={ROUTES.home}
-          className="flex items-center gap-2 mb-6 px-2 text-sm font-medium opacity-70 hover:opacity-100"
-          style={{ color: '#1A202C' }}
+          className="flex items-center gap-2 mb-6 px-2 text-sm font-medium opacity-70 hover:opacity-100 no-underline"
+          style={{ color: tezcaTheme.text }}
         >
-          <Home size={18} />
+          <Home size={18} aria-hidden />
           Về trang chủ
         </Link>
-        <p className="px-2 text-xs font-semibold uppercase tracking-wider opacity-40 mb-3" style={{ color: '#1A202C' }}>
-          Ứng dụng
+        <p
+          className="px-2 text-xs font-semibold uppercase tracking-wider opacity-40 mb-3"
+          style={{ color: tezcaTheme.text }}
+        >
+          Ứng dụng khách hàng
         </p>
-        <nav className="flex md:flex-col gap-1 overflow-x-auto pb-1 md:pb-0">
+        <nav className="flex flex-col gap-1">
           {nav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
         </nav>
-        <div className="mt-6 pt-4 border-t px-2 space-y-2" style={{ borderColor: 'rgba(26, 32, 44, 0.08)' }}>
-          {isVerifying ? (
-            <p className="text-xs opacity-50 m-0 px-1" style={{ color: '#1A202C' }}>
-              Đang xác thực tài khoản…
-            </p>
-          ) : isAuthenticated && user ? (
-            <div
-              className="rounded-xl p-3 space-y-2"
-              style={{ backgroundColor: 'rgba(45, 212, 191, 0.1)', border: '1px solid rgba(45, 212, 191, 0.25)' }}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
-                  style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)', color: '#1A202C' }}
-                  aria-hidden
-                >
-                  {userInitials(user.name)}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold m-0 truncate" style={{ color: '#1A202C' }}>
-                    {user.name}
-                  </p>
-                  <p className="text-[11px] opacity-60 m-0 truncate" style={{ color: '#1A202C' }} title={user.email}>
-                    {user.email}
-                  </p>
-                </div>
-              </div>
-              <p className="text-[10px] m-0 flex items-center gap-1 opacity-70" style={{ color: '#0F766E' }}>
-                <Lock size={10} />
-                Dữ liệu &amp; chat AI riêng tư theo tài khoản
-              </p>
-              <button
-                type="button"
-                onClick={logout}
-                className="text-xs font-medium opacity-80 hover:opacity-100 w-full text-left border-0 bg-transparent cursor-pointer p-0"
-                style={{ color: '#0F766E' }}
-              >
-                Đăng xuất
-              </button>
-            </div>
-          ) : (
-            <Link
-              to={ROUTES.app.login}
-              className="flex items-center gap-2 text-sm font-medium py-2 rounded-xl px-2"
-              style={{ color: '#1A202C', backgroundColor: 'rgba(45, 212, 191, 0.12)' }}
-            >
-              <LogIn size={18} />
-              Đăng nhập đồng bộ
-            </Link>
-          )}
+        <div className="mt-auto pt-6">
+          <AccountProfileButton {...profileProps} menuPlacement="top" menuAlign="start" />
         </div>
       </aside>
-      <div className="flex-1 p-6 md:p-10 overflow-auto" style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}>
-        <Outlet />
+
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 pb-[4.5rem] xl:pb-0">
+        <header
+          className="xl:hidden shrink-0 border-b px-4 py-3 flex items-center justify-between gap-2"
+          style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.sidebarSurface }}
+        >
+          <Link to={ROUTES.home} className="font-semibold text-sm no-underline" style={{ color: tezcaTheme.text }}>
+            Tezca
+          </Link>
+          <AccountProfileButton {...profileProps} compact className="shrink-0" buttonClassName="px-2 py-2 rounded-xl" />
+        </header>
+        <div className="flex-1 p-4 sm:p-6 md:p-10 overflow-auto" style={{ backgroundColor: pageBg, color: tezcaTheme.text }}>
+          <PageBreadcrumb pathname={pathname} />
+          <Outlet />
+        </div>
       </div>
+
+      <MobileBottomNav items={mobileNav} />
     </div>
   );
 }

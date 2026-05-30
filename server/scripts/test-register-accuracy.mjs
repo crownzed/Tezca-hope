@@ -46,7 +46,7 @@ record(
 const token = ok1.json.token;
 
 // 2. Đăng nhập sau đăng ký (cùng mật khẩu)
-const login1 = await post('/api/auth/patient/login', { email, password });
+const login1 = await post('/api/auth/customer/login', { email, password });
 record(
   'Đăng nhập patient sau đăng ký',
   login1.status === 200 && login1.json.user?.email === email.toLowerCase(),

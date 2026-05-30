@@ -1,10 +1,10 @@
 import {
   findUserById,
-  getPatientIdsForExpert,
+  getCustomerIdsForExpert,
   listBmiForUser,
   listMoodsForUser,
   listBotMessagesForUser,
-  listLiveMessagesForPatient,
+  listLiveMessagesForCustomer,
 } from './db.js';
 
 function parseIsoDate(iso) {
@@ -54,32 +54,36 @@ function inTsRange(ts, startTs, endTs) {
   return ts >= startTs && ts <= endTs;
 }
 
+function isCustomerSenderRole(role) {
+  return role === 'customer' || role === 'patient';
+}
+
 export function buildWeeklyReport(expertId, weekStartIso) {
   const { from, to, startTs, endTs } = weekRangeFromStart(weekStartIso);
-  const patientIds = getPatientIdsForExpert(expertId);
+  const customerIds = getCustomerIdsForExpert(expertId);
 
   let liveMessagesTotal = 0;
-  let liveFromPatients = 0;
+  let liveFromCustomers = 0;
   let liveFromExpert = 0;
   let bmiEntries = 0;
   let moodEntries = 0;
   let botMessages = 0;
   let needsReplyCount = 0;
   let lowMoodCount = 0;
-  let activePatients = 0;
+  let activeCustomers = 0;
 
-  const patients = patientIds.map((pid) => {
-    const u = findUserById(pid);
-    const live = listLiveMessagesForPatient(pid).filter((m) => inTsRange(m.ts, startTs, endTs));
-    const bmi = listBmiForUser(pid).filter((e) => inDateRange(e.date, from, to));
-    const moods = listMoodsForUser(pid).filter((e) => inDateRange(e.date, from, to));
-    const bot = listBotMessagesForUser(pid).filter((m) => inTsRange(m.ts, startTs, endTs));
+  const customers = customerIds.map((cid) => {
+    const u = findUserById(cid);
+    const live = listLiveMessagesForCustomer(cid).filter((m) => inTsRange(m.ts, startTs, endTs));
+    const bmi = listBmiForUser(cid).filter((e) => inDateRange(e.date, from, to));
+    const moods = listMoodsForUser(cid).filter((e) => inDateRange(e.date, from, to));
+    const bot = listBotMessagesForUser(cid).filter((m) => inTsRange(m.ts, startTs, endTs));
 
-    const livePatient = live.filter((m) => m.senderRole === 'patient').length;
+    const liveCustomer = live.filter((m) => isCustomerSenderRole(m.senderRole)).length;
     const liveExpert = live.filter((m) => m.senderRole === 'expert').length;
 
     liveMessagesTotal += live.length;
-    liveFromPatients += livePatient;
+    liveFromCustomers += liveCustomer;
     liveFromExpert += liveExpert;
     bmiEntries += bmi.length;
     moodEntries += moods.length;
@@ -94,11 +98,11 @@ export function buildWeeklyReport(expertId, weekStartIso) {
     if (weekMoodLow) lowMoodCount += 1;
 
     const lastLive = live.length ? live[live.length - 1] : null;
-    const needsReply = lastLive?.senderRole === 'patient';
+    const needsReply = lastLive ? isCustomerSenderRole(lastLive.senderRole) : false;
     if (needsReply) needsReplyCount += 1;
 
     const active = live.length + bmi.length + moods.length + bot.length > 0;
-    if (active) activePatients += 1;
+    if (active) activeCustomers += 1;
 
     const highlights = [];
     if (needsReply) highlights.push('Cần phản hồi chat');
@@ -113,12 +117,12 @@ export function buildWeeklyReport(expertId, weekStartIso) {
     const lastActivity = activityDates.length ? activityDates[activityDates.length - 1] : null;
 
     return {
-      id: pid,
+      id: cid,
       name: u?.name || '—',
       email: u?.email || '',
       stats: {
         liveMessages: live.length,
-        liveFromPatient: livePatient,
+        liveFromCustomer: liveCustomer,
         liveFromExpert: liveExpert,
         bmiEntries: bmi.length,
         moodEntries: moods.length,
@@ -131,7 +135,7 @@ export function buildWeeklyReport(expertId, weekStartIso) {
     };
   });
 
-  patients.sort((a, b) => {
+  customers.sort((a, b) => {
     if (a.needsReply !== b.needsReply) return a.needsReply ? -1 : 1;
     const ta = a.lastActivity || '';
     const tb = b.lastActivity || '';
@@ -147,10 +151,10 @@ export function buildWeeklyReport(expertId, weekStartIso) {
       label: formatPeriodLabel(from, to),
     },
     summary: {
-      patientCount: patientIds.length,
-      activePatients,
+      customerCount: customerIds.length,
+      activeCustomers,
       liveMessagesTotal,
-      liveFromPatients,
+      liveFromCustomers,
       liveFromExpert,
       bmiEntries,
       moodEntries,
@@ -158,6 +162,6 @@ export function buildWeeklyReport(expertId, weekStartIso) {
       needsReplyCount,
       lowMoodCount,
     },
-    patients,
+    customers,
   };
 }

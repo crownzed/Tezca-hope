@@ -5,7 +5,7 @@ const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
 const body = { email: 'patient@tezca.vn', password: 'TezcaDemo#2026' };
 
 const paths = [
-  '/api/auth/patient/login',
+  '/api/auth/customer/login',
   '/api/auth/login',
   '/auth/patient/login',
 ];

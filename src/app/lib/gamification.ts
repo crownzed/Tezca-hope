@@ -151,7 +151,7 @@ export function deriveGamificationState(): GamificationState {
     typeof localStorage !== 'undefined'
       ? (() => {
           try {
-            const raw = localStorage.getItem('tezca_patient_user');
+            const raw = localStorage.getItem('tezca_customer_user');
             if (!raw) return null;
             return (JSON.parse(raw) as { id?: string }).id ?? null;
           } catch {

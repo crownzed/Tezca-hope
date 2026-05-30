@@ -1,22 +1,22 @@
 import { insertLiveMessage } from './db.js';
 
-/** @type {((patientId: string, payload: object, exceptWs?: import('ws').WebSocket) => void) | null} */
+/** @type {((customerId: string, payload: object, exceptWs?: import('ws').WebSocket) => void) | null} */
 let roomBroadcast = null;
 
 export function registerLiveRoomBroadcast(fn) {
   roomBroadcast = fn;
 }
 
-export function sendLiveChatMessage({ patientId, senderUserId, senderRole, content }, exceptWs) {
+export function sendLiveChatMessage({ customerId, senderUserId, senderRole, content }, exceptWs) {
   const text = String(content || '').trim().slice(0, 4000);
   if (!text) return null;
   const msg = insertLiveMessage({
-    patientId,
+    customerId,
     senderUserId,
     senderRole,
     content: text,
   });
   const out = { type: 'live_message', message: msg };
-  if (roomBroadcast) roomBroadcast(patientId, out, exceptWs);
+  if (roomBroadcast) roomBroadcast(customerId, out, exceptWs);
   return msg;
 }

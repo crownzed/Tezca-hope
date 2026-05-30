@@ -1,0 +1,157 @@
+@startuml Tezca_QuyTrinh_NghiepVu_BPMN
+
+' ===== BPMN Readable Style =====
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI", sans-serif
+skinparam dpi 200
+skinparam defaultFontSize 20
+scale 1.2
+skinparam linetype ortho
+skinparam roundcorner 8
+skinparam ArrowColor #607D8B
+skinparam ArrowFontColor #455A64
+skinparam ArrowFontSize 16
+
+skinparam Activity {
+  BackgroundColor #FFFFFF
+  BorderColor #1976D2
+  BorderThickness 2.2
+  FontColor #263238
+  FontSize 20
+}
+
+skinparam ActivityDiamond {
+  BackgroundColor #FFF9C4
+  BorderColor #F57F17
+  BorderThickness 2
+  FontColor #263238
+  FontSize 18
+}
+
+skinparam Swimlane {
+  BorderColor #CFD8DC
+  BorderThickness 2
+  TitleBackgroundColor #F4F8FB
+  TitleFontColor #0D47A1
+  TitleFontSize 22
+  TitleFontStyle bold
+}
+
+skinparam ActivityStartColor #43A047
+skinparam ActivityEndColor #E53935
+
+title Sơ đồ quy trình nghiệp vụ BPMN (1 ảnh tổng thể) — Tezca Health\n
+
+' ===== LANES =====
+|Khách hàng (Client)|
+|Hệ thống Tezca (API / AI / DB)|
+|Chuyên gia (Expert / Doctor Desk)|
+|Quản trị viên (Admin)|
+
+|Khách hàng (Client)|
+start
+:Đăng nhập / Xác thực;
+:Cập nhật thông số cơ thể\n(BMI · mood · bệnh lý nền);
+:Yêu cầu tạo lộ trình mới;
+
+|Hệ thống Tezca (API / AI / DB)|
+:Đóng gói Prompt + hồ sơ;
+:Gọi Gemini API (HTTPS);
+:Parse JSON & Lưu lộ trình\n(Status: Pending Review);
+:Thông báo yêu cầu duyệt giáo án;
+
+|Chuyên gia (Expert / Doctor Desk)|
+:Nhận thông báo & mở Doctor Desk;
+:Xem lộ trình AI đề xuất;
+if (Cần điều chỉnh chuyên môn?) then (Có)
+  :Chỉnh bài tập · sets · reps;
+  :Ghi chú chuyên môn (Expert Note);
+else (Không)
+endif
+:Phê duyệt giáo án;
+
+|Hệ thống Tezca (API / AI / DB)|
+:Cập nhật Status = Approved;
+:Ghi Audit Log\n(action = approve_plan);
+:Emit WebSocket sync tới Client;
+
+|Khách hàng (Client)|
+:Nhận thông báo giáo án mới;
+fork
+  :Thực hiện tập luyện\n& đánh dấu hoàn thành;
+fork again
+  :Đo lường & cập nhật BMI;
+fork again
+  :Ghi nhật ký cảm xúc (mood);
+end fork
+
+|Hệ thống Tezca (API / AI / DB)|
+:Upsert dữ liệu vào SQLite;
+:Tổng hợp & tính toán\nchỉ số tuần;
+
+|Chuyên gia (Expert / Doctor Desk)|
+:Xem Dashboard báo cáo tuần;
+:Đánh giá tiến độ & tư vấn;
+:Gửi yêu cầu hỗ trợ vận hành\n(nếu có nội dung cần kiểm duyệt);
+
+|Quản trị viên (Admin)|
+:Đăng nhập hệ thống quản trị;
+fork
+  :Cấp quyền chuyên gia\n(tạo tài khoản · gán role expert);
+  |Hệ thống Tezca (API / AI / DB)|
+  :Ghi Audit Log\n(action = grant_expert);
+fork again
+  |Quản trị viên (Admin)|
+  :Rà soát nội dung bị báo cáo\n(posts / comments);
+  if (Xác nhận vi phạm?) then (Có)
+    |Hệ thống Tezca (API / AI / DB)|
+    :Xóa nội dung vi phạm;
+    :Ghi lý do kiểm duyệt vào audit_logs;
+  else (Không)
+    |Quản trị viên (Admin)|
+    :Giữ nguyên nội dung;
+  endif
+end fork
+|Quản trị viên (Admin)|
+:Kết thúc phiên quản trị;
+
+|Khách hàng (Client)|
+:Truy cập diễn đàn cộng đồng;
+fork
+  :Đăng bài / Bình luận\nchia sẻ kinh nghiệm sức khỏe;
+fork again
+  :Tham gia chat nhóm chủ đề\n(Dinh dưỡng · Tâm lý · Cơ xương khớp);
+end fork
+
+|Hệ thống Tezca (API / AI / DB)|
+:Lưu nội dung tương tác cộng đồng;
+
+|Quản trị viên (Admin)|
+:Theo dõi nội dung báo cáo\nđể kiểm duyệt khi cần;
+
+|Khách hàng (Client)|
+:Hỏi đáp sức khỏe với AI;
+
+|Hệ thống Tezca (API / AI / DB)|
+:Gửi hội thoại tới Gemini API;
+:Nhận phản hồi dạng streaming;
+:Lưu lịch sử hội thoại\n(bot_messages);
+
+|Khách hàng (Client)|
+:Nhận tư vấn AI theo ngữ cảnh cá nhân;
+:Mở chat trực tiếp với chuyên gia;
+
+|Hệ thống Tezca (API / AI / DB)|
+:Thiết lập WebSocket /ws;
+
+|Chuyên gia (Expert / Doctor Desk)|
+:Trao đổi realtime với khách hàng;
+
+|Hệ thống Tezca (API / AI / DB)|
+:Lưu live_messages & đồng bộ 2 chiều;
+
+|Khách hàng (Client)|
+stop
+
+@enduml
+
