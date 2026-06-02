@@ -14,6 +14,7 @@ function mapCommunityPostRow(row, viewerId) {
     userId: row.user_id,
     authorName: row.author_name || row.user_name || 'Thành viên',
     authorRole: row.author_role || row.user_role || 'user',
+    authorSpecialty: row.author_specialty || '',
     topic: row.topic,
     content: row.content,
     imageUrl: row.image_url || '',
@@ -39,9 +40,11 @@ export function listCommunityPosts({ topic, limit = 30, beforeTs, viewerId, incl
   const params = [];
   let sql = `
     SELECT p.*, u.name AS author_name, u.role AS author_role,
+      COALESCE(ep.specialty, '') AS author_specialty,
       ${POST_STATS_SQL}
     FROM community_posts p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN expert_profiles ep ON ep.user_id = p.user_id
     WHERE 1=1
     ${ROOT_POSTS_ONLY}
   `;
@@ -65,9 +68,11 @@ export function listCommunityPosts({ topic, limit = 30, beforeTs, viewerId, incl
 export function getCommunityPostById(postId, viewerId, { includeHidden = false } = {}) {
   let sql = `
     SELECT p.*, u.name AS author_name, u.role AS author_role,
+      COALESCE(ep.specialty, '') AS author_specialty,
       ${POST_STATS_SQL}
     FROM community_posts p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN expert_profiles ep ON ep.user_id = p.user_id
     WHERE p.id = ?
   `;
   if (!includeHidden) sql += ` AND p.status = 'published'`;
@@ -105,9 +110,11 @@ export function listCommunityThreadReplies(parentPostId, { beforeTs, limit = 30,
   const params = [parentPostId];
   let sql = `
     SELECT p.*, u.name AS author_name, u.role AS author_role,
+      COALESCE(ep.specialty, '') AS author_specialty,
       ${POST_STATS_SQL}
     FROM community_posts p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN expert_profiles ep ON ep.user_id = p.user_id
     WHERE p.parent_post_id = ? AND p.status = 'published'
   `;
   if (beforeTs) {
@@ -138,9 +145,11 @@ export function deleteCommunityPost(postId, userId, isAdmin = false) {
 
 export function listCommunityComments(postId, { includeHidden = false } = {}) {
   let sql = `
-    SELECT c.*, u.name AS author_name, u.role AS author_role
+    SELECT c.*, u.name AS author_name, u.role AS author_role,
+      COALESCE(ep.specialty, '') AS author_specialty
     FROM community_comments c
     JOIN users u ON u.id = c.user_id
+    LEFT JOIN expert_profiles ep ON ep.user_id = c.user_id
     WHERE c.post_id = ?
   `;
   if (!includeHidden) sql += ` AND c.status = 'published'`;
@@ -152,6 +161,7 @@ export function listCommunityComments(postId, { includeHidden = false } = {}) {
     userId: r.user_id,
     authorName: r.author_name,
     authorRole: r.author_role,
+    authorSpecialty: r.author_specialty || '',
     content: r.content,
     status: r.status,
     createdAt: r.created_at,
@@ -170,8 +180,12 @@ export function createCommunityComment({ id, postId, userId, content }) {
     .run(id, postId, userId, content, now);
   const row = getDb()
     .prepare(
-      `SELECT c.*, u.name AS author_name, u.role AS author_role
-       FROM community_comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`,
+      `SELECT c.*, u.name AS author_name, u.role AS author_role,
+        COALESCE(ep.specialty, '') AS author_specialty
+       FROM community_comments c
+       JOIN users u ON u.id = c.user_id
+       LEFT JOIN expert_profiles ep ON ep.user_id = c.user_id
+       WHERE c.id = ?`,
     )
     .get(id);
   return {
@@ -180,6 +194,7 @@ export function createCommunityComment({ id, postId, userId, content }) {
     userId: row.user_id,
     authorName: row.author_name,
     authorRole: row.author_role,
+    authorSpecialty: row.author_specialty || '',
     content: row.content,
     status: row.status,
     createdAt: row.created_at,
@@ -397,9 +412,11 @@ export function listCommunityFeed({
   const params = [];
   let sql = `
     SELECT p.*, u.name AS author_name, u.role AS author_role,
+      COALESCE(ep.specialty, '') AS author_specialty,
       ${POST_STATS_SQL}
     FROM community_posts p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN expert_profiles ep ON ep.user_id = p.user_id
     WHERE p.status = 'published'
     ${ROOT_POSTS_ONLY}
   `;

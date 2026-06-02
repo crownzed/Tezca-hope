@@ -1,4 +1,5 @@
 import { Bell, MessagesSquare } from 'lucide-react';
+import { communityShell } from '../../lib/communityShellTheme';
 import { tezcaTheme } from '../../lib/tezcaTheme';
 import { POST_TOPICS, type CommunityPostTopic } from '../../lib/communityTopics';
 import { EmptyState } from '../tezca/EmptyState';
@@ -40,10 +41,11 @@ type ForumFeedProps = {
   onToggleLike: (postId: string) => void;
   onToggleComments: (postId: string) => void;
   onReport: (postId: string) => void;
+  onDelete: (postId: string) => void;
   onCommentDraftChange: (postId: string, value: string) => void;
   onThreadReplyDraftChange: (postId: string, value: string) => void;
-  onSubmitComment: (postId: string) => void;
-  onSubmitThreadReply: (postId: string) => void;
+  onSubmitComment: (postId: string) => Promise<void> | void;
+  onSubmitThreadReply: (postId: string) => Promise<void> | void;
 };
 
 export function ForumFeed({
@@ -69,6 +71,7 @@ export function ForumFeed({
   onToggleLike,
   onToggleComments,
   onReport,
+  onDelete,
   threadReplies,
   threadReplyDraft,
   followedTopics,
@@ -99,15 +102,21 @@ export function ForumFeed({
         onSubmit={onSubmitPost}
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div
+        className="flex flex-wrap gap-2 p-2 rounded-xl border"
+        style={{
+          backgroundColor: communityShell.cardBg,
+          borderColor: communityShell.cardBorder,
+        }}
+      >
         <button
           type="button"
           onClick={() => onTopicFilterChange('')}
           className="text-xs px-3 py-1.5 rounded-full border cursor-pointer"
           style={
             !topicFilter
-              ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
-              : { borderColor: tezcaTheme.border }
+              ? { backgroundColor: communityShell.navActiveBg, borderColor: 'transparent' }
+              : { borderColor: communityShell.cardBorder, color: communityShell.navText, backgroundColor: 'transparent' }
           }
         >
           Tất cả
@@ -120,8 +129,8 @@ export function ForumFeed({
               className="text-xs px-3 py-1.5 rounded-full border cursor-pointer"
               style={
                 topicFilter === t.id
-                  ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
-                  : { borderColor: tezcaTheme.border }
+                  ? { backgroundColor: communityShell.navActiveBg, borderColor: 'transparent' }
+                  : { borderColor: communityShell.cardBorder, color: communityShell.navText, backgroundColor: 'transparent' }
               }
             >
               {t.label}
@@ -171,6 +180,7 @@ export function ForumFeed({
             onToggleLike={onToggleLike}
             onToggleComments={onToggleComments}
             onReport={onReport}
+            onDelete={onDelete}
             onCommentDraftChange={onCommentDraftChange}
             onThreadReplyDraftChange={onThreadReplyDraftChange}
             onSubmitComment={onSubmitComment}

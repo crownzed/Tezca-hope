@@ -19,72 +19,76 @@ import {
 } from '../db.js';
 import { broadcastCommunityEvent, forumChannel } from '../communityDelivery.js';
 
-export function listPosts(opts) {
+export async function listPosts(opts) {
   return listCommunityPosts(opts);
 }
 
-export function listFeed(opts) {
+export async function listFeed(opts) {
   return listCommunityFeed(opts);
 }
 
-export function followUser(followerId, followingId) {
+export async function followUser(followerId, followingId) {
   return followCommunityUser(followerId, followingId);
 }
 
-export function unfollowUser(followerId, followingId) {
+export async function unfollowUser(followerId, followingId) {
   return unfollowCommunityUser(followerId, followingId);
 }
 
-export function listFollowedUserIds(followerId) {
+export async function listFollowedUserIds(followerId) {
   return listFollowedCommunityUserIds(followerId);
 }
 
-export function followTopic(userId, topic) {
+export async function followTopic(userId, topic) {
   return followCommunityTopic(userId, topic);
 }
 
-export function unfollowTopic(userId, topic) {
+export async function unfollowTopic(userId, topic) {
   return unfollowCommunityTopic(userId, topic);
 }
 
-export function listFollowedTopics(userId) {
+export async function listFollowedTopics(userId) {
   return listFollowedCommunityTopics(userId);
 }
 
-export function listThreadReplies(parentPostId, opts) {
+export async function listThreadReplies(parentPostId, opts) {
   return listCommunityThreadReplies(parentPostId, opts);
 }
 
-export function addThreadReply(input) {
-  const post = createCommunityThreadReply(input);
+export async function addThreadReply(input) {
+  const post = await createCommunityThreadReply(input);
   if (post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post', post });
   }
   return post;
 }
 
-export function getPost(postId, viewerId, opts) {
+export async function getPost(postId, viewerId, opts) {
   return getCommunityPostById(postId, viewerId, opts);
 }
 
-export function createPost(input) {
-  const post = createCommunityPost(input);
+export async function createPost(input) {
+  const post = await createCommunityPost(input);
   if (post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post', post });
   }
   return post;
 }
 
-export function removeOwnPost(postId, userId, isAdmin) {
-  return deleteCommunityPost(postId, userId, isAdmin);
+export async function removeOwnPost(postId, userId, isAdmin) {
+  const ok = await deleteCommunityPost(postId, userId, isAdmin);
+  if (ok) {
+    broadcastCommunityEvent(forumChannel(), { type: 'community_post_removed', postId });
+  }
+  return ok;
 }
 
-export function listComments(postId, opts) {
+export async function listComments(postId, opts) {
   return listCommunityComments(postId, opts);
 }
 
-export function addComment(input) {
-  const comment = createCommunityComment(input);
+export async function addComment(input) {
+  const comment = await createCommunityComment(input);
   if (comment) {
     broadcastCommunityEvent(forumChannel(), {
       type: 'community_comment',
@@ -95,10 +99,10 @@ export function addComment(input) {
   return comment;
 }
 
-export function likePost(postId, userId) {
+export async function likePost(postId, userId) {
   return toggleCommunityPostLike(postId, userId);
 }
 
-export function reportContent(input) {
+export async function reportContent(input) {
   return createCommunityReport(input);
 }

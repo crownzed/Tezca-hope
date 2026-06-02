@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch, canUseWebSocket } from '../../lib/api';
 import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
@@ -55,6 +56,9 @@ function loadRoomReadState(): Record<CommunityRoomTopic, number> {
 
 export function CommunityPage({ mode }: CommunityPageProps) {
   const { token, user } = useAnyCommunitySession();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkPostId = searchParams.get('post');
+  const deepLinkHandled = useRef(false);
   const tab = mode;
   const [feedMode, setFeedMode] = useState<CommunityFeedMode>('for_you');
   const [topicFilter, setTopicFilter] = useState<CommunityPostTopic | ''>('');
@@ -79,6 +83,7 @@ export function CommunityPage({ mode }: CommunityPageProps) {
 
   const [roomTopic, setRoomTopic] = useState<CommunityRoomTopic>('nutrition');
   const [roomMessages, setRoomMessages] = useState<RoomChatMessage[]>([]);
+  const [roomLoading, setRoomLoading] = useState(false);
   const [roomDraft, setRoomDraft] = useState('');
   const [roomLatestByTopic, setRoomLatestByTopic] = useState<Record<CommunityRoomTopic, number>>(
     defaultRoomState,
@@ -130,6 +135,21 @@ export function CommunityPage({ mode }: CommunityPageProps) {
   useEffect(() => {
     loadPosts();
   }, [loadPosts]);
+
+  /* Deep link: ?post=<id> — open that post when feed finishes loading */
+  useEffect(() => {
+    if (!deepLinkPostId || deepLinkHandled.current || loading) return;
+    const found = posts.find((p) => p.id === deepLinkPostId);
+    if (!found) return;
+    deepLinkHandled.current = true;
+    setExpandedPost(deepLinkPostId);
+    if (!comments[deepLinkPostId]) void loadComments(deepLinkPostId);
+    if (!threadReplies[deepLinkPostId]) void loadThreadReplies(deepLinkPostId);
+    setSearchParams((prev) => { prev.delete('post'); return prev; }, { replace: true });
+    setTimeout(() => {
+      document.getElementById(`post-${deepLinkPostId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  }, [deepLinkPostId, posts, loading, comments, threadReplies, setSearchParams]);
 
   useEffect(() => {
     if (!token || tab !== 'forum') return;
@@ -340,6 +360,19 @@ export function CommunityPage({ mode }: CommunityPageProps) {
     alert('Đã gửi báo cáo. Cảm ơn bạn đã giúp cộng đồng an toàn.');
   };
 
+  const deletePost = async (postId: string) => {
+    if (!token || !window.confirm('Xóa bài viết này? Hành động này không thể hoàn tác.')) return;
+    try {
+      await apiFetch(`/api/community/posts/${encodeURIComponent(postId)}`, {
+        method: 'DELETE',
+        token,
+      });
+      setPosts((list) => list.filter((p) => p.id !== postId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể xóa bài viết');
+    }
+  };
+
   const markRoomAsRead = useCallback((topic: CommunityRoomTopic, ts: number) => {
     if (!ts) return;
     setRoomReadAtByTopic((prev) => {
@@ -352,8 +385,9 @@ export function CommunityPage({ mode }: CommunityPageProps) {
     });
   }, []);
 
-  const loadRoom = useCallback(() => {
+  const loadRoom = useCallback((showLoading = false) => {
     if (!token) return;
+    if (showLoading) setRoomLoading(true);
     apiFetch<{ messages: RoomChatMessage[] }>(
       `/api/community/rooms/${encodeURIComponent(roomTopic)}/messages`,
       { token },
@@ -363,7 +397,8 @@ export function CommunityPage({ mode }: CommunityPageProps) {
         const latest = r.messages[r.messages.length - 1]?.createdAt || 0;
         setRoomLatestByTopic((prev) => ({ ...prev, [roomTopic]: Math.max(prev[roomTopic] || 0, latest) }));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setRoomLoading(false));
   }, [token, roomTopic]);
 
   const loadRoomSnapshots = useCallback(() => {
@@ -393,7 +428,8 @@ export function CommunityPage({ mode }: CommunityPageProps) {
 
   useEffect(() => {
     if (tab !== 'rooms') return;
-    loadRoom();
+    setRoomMessages([]);
+    loadRoom(true);
     loadRoomSnapshots();
   }, [tab, loadRoom, loadRoomSnapshots]);
 
@@ -476,23 +512,25 @@ export function CommunityPage({ mode }: CommunityPageProps) {
     count: posts.filter((post) => post.topic === topic.id).length,
   })).sort((a, b) => b.count - a.count);
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold m-0" style={{ color: tezcaTheme.text }}>
-          {tab === 'forum' ? 'Bảng tin cộng đồng' : 'Phòng chat theo chủ đề'}
-        </h1>
-        <p className="mt-2 m-0 opacity-70 text-sm leading-relaxed" style={{ color: tezcaTheme.text }}>
-          {tab === 'forum'
-            ? 'Feed kiểu Threads — đăng bài ngắn, theo dõi chủ đề và tương tác với cộng đồng sức khỏe.'
-            : 'Trò chuyện thời gian thực theo chủ đề dinh dưỡng, tâm lý và cơ · xương · khớp (Discord-lite).'}
-        </p>
-      </div>
+    <div className="space-y-4">
+      {tab !== 'forum' && (
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold m-0" style={{ color: tezcaTheme.text }}>
+            Phòng chat theo chủ đề
+          </h1>
+          <p className="mt-1 m-0 text-sm opacity-70" style={{ color: tezcaTheme.text }}>
+            Trò chuyện theo chủ đề dinh dưỡng, tâm lý và cơ · xương · khớp.
+          </p>
+        </div>
+      )}
 
-      {error && <p className="text-sm text-red-600 m-0">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-600 m-0 rounded-xl px-4 py-2 bg-red-50 border border-red-100">{error}</p>
+      )}
 
       {tab === 'forum' && (
-        <div className="flex gap-6 items-start justify-center xl:justify-start">
-          <div className="flex-1 min-w-0 max-w-[680px] space-y-4">
+        <div className="flex gap-6 items-start justify-center">
+          <div className="flex-1 min-w-0 w-full max-w-[680px] space-y-4 mx-auto xl:mx-0">
             <ForumFeed
               authorName={user?.name || 'Bạn'}
               feedMode={feedMode}
@@ -534,12 +572,17 @@ export function CommunityPage({ mode }: CommunityPageProps) {
               }
               onSubmitComment={submitComment}
               onSubmitThreadReply={submitThreadReply}
+              onDelete={deletePost}
             />
           </div>
           <CommunityRightAside
             posts={posts}
             topicStat={topicStat}
             onTopicSelect={(id) => setTopicFilter(id)}
+            token={token}
+            currentUserId={user?.id}
+            followedUserIds={followedUserIds}
+            onToggleFollowAuthor={toggleFollowAuthor}
           />
         </div>
       )}
@@ -550,11 +593,15 @@ export function CommunityPage({ mode }: CommunityPageProps) {
             currentUserName={user?.name || 'Bạn'}
             roomTopic={roomTopic}
             messages={roomMessages}
+            loading={roomLoading}
             draft={roomDraft}
             unreadByTopic={roomUnreadByTopic}
             onlineMembers={onlineMembers}
             typingText={typingText}
-            onRoomTopicChange={setRoomTopic}
+            onRoomTopicChange={(topic) => {
+              setRoomTopic(topic);
+              setRoomMessages([]);
+            }}
             onDraftChange={handleRoomDraftChange}
             onSend={sendRoomMessage}
             fetchMentionCandidates={fetchRoomMentionCandidates}
