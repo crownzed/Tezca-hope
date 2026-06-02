@@ -3,13 +3,20 @@ import { apiFetch } from './api';
 import {
   loadDailyProgressLocal,
   loadDashboardExercises,
+  loadExerciseSchedule,
   loadFoodLog,
   saveDailyProgressLocal,
   saveDashboardExercises,
+  saveExerciseSchedule,
   saveFoodLog,
   type DashboardExercise,
   type FoodLogItem,
 } from './dashboardStorage';
+import {
+  getExercisesForIso,
+  normalizePlanExercisesFromApi,
+  type ParsedPlanSchedule,
+} from './trainingPlanSchedule';
 import { syncTrainingProgressToServer } from './syncTrainingProgress';
 import type { TrainingPlanResponse, TrainingPlanStatus } from './trainingPlan';
 import {
@@ -27,6 +34,7 @@ export type DisciplineScopeKind = 'guest' | 'account';
 
 export type DisciplineLocalBundle = {
   exercises: DashboardExercise[];
+  exerciseSchedule: Record<string, DashboardExercise[]>;
   dailyProgress: DailyProgressMap;
   foodLog: FoodLogItem[];
 };
@@ -77,6 +85,7 @@ export function loadDisciplineLocalBundle(scopeId: string | null): DisciplineLoc
   if (scopeId) adoptGuestDisciplineDataIntoAccount(scopeId);
   return {
     exercises: loadDashboardExercises(scopeId),
+    exerciseSchedule: loadExerciseSchedule(scopeId),
     dailyProgress: loadDailyProgressLocal(scopeId),
     foodLog: loadFoodLog(scopeId),
   };
@@ -105,10 +114,15 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
   const scopeId = userId;
   const { canSync, kind } = resolveDisciplineScope(scopeId, token);
 
-  const [baseExercises, setBaseExercises] = useState<DashboardExercise[]>(() => {
+  const [schedule, setSchedule] = useState<ParsedPlanSchedule>(() => {
     const initial = loadDisciplineLocalBundle(scopeId);
-    return initial.exercises;
+    const fromLocal = normalizePlanExercisesFromApi(
+      initial.exercises,
+      Object.keys(initial.exerciseSchedule).length ? initial.exerciseSchedule : undefined,
+    );
+    return fromLocal;
   });
+  const [baseExercises, setBaseExercises] = useState<DashboardExercise[]>(() => schedule.flat);
   const [dailyProgress, setDailyProgress] = useState<DailyProgressMap>(() => {
     const initial = loadDisciplineLocalBundle(scopeId);
     return initial.dailyProgress;
@@ -125,7 +139,12 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
 
   useEffect(() => {
     const bundle = loadDisciplineLocalBundle(scopeId);
-    setBaseExercises(bundle.exercises);
+    const nextSchedule = normalizePlanExercisesFromApi(
+      bundle.exercises,
+      Object.keys(bundle.exerciseSchedule).length ? bundle.exerciseSchedule : undefined,
+    );
+    setSchedule(nextSchedule);
+    setBaseExercises(nextSchedule.flat);
     setDailyProgress(bundle.dailyProgress);
     setFoodLog(bundle.foodLog);
     setTrainingStatus(null);
@@ -136,31 +155,60 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
   useEffect(() => {
     if (!canSync || !token) return;
     let cancelled = false;
-    apiFetch<TrainingPlanResponse>('/api/me/training-plan', { token })
-      .then((r) => {
-        if (cancelled || !r.plan?.exercises?.length) return;
-        setTrainingStatus(r.plan.status);
-        setExpertTrainingNote(r.plan.expertNote || '');
-        setBaseExercises(r.plan.exercises);
-        const serverDaily = normalizeDailyProgressFromApi(r.plan.dailyProgress);
-        setDailyProgress((prev) => {
-          const merged = { ...prev, ...serverDaily };
-          saveDailyProgressLocal(scopeId, merged);
-          return merged;
+    let isFirstFetch = true;
+
+    const fetchPlan = () => {
+      apiFetch<TrainingPlanResponse>('/api/me/training-plan', { token })
+        .then((r) => {
+          if (cancelled) return;
+          // Always update status and expert note on every poll
+          setTrainingStatus(r.plan?.status ?? null);
+          setExpertTrainingNote(r.plan?.expertNote || '');
+
+          // Only apply exercises/progress on first fetch (avoid overwriting in-session state)
+          if (!isFirstFetch || !r.plan?.exercises?.length) {
+            isFirstFetch = false;
+            return;
+          }
+          isFirstFetch = false;
+
+          const nextSchedule = normalizePlanExercisesFromApi(
+            r.plan.exercises,
+            r.plan.exercisesByDay,
+          );
+          setSchedule(nextSchedule);
+          setBaseExercises(nextSchedule.flat);
+          const serverDaily = normalizeDailyProgressFromApi(r.plan.dailyProgress);
+          setDailyProgress((prev) => {
+            const merged = { ...prev, ...serverDaily };
+            saveDailyProgressLocal(scopeId, merged);
+            return merged;
+          });
+          saveDashboardExercises(scopeId, nextSchedule.flat);
+          if (nextSchedule.mode === 'daily') {
+            saveExerciseSchedule(scopeId, nextSchedule.byDay);
+          }
+        })
+        .catch(() => {
+          /* giữ bản local */
         });
-        saveDashboardExercises(scopeId, r.plan.exercises);
-      })
-      .catch(() => {
-        /* giữ bản local */
-      });
+    };
+
+    fetchPlan();
+    const intervalId = setInterval(fetchPlan, 30_000);
+
     return () => {
       cancelled = true;
+      clearInterval(intervalId);
     };
   }, [canSync, token, scopeId]);
 
   useEffect(() => {
     saveDashboardExercises(scopeId, baseExercises);
-  }, [baseExercises, scopeId]);
+    if (schedule.mode === 'daily') {
+      saveExerciseSchedule(scopeId, schedule.byDay);
+    }
+  }, [baseExercises, schedule, scopeId]);
 
   useEffect(() => {
     saveDailyProgressLocal(scopeId, dailyProgress);
@@ -175,7 +223,11 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
       if (!canSync || !token) return;
       const run = () => {
         setSyncState('syncing');
-        void syncTrainingProgressToServer(token, dateIso, dayExercises, baseExercises).then((ok) => {
+        const structure = getExercisesForIso(schedule, dateIso).map((ex) => ({
+          ...ex,
+          completed: false,
+        }));
+        void syncTrainingProgressToServer(token, dateIso, dayExercises, structure).then((ok) => {
           setSyncState(ok ? 'idle' : 'error');
         });
       };
@@ -187,15 +239,22 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
       if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
       syncTimerRef.current = setTimeout(run, 500);
     },
-    [canSync, token, baseExercises],
+    [canSync, token, schedule],
+  );
+
+  const getDayStructure = useCallback(
+    (iso: string) => getExercisesForIso(schedule, iso),
+    [schedule],
   );
 
   return {
     scopeId,
     kind,
     canSync,
+    schedule,
     baseExercises,
     setBaseExercises,
+    getDayStructure,
     dailyProgress,
     setDailyProgress,
     foodLog,

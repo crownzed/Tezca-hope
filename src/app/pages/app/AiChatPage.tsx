@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Sparkles, Send, Trash2, LogIn, User, History } from 'lucide-react';
+import { Sparkles, Send, Trash2, LogIn, User, History, Plus } from 'lucide-react';
 import {
   loadAiChatForUser,
   saveAiChatForUser,
@@ -34,11 +34,18 @@ export function AiChatPage() {
   const canPersist = isAuthenticated;
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
+  /**
+   * sessionAnchor = index into allMessages where the current chat window starts.
+   * Messages before this index are shown in the history sidebar only.
+   * "Chat mới" advances this anchor without deleting server history.
+   */
+  const [sessionAnchor, setSessionAnchor] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState('');
   const [pending, setPending] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -57,6 +64,16 @@ export function AiChatPage() {
     [canPersist, userId, token],
   );
 
+  /** Apply a new full-history list (for deletions / clears) and optionally persist. */
+  const applyMessages = useCallback(
+    (list: ChatMessage[]) => {
+      setAllMessages(list);
+      setSessionAnchor((prev) => Math.min(prev, list.length));
+      if (canPersist) persistMessages(list);
+    },
+    [canPersist, persistMessages],
+  );
+
   useEffect(() => {
     const q = searchParams.get('q');
     if (q) {
@@ -68,7 +85,7 @@ export function AiChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pending, streamingId]);
+  }, [allMessages, pending, streamingId]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -78,7 +95,8 @@ export function AiChatPage() {
     if (!sessionReady) return;
 
     if (!canPersist) {
-      setMessages([]);
+      setAllMessages([]);
+      setSessionAnchor(0);
       setHistoryLoading(false);
       return;
     }
@@ -92,13 +110,15 @@ export function AiChatPage() {
         const fromServer = Array.isArray(r.messages) ? r.messages : [];
         const list =
           fromServer.length > 0 ? fromServer : migrateLegacyAiChat(userId!);
-        setMessages(list);
+        setAllMessages(list);
+        setSessionAnchor(0); // show all history in the chat window on page load
         saveAiChatForUser(userId, list);
       })
       .catch(() => {
         if (cancelled) return;
         const cached = loadAiChatForUser(userId);
-        setMessages(cached);
+        setAllMessages(cached);
+        setSessionAnchor(0);
       })
       .finally(() => {
         if (!cancelled) setHistoryLoading(false);
@@ -109,25 +129,29 @@ export function AiChatPage() {
     };
   }, [sessionReady, canPersist, userId, token]);
 
-  const scrollToMessage = (id: string) => {
+  const scrollToMessage = (id: string, turnId?: string) => {
     messageRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (turnId) setActiveTurnId(turnId);
   };
 
-  const applyMessages = useCallback(
-    (list: ChatMessage[]) => {
-      setMessages(list);
-      if (canPersist) persistMessages(list);
-    },
-    [canPersist, persistMessages],
-  );
-
   const clearChat = () => {
-    if (!messages.length) return;
+    if (!allMessages.length) return;
     const msg = canPersist
-      ? 'Xóa toàn bộ lịch sử chat trên tài khoản? Hành động này đồng bộ lên server.'
+      ? 'Xóa toàn bộ lịch sử chat trên tài khoản? Hành động này không thể hoàn tác.'
       : 'Xóa tin nhắn trong phiên này? (Chưa đăng nhập — không có lịch sử lưu trữ.)';
     if (!window.confirm(msg)) return;
     applyMessages([]);
+    setActiveTurnId(null);
+  };
+
+  const startNewChat = () => {
+    if (pending) return;
+    // Advance the session anchor to hide current messages from the chat window.
+    // History is preserved on the server — NOT deleted.
+    setSessionAnchor(allMessages.length);
+    setActiveTurnId(null);
+    setInput('');
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const deleteTurn = (turnId: string) => {
@@ -138,12 +162,12 @@ export function AiChatPage() {
     ) {
       return;
     }
-    applyMessages(removeTurnById(messages, turnId));
+    applyMessages(removeTurnById(allMessages, turnId));
   };
 
   const deleteMessage = (messageId: string) => {
     if (!window.confirm('Xóa tin nhắn này khỏi lịch sử tài khoản?')) return;
-    applyMessages(removeMessageById(messages, messageId));
+    applyMessages(removeMessageById(allMessages, messageId));
   };
 
   const send = async (overrideText?: string) => {
@@ -156,10 +180,11 @@ export function AiChatPage() {
       content: text,
       ts: Date.now(),
     };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    const next = [...allMessages, userMsg];
+    setAllMessages(next);
     if (canPersist) persistMessages(next);
     setInput('');
+    setActiveTurnId(userMsg.id);
     setPending(true);
 
     const replyId = crypto.randomUUID();
@@ -170,7 +195,7 @@ export function AiChatPage() {
       ts: Date.now(),
     };
     const withShell = [...next, replyShell];
-    setMessages(withShell);
+    setAllMessages(withShell);
     setStreamingId(replyId);
 
     abortRef.current?.abort();
@@ -178,14 +203,15 @@ export function AiChatPage() {
     abortRef.current = ac;
 
     const patchStreaming = (content: string) => {
-      setMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, content } : m)));
+      setAllMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, content } : m)));
     };
 
     try {
       let finalContent: string;
 
       if (canPersist) {
-        const apiMsgs = next.map(({ role, content }) => ({ role, content }));
+        // Use only the current session messages as AI context (from sessionAnchor)
+        const apiMsgs = next.slice(sessionAnchor).map(({ role, content }) => ({ role, content }));
         try {
           finalContent = await streamAiChat({
             token: token!,
@@ -216,7 +242,7 @@ export function AiChatPage() {
         ts: Date.now(),
       };
       const withReply = [...next, reply];
-      setMessages(withReply);
+      setAllMessages(withReply);
       if (canPersist) persistMessages(withReply);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -230,7 +256,7 @@ export function AiChatPage() {
         ts: Date.now(),
       };
       const withReply = [...next, reply];
-      setMessages(withReply);
+      setAllMessages(withReply);
       if (canPersist) persistMessages(withReply);
     } finally {
       setStreamingId(null);
@@ -240,7 +266,10 @@ export function AiChatPage() {
   };
 
   const liveMode = canPersist;
-  const dayTurnGroups = liveMode ? groupTurnsByDay(groupChatByTurn(messages)) : [];
+  // Current session: messages from sessionAnchor to end (shown in chat window)
+  const displayMessages = allMessages.slice(sessionAnchor);
+  // Full history grouped for the sidebar
+  const dayTurnGroups = liveMode ? groupTurnsByDay(groupChatByTurn(allMessages)) : [];
 
   return (
     <div className={`mx-auto flex flex-col lg:flex-row gap-4 ${liveMode ? 'max-w-5xl' : 'max-w-4xl'}`} style={{ minHeight: 'calc(100vh - 8rem)' }}>
@@ -256,9 +285,11 @@ export function AiChatPage() {
           <ChatHistoryPanel
             dayTurnGroups={dayTurnGroups}
             historyLoading={historyLoading}
-            messageCount={messages.length}
+            messageCount={allMessages.length}
+            activeTurnId={activeTurnId}
             onScrollTo={scrollToMessage}
             onDeleteTurn={deleteTurn}
+            onNewChat={startNewChat}
           />
         </aside>
       )}
@@ -299,11 +330,24 @@ export function AiChatPage() {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center gap-2">
+          {liveMode && (
+            <button
+              type="button"
+              onClick={startNewChat}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full border transition-opacity disabled:opacity-35 lg:hidden"
+              style={{ borderColor: 'rgba(45, 212, 191, 0.35)', color: '#0F766E', backgroundColor: 'rgba(45, 212, 191, 0.08)' }}
+            >
+              <Plus size={14} />
+              Chat mới
+            </button>
+          )}
+          <div className="flex-1" />
           <button
             type="button"
             onClick={clearChat}
-            disabled={!messages.length || pending || historyLoading}
+            disabled={!allMessages.length || pending || historyLoading}
             className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full border transition-opacity disabled:opacity-35"
             style={{ borderColor: 'rgba(26, 32, 44, 0.12)', color: '#64748B' }}
           >
@@ -321,7 +365,7 @@ export function AiChatPage() {
           }}
         >
           <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5">
-            {messages.length === 0 && !historyLoading && (
+            {displayMessages.length === 0 && !historyLoading && (
               <div className="text-center py-6 md:py-10 px-2">
                 <div className="flex flex-col gap-2 max-w-md mx-auto">
                   {SUGGESTIONS.map((s) => (
@@ -344,13 +388,13 @@ export function AiChatPage() {
               </div>
             )}
 
-            {historyLoading && messages.length === 0 && (
+            {historyLoading && allMessages.length === 0 && (
               <p className="text-sm text-center py-10 opacity-50 m-0" style={{ color: '#1A202C' }}>
                 Đang tải lịch sử hội thoại…
               </p>
             )}
 
-            {messages.map((m) => (
+            {displayMessages.map((m) => (
               <div
                 key={m.id}
                 ref={(el) => {
@@ -484,14 +528,15 @@ export function AiChatPage() {
               style={{ color: '#1A202C', backgroundColor: 'rgba(45,212,191,0.08)' }}
             >
               <History size={16} style={{ color: '#0F766E' }} />
-              Lịch sử riêng tư ({messages.length} tin)
+              Lịch sử riêng tư ({allMessages.length} tin)
             </summary>
             <div className="max-h-56 overflow-hidden flex flex-col border-t" style={{ borderColor: 'rgba(26,32,44,0.06)' }}>
               <ChatHistoryPanel
                 compact
                 dayTurnGroups={dayTurnGroups}
                 historyLoading={historyLoading}
-                messageCount={messages.length}
+                messageCount={allMessages.length}
+                activeTurnId={activeTurnId}
                 onScrollTo={scrollToMessage}
                 onDeleteTurn={deleteTurn}
               />
