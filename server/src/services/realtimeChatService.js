@@ -1,12 +1,12 @@
 import { listCommunityRoomMessages, insertCommunityRoomMessage } from '../db.js';
 import { broadcastCommunityEvent, roomChannel } from '../communityDelivery.js';
 
-export function listRoomMessages(topic, opts) {
+export async function listRoomMessages(topic, opts) {
   return listCommunityRoomMessages(topic, opts);
 }
 
-export function sendRoomMessage(input) {
-  const message = insertCommunityRoomMessage(input);
+export async function sendRoomMessage(input) {
+  const message = await insertCommunityRoomMessage(input);
   if (message) {
     broadcastCommunityEvent(roomChannel(input.topic), {
       type: 'community_room_message',

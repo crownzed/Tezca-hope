@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { CalendarRange, ChevronRight, UserPlus, UserMinus } from 'lucide-react';
+import { ChevronRight, UserPlus, UserMinus } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
 import { ROUTES, expertCustomerPath, expertDoctorDeskPath } from '../../routes';
-import { tezcaTheme } from '../../lib/tezcaTheme';
+import { CustomerIntakeSummary, type CustomerIntakePacket } from '../../components/CustomerIntakeSummary';
+import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 type CustomerRow = {
   id: string;
@@ -15,7 +16,14 @@ type CustomerRow = {
   lastLiveMessage?: { content: string; ts: number; senderRole: 'expert' | 'customer' } | null;
   needsReply?: boolean;
 };
-type PendingRequest = { id: string; email: string; name: string; requestedAt: number };
+type PendingRequest = {
+  id: string;
+  customerId: string;
+  email: string;
+  name: string;
+  createdAt: number;
+  intake?: CustomerIntakePacket;
+};
 
 export function ExpertCustomerListPage() {
   const { token } = useExpertAuth();
@@ -91,51 +99,17 @@ export function ExpertCustomerListPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-8" style={{ color: tezcaTheme.text }}>
+    <div className="space-y-6 max-w-4xl" style={{ color: tezcaTheme.text }}>
       <div>
-        <h1 className="text-2xl font-bold mb-2" style={{ color: tezcaTheme.text }}>
-          Danh sách khách hàng
-        </h1>
-        <p className="text-sm" style={{ color: tezcaTheme.textMuted }}>
-          Thêm khách hàng bằng <strong>email đăng ký</strong> (tài khoản vai trò khách hàng). Nhấn vào khách hàng để
-          mở hồ sơ và chỉnh sửa kế hoạch tập. Sau khi gán, họ thấy bạn trong app và có thể chat trực tiếp; dữ liệu BMI /
-          nhật ký / Tezca AI dùng để đồng hành —{' '}
-          <span style={{ color: tezcaTheme.accent }}>không thay cho khám trực tiếp hay kết luận y khoa.</span>
+        <h1 className="text-2xl md:text-3xl font-bold m-0">Quản lý Khách hàng</h1>
+        <p className="text-sm mt-1.5 m-0 opacity-70">
+          Thêm khách hàng bằng <strong>email đăng ký</strong>. Nhấn vào khách hàng để mở hồ sơ và chỉnh kế hoạch tập.
+          Dữ liệu BMI / nhật ký / Tezca AI hỗ trợ đồng hành —{' '}
+          <span style={{ color: tezcaTheme.accentDark }}>không thay cho khám trực tiếp hay kết luận y khoa.</span>
         </p>
-        <div className="flex flex-wrap gap-2 mt-4">
-          <Link
-            to={ROUTES.expert.weeklyReport}
-            className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 border transition-colors"
-            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.accent, backgroundColor: tezcaTheme.surface }}
-          >
-            <CalendarRange size={16} />
-            Báo cáo tuần
-          </Link>
-          <Link
-            to={ROUTES.expert.doctorDesk}
-            className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 shadow-md transition-opacity hover:opacity-90"
-            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
-          >
-            Mở Doctor Desk
-          </Link>
-          <Link
-            to={ROUTES.expert.settings}
-            className="inline-flex items-center gap-2 text-sm font-medium rounded-xl px-4 py-2.5 border transition-colors"
-            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.textMuted, backgroundColor: tezcaTheme.surface }}
-          >
-            Cài đặt
-          </Link>
-        </div>
       </div>
 
-      <section
-        className="rounded-2xl border p-5"
-        style={{
-          backgroundColor: tezcaTheme.surface,
-          borderColor: tezcaTheme.border,
-          boxShadow: '0 8px 32px -12px rgba(26,32,44,0.08)',
-        }}
-      >
+      <section className="rounded-xl border p-5" style={tezcaCardStyle}>
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: tezcaTheme.accent }}>
           <UserPlus size={18} />
           Gán khách hàng mới
@@ -169,22 +143,33 @@ export function ExpertCustomerListPage() {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {requests.length > 0 && (
-        <section className="rounded-2xl border p-5 bg-white space-y-3" style={{ borderColor: tezcaTheme.border }}>
+        <section className="rounded-xl border p-5 space-y-3" style={tezcaCardStyle}>
           <h2 className="text-sm font-semibold">Yêu cầu chọn chuyên gia đang chờ ({requests.length})</h2>
           {requests.map((r) => (
-            <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border rounded-xl p-3">
-              <div>
-                <p className="text-sm font-medium">{r.name}</p>
-                <p className="text-xs opacity-70">{r.email}</p>
+            <div key={r.id} className="border rounded-xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium m-0">{r.name}</p>
+                  <p className="text-xs opacity-70 m-0 mt-0.5">{r.email}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="text-xs px-3 py-2 rounded-lg bg-teal-600 text-white border-0 cursor-pointer"
+                    onClick={() => void decideRequest(r.customerId, 'approve')}
+                  >
+                    Duyệt
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs px-3 py-2 rounded-lg border cursor-pointer"
+                    onClick={() => void decideRequest(r.customerId, 'reject')}
+                  >
+                    Từ chối
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button type="button" className="text-xs px-3 py-2 rounded-lg bg-teal-600 text-white" onClick={() => void decideRequest(r.id, 'approve')}>
-                  Duyệt
-                </button>
-                <button type="button" className="text-xs px-3 py-2 rounded-lg border" onClick={() => void decideRequest(r.id, 'reject')}>
-                  Từ chối
-                </button>
-              </div>
+              <CustomerIntakeSummary intake={r.intake} compact />
             </div>
           ))}
         </section>

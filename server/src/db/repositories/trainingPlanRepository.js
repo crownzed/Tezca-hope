@@ -7,6 +7,12 @@ import {
   stringifyJsonColumn,
 } from '../jsonStore.js';
 import { assertIsoDate, assertNonEmptyId } from '../validators.js';
+import {
+  exercisesForDateFromStored,
+  flattenScheduleExercises,
+  isScheduleV2,
+  toScheduleV2Json,
+} from '../../trainingPlanSchedule.js';
 
 const MAX_EXERCISES = 20;
 const DAILY_HISTORY_DAYS = 120;
@@ -97,15 +103,28 @@ function filterDailyToExerciseIds(daily, exerciseIds) {
 
 function mapPlanRow(row) {
   if (!row) return null;
-  const rawExercises = parseExercisesJson(row.exercisesJson);
+  const rawStored = parseExercisesJson(row.exercisesJson);
+  const flatRaw = flattenScheduleExercises(rawStored);
   let dailyProgress = parseDailyProgressJson(row.dailyProgressJson);
-  dailyProgress = migrateLegacyProgressToDaily(rawExercises, dailyProgress);
+  dailyProgress = migrateLegacyProgressToDaily(flatRaw, dailyProgress);
   dailyProgress = pruneDailyProgress(dailyProgress);
+
+  const exercises = structureExercises(flatRaw);
+  let exercisesByDay;
+  if (isScheduleV2(rawStored)) {
+    exercisesByDay = {};
+    for (const [iso, list] of Object.entries(rawStored.byDay || {})) {
+      exercisesByDay[iso] = structureExercises(list);
+    }
+  }
+
   return {
     customerId: row.customerId,
     sourcePlanMd: row.sourcePlanMd,
     status: row.status,
-    exercises: structureExercises(rawExercises),
+    exercises,
+    exercisesByDay,
+    scheduleMode: exercisesByDay ? 'daily' : 'shared',
     dailyProgress,
     expertNote: row.expertNote,
     integratedAt: row.integratedAt,
@@ -173,11 +192,22 @@ export function ensureTrainingPlanFromWorkout(customerId, exercises) {
   return runInTransaction(() => ensureTrainingPlanFromWorkoutInTx(customerId, exercises));
 }
 
-export function integrateTrainingPlanFromAi(customerId, sourcePlanMd, exercises) {
+export function integrateTrainingPlanFromAi(customerId, sourcePlanMd, exercises, exercisesByDay) {
   const id = assertCustomerRole(customerId);
   const structured = structureExercises(exercises);
   const planMd = String(sourcePlanMd || '').slice(0, JSON_LIMITS.sourcePlanMd);
-  const exercisesJson = stringifyJsonColumn(structured, JSON_LIMITS.exercises);
+  const payload =
+    exercisesByDay && Object.keys(exercisesByDay).length > 0
+      ? toScheduleV2Json(
+          Object.fromEntries(
+            Object.entries(exercisesByDay).map(([iso, list]) => [
+              iso,
+              structureExercises(list),
+            ]),
+          ),
+        )
+      : structured;
+  const exercisesJson = stringifyJsonColumn(payload, JSON_LIMITS.exercises);
 
   return runInTransaction(() => {
     const existing = getDb().prepare(SELECT_PLAN).get(id);
@@ -213,7 +243,7 @@ export function integrateTrainingPlanFromAi(customerId, sourcePlanMd, exercises)
 export function updateTrainingPlanByExpert(
   customerId,
   expertId,
-  { exercises, status, expertNote, expectedUpdatedAt },
+  { exercises, exercisesByDay, status, expertNote, expectedUpdatedAt },
 ) {
   const pid = assertNonEmptyId(customerId, 'customerId');
   const eid = assertNonEmptyId(expertId, 'expertId');
@@ -249,46 +279,81 @@ export function updateTrainingPlanByExpert(
       : existing.expertNote;
 
   const prevById = new Map(existing.exercises.map((ex) => [ex.id, ex]));
-  const merged =
-    exercises != null
-      ? structureExercises(
-          exercises.map((ex, i) => ({
-            ...ex,
-            id: Number(ex.id) || Date.now() + i,
-            actualWeight: ex.actualWeight ?? prevById.get(Number(ex.id))?.actualWeight ?? '',
-          })),
-        )
-      : existing.exercises;
+  const mergeOne = (ex, i) => ({
+    ...ex,
+    id: Number(ex.id) || Date.now() + i,
+    actualWeight: ex.actualWeight ?? prevById.get(Number(ex.id))?.actualWeight ?? '',
+  });
+
+  let exercisesJsonPayload;
+  let mergedFlat;
+
+  if (exercisesByDay != null && typeof exercisesByDay === 'object' && Object.keys(exercisesByDay).length > 0) {
+    const structuredByDay = {};
+    for (const [iso, list] of Object.entries(exercisesByDay)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || !Array.isArray(list)) continue;
+      structuredByDay[iso] = structureExercises(list.map(mergeOne));
+    }
+    exercisesJsonPayload = toScheduleV2Json(structuredByDay);
+    mergedFlat = flattenScheduleExercises(exercisesJsonPayload);
+  } else if (exercises != null) {
+    mergedFlat = structureExercises(exercises.map(mergeOne));
+    exercisesJsonPayload = mergedFlat;
+  } else {
+    mergedFlat = existing.exercises;
+    exercisesJsonPayload = null;
+  }
 
   const dailyProgress = filterDailyToExerciseIds(
     existing.dailyProgress,
-    merged.map((ex) => ex.id),
+    mergedFlat.map((ex) => ex.id),
   );
 
   const now = Date.now();
 
   return runInTransaction(() => {
-    const result = getDb()
-      .prepare(
-        `UPDATE patient_training_plans SET
-           exercises_json = ?,
-           daily_progress_json = ?,
-           status = ?,
-           expert_note = ?,
-           updated_at = ?,
-           updated_by = ?
-         WHERE patient_id = ? AND updated_at = ?`,
-      )
-      .run(
-        stringifyJsonColumn(merged, JSON_LIMITS.exercises),
-        stringifyJsonColumn(dailyProgress, JSON_LIMITS.dailyProgress),
-        nextStatus,
-        note,
-        now,
-        eid,
-        pid,
-        lockAt,
-      );
+    const result =
+      exercisesJsonPayload != null
+        ? getDb()
+            .prepare(
+              `UPDATE patient_training_plans SET
+                 exercises_json = ?,
+                 daily_progress_json = ?,
+                 status = ?,
+                 expert_note = ?,
+                 updated_at = ?,
+                 updated_by = ?
+               WHERE patient_id = ? AND updated_at = ?`,
+            )
+            .run(
+              stringifyJsonColumn(exercisesJsonPayload, JSON_LIMITS.exercises),
+              stringifyJsonColumn(dailyProgress, JSON_LIMITS.dailyProgress),
+              nextStatus,
+              note,
+              now,
+              eid,
+              pid,
+              lockAt,
+            )
+        : getDb()
+            .prepare(
+              `UPDATE patient_training_plans SET
+                 daily_progress_json = ?,
+                 status = ?,
+                 expert_note = ?,
+                 updated_at = ?,
+                 updated_by = ?
+               WHERE patient_id = ? AND updated_at = ?`,
+            )
+            .run(
+              stringifyJsonColumn(dailyProgress, JSON_LIMITS.dailyProgress),
+              nextStatus,
+              note,
+              now,
+              eid,
+              pid,
+              lockAt,
+            );
     if (result.changes === 0) {
       throw new DbError(
         'PLAN_CONFLICT',
@@ -324,10 +389,34 @@ export function syncTrainingPlanProgress(customerId, dateIso, items, bootstrapWo
       if (!existing) return null;
     }
 
+    const row = getDb().prepare(`SELECT exercises_json AS exercisesJson FROM patient_training_plans WHERE patient_id = ?`).get(pid);
+    const rawStored = parseExercisesJson(row?.exercisesJson);
+    const dayExercises = structureExercises(
+      exercisesForDateFromStored(rawStored, date).length
+        ? exercisesForDateFromStored(rawStored, date)
+        : bootstrapWorkout?.length
+          ? bootstrapWorkout
+          : existing.exercises,
+    );
+
+    if (bootstrapWorkout?.length && isScheduleV2(rawStored)) {
+      const nextByDay = { ...(rawStored.byDay || {}), [date]: structureExercises(bootstrapWorkout) };
+      getDb()
+        .prepare(`UPDATE patient_training_plans SET exercises_json = ? WHERE patient_id = ?`)
+        .run(stringifyJsonColumn(toScheduleV2Json(nextByDay), JSON_LIMITS.exercises), pid);
+    } else if (bootstrapWorkout?.length && !isScheduleV2(rawStored)) {
+      getDb()
+        .prepare(`UPDATE patient_training_plans SET exercises_json = ? WHERE patient_id = ?`)
+        .run(
+          stringifyJsonColumn(structureExercises(bootstrapWorkout), JSON_LIMITS.exercises),
+          pid,
+        );
+    }
+
     const dailyProgress = { ...(existing.dailyProgress || {}) };
     const day = { ...(dailyProgress[date] || {}) };
 
-    for (const ex of existing.exercises) {
+    for (const ex of dayExercises) {
       const patch = patchById.get(ex.id);
       if (!patch) continue;
       day[String(ex.id)] = {

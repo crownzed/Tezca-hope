@@ -1,0 +1,5 @@
+<svg width="200" height="48" viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tezca">
+  <circle cx="24" cy="24" r="24" fill="#14B8A6"/>
+  <path fill="#ffffff" d="M13.5 13.5h21v6.2H26.4v15.3h-4.8V19.7H13.5V13.5z"/>
+  <text x="56" y="32" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="600" fill="#1A202C">Tezca</text>
+</svg>

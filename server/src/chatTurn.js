@@ -76,9 +76,15 @@ export async function runChatTurnStream({ systemBase, messages, plan, send }) {
 
   const payload = buildChatPayload(systemBase, messages, plan.intentMeta);
   let raw = '';
-  for await (const delta of aiChatStream(payload, plan.intentMeta.opts)) {
-    raw += delta;
-    send({ delta });
+  try {
+    for await (const delta of aiChatStream(payload, plan.intentMeta.opts)) {
+      raw += delta;
+      send({ delta });
+    }
+  } catch (streamErr) {
+    const reply = await aiChat(payload, plan.intentMeta.opts);
+    raw = reply;
+    send({ delta: reply });
   }
   const content = polishAiText(raw);
   send({ done: true, content, intent: plan.intent, source: 'llm' });

@@ -44,7 +44,7 @@ export function buildCustomerSession(
 }
 
 /** Đường dẫn bắt buộc đăng nhập (không dùng chế độ guest). */
-const AUTH_REQUIRED_PREFIXES = [ROUTES.app.expertChat, ROUTES.community.root] as const;
+const AUTH_REQUIRED_PREFIXES = [ROUTES.app.expertChat] as const;
 
 export function customerRouteRequiresAuth(pathname: string): boolean {
   return AUTH_REQUIRED_PREFIXES.some(

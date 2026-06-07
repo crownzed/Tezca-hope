@@ -7,9 +7,9 @@ import { landingEase, staggerContainer, staggerItem, viewportOnce } from '../lib
 export function SocialProofBar() {
   const reduce = useReducedMotion();
   const proofs = [
-    { icon: Shield, text: 'Mã hóa đầu cuối 100%', to: ROUTES.product.security },
-    { icon: Brain, text: 'Phân tích bởi AI', to: ROUTES.app.chat },
-    { icon: Users, text: 'Hỗ trợ bởi Chuyên gia', to: ROUTES.product.experts },
+    { icon: Shield, text: 'Dữ liệu được bảo vệ & mã hóa', to: ROUTES.product.security },
+    { icon: Brain, text: 'Phân tích & gợi ý bởi AI', to: ROUTES.app.chat },
+    { icon: Users, text: 'Đồng hành bởi Chuyên gia thực', to: ROUTES.product.experts },
   ] as const;
 
   return (

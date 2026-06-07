@@ -8,7 +8,7 @@ import { ROUTES } from '../../routes';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 export function CustomerProfilePage() {
-  const { token, isVerifying, sessionReady } = useCustomerSession();
+  const { token, user, isVerifying, sessionReady } = useCustomerSession();
 
   if (!sessionReady || isVerifying) {
     return <SessionLoading title="Đang tải hồ sơ…" hint="" />;
@@ -31,7 +31,7 @@ export function CustomerProfilePage() {
       </div>
 
       <section className="rounded-2xl border p-5 md:p-6" style={tezcaCardStyle}>
-        <CustomerProfileForm token={token} />
+        <CustomerProfileForm token={token} userId={user?.id} />
       </section>
 
       <section className="rounded-2xl border p-5 md:p-6" style={tezcaCardStyle}>
@@ -41,7 +41,7 @@ export function CustomerProfilePage() {
         <p className="text-sm opacity-70 m-0 mb-4 -mt-2" style={{ color: tezcaTheme.text }}>
           Bệnh nền, dị ứng và chống chỉ định — mỗi mục ghi chú riêng để chuyên gia đọc nhanh.
         </p>
-        <HealthProfileForm token={token} />
+        <HealthProfileForm token={token} userId={user?.id} />
       </section>
     </div>
   );

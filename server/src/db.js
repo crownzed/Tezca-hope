@@ -29,12 +29,10 @@ export {
   requestExpertAssignment,
   listPendingCustomersForExpert,
   decideExpertAssignment,
-  getCustomerHealthProfile,
-  upsertCustomerHealthProfile,
+  getExpertProfile,
   listCustomersWithProfiles,
   listExpertsWithProfiles,
   listAssignmentRelations,
-  upsertCustomerProfile,
   upsertExpertProfile,
   createExpertAccount,
   updateExpertAccount,
@@ -49,6 +47,14 @@ export {
   grantUserRole,
   revokeUserRole,
 } from './db/customerDomain.js';
+
+export {
+  getCustomerHealthProfile,
+  upsertCustomerHealthProfile,
+  getCustomerProfile,
+  upsertCustomerProfile,
+  buildCustomerProfilePacket,
+} from './db/customerProfileStore.js';
 
 export { getDb, initDb, runInTransaction, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID, getDatabaseInfo, runDatabaseDiagnostics };
 
@@ -329,6 +335,7 @@ export function subscribeNewsletter(email, source = 'landing') {
 }
 
 export {
+  useCommunityFirestore,
   listCommunityPosts,
   getCommunityPostById,
   createCommunityPost,
@@ -353,11 +360,9 @@ export {
   followCommunityTopic,
   unfollowCommunityTopic,
   listFollowedCommunityTopics,
+  isCommunityTopicFollowed,
   listCommunityThreadReplies,
   createCommunityThreadReply,
-} from './db/repositories/communityRepository.js';
-
-export {
   listCommunityAnnouncementMessages,
   insertCommunityAnnouncementMessage,
   getOrCreateCommunityDmThread,
@@ -367,4 +372,4 @@ export {
   insertCommunityDmMessage,
   searchCommunityMembers,
   listRoomMentionCandidates,
-} from './db/repositories/communityExtendedRepository.js';
+} from './db/communityStore.js';

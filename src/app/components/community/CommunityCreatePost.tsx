@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { Image, X } from 'lucide-react';
-import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
+import { Hash, Image, Link2, X } from 'lucide-react';
+import { communityShell } from '../../lib/communityShellTheme';
+import { tezcaTheme } from '../../lib/tezcaTheme';
 import { POST_TOPICS, type CommunityPostTopic } from '../../lib/communityTopics';
 
 type CommunityCreatePostProps = {
@@ -24,7 +25,6 @@ function initials(name: string) {
     .join('');
 }
 
-/** Nén ảnh xuống tối đa maxDim px, trả về data URL (JPEG 0.78). */
 function compressImage(file: File, maxDim = 1200): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -48,7 +48,10 @@ function compressImage(file: File, maxDim = 1200): Promise<string> {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('canvas')); return; }
+        if (!ctx) {
+          reject(new Error('canvas'));
+          return;
+        }
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', 0.78));
       };
@@ -72,15 +75,14 @@ export function CommunityCreatePost({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [compressing, setCompressing] = useState(false);
   const [imgError, setImgError] = useState('');
+  const [showTopics, setShowTopics] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!e.target.files) return;
-    // reset input để chọn cùng file lại được
     e.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setImgError('Chỉ hỗ trợ file ảnh (JPG, PNG, GIF, WebP…)');
+      setImgError('Chỉ hỗ trợ file ảnh');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -90,127 +92,135 @@ export function CommunityCreatePost({
     setImgError('');
     setCompressing(true);
     try {
-      const dataUrl = await compressImage(file);
-      onImageUrlChange(dataUrl);
+      onImageUrlChange(await compressImage(file));
     } catch {
-      setImgError('Không đọc được ảnh, hãy thử file khác.');
+      setImgError('Không đọc được ảnh');
     } finally {
       setCompressing(false);
     }
   };
 
-  const clearImage = () => {
-    onImageUrlChange('');
-    setImgError('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   const hasImage = Boolean(imageUrl.trim());
 
   return (
-    <div className="rounded-2xl border p-4 shadow-sm space-y-3" style={tezcaCardStyle}>
+    <div
+      className="rounded-2xl border p-4"
+      style={{
+        backgroundColor: communityShell.cardBg,
+        borderColor: communityShell.cardBorder,
+        boxShadow: communityShell.cardShadow,
+      }}
+    >
       <div className="flex gap-3">
         <div
-          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-xs font-semibold"
+          className="w-11 h-11 rounded-full shrink-0 flex items-center justify-center text-sm font-semibold"
           style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
           aria-hidden
         >
           {initials(authorName || 'B')}
         </div>
-        <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex-1 min-w-0">
           <textarea
             value={content}
             onChange={(e) => onContentChange(e.target.value)}
             rows={2}
-            placeholder="Chia sẻ kinh nghiệm, đặt câu hỏi hoặc động viên cộng đồng…"
-            className="w-full rounded-xl border px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2"
-            style={{ borderColor: tezcaTheme.border }}
+            placeholder="Chia sẻ kinh nghiệm hoặc đặt câu hỏi…"
+            className="w-full rounded-xl border-0 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 min-h-[52px]"
+            style={{
+              backgroundColor: communityShell.inputBg,
+              color: tezcaTheme.text,
+            }}
           />
-
-          {/* Ảnh xem trước */}
-          {hasImage && (
-            <div className="relative inline-block rounded-xl overflow-hidden border" style={{ borderColor: tezcaTheme.border }}>
-              <img
-                src={imageUrl}
-                alt="Ảnh đính kèm"
-                className="max-h-48 max-w-full object-cover"
-                style={{ display: 'block' }}
-              />
-              <button
-                type="button"
-                onClick={clearImage}
-                aria-label="Xóa ảnh"
-                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center border-0 cursor-pointer"
-                style={{ backgroundColor: 'rgba(15,23,42,0.65)', color: '#fff' }}
-              >
-                <X size={14} aria-hidden />
-              </button>
-            </div>
-          )}
-
-          {compressing && (
-            <p className="text-xs opacity-60 m-0">Đang xử lý ảnh…</p>
-          )}
-          {imgError && (
-            <p className="text-xs text-red-600 m-0">{imgError}</p>
-          )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 pl-[52px]">
-        {/* Hidden file input */}
+      {hasImage && (
+        <div className="relative mt-3 ml-14 rounded-xl overflow-hidden border max-w-md" style={{ borderColor: communityShell.cardBorder }}>
+          <img src={imageUrl} alt="" className="max-h-52 w-full object-cover" />
+          <button
+            type="button"
+            onClick={() => onImageUrlChange('')}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center border-0 cursor-pointer text-white"
+            style={{ backgroundColor: 'rgba(15,23,42,0.7)' }}
+            aria-label="Xóa ảnh"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {compressing && <p className="text-xs opacity-60 m-0 mt-2 ml-14">Đang xử lý ảnh…</p>}
+      {imgError && <p className="text-xs text-red-600 m-0 mt-2 ml-14">{imgError}</p>}
+
+      <div className="flex flex-wrap items-center gap-1 mt-3 ml-14 pt-3 border-t" style={{ borderColor: communityShell.cardBorder }}>
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           className="sr-only"
-          aria-label="Chọn ảnh từ máy"
           onChange={(e) => void handleFileChange(e)}
         />
-
-        {/* Nút chọn ảnh */}
         <button
           type="button"
           disabled={compressing}
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border-0 cursor-pointer disabled:opacity-50"
-          style={{
-            backgroundColor: hasImage ? 'rgba(45,212,191,0.15)' : tezcaTheme.subtleBg,
-            color: hasImage ? tezcaTheme.accentDark : tezcaTheme.text,
-            opacity: compressing ? 0.5 : undefined,
-          }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border-0 cursor-pointer hover:opacity-80"
+          style={{ color: communityShell.navText, backgroundColor: 'transparent' }}
         >
-          <Image size={14} aria-hidden />
-          {compressing ? 'Đang nén…' : hasImage ? 'Thay ảnh' : 'Thêm ảnh'}
+          <Image size={16} aria-hidden />
+          Ảnh
         </button>
-
-        {/* Chủ đề */}
-        {POST_TOPICS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onTopicChange(t.id)}
-            className="text-xs px-2.5 py-1 rounded-full border cursor-pointer"
-            style={
-              topic === t.id
-                ? { background: tezcaTheme.accentGradient, borderColor: 'transparent', color: tezcaTheme.text }
-                : { borderColor: tezcaTheme.border, color: tezcaTheme.textMuted }
-            }
-          >
-            {t.label}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => setShowTopics((v) => !v)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border-0 cursor-pointer hover:opacity-80"
+          style={{ color: communityShell.navText, backgroundColor: 'transparent' }}
+        >
+          <Hash size={16} aria-hidden />
+          Chủ đề
+        </button>
+        <span
+          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium opacity-40"
+          style={{ color: communityShell.navText }}
+          title="Sắp có"
+        >
+          <Link2 size={16} aria-hidden />
+          Liên kết
+        </span>
 
         <button
           type="button"
           disabled={busy || !content.trim()}
           onClick={onSubmit}
-          className="ml-auto rounded-full px-4 py-1.5 text-xs font-semibold border-0 cursor-pointer disabled:opacity-50"
-          style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
+          className="ml-auto rounded-full px-5 py-2 text-xs font-semibold border-0 cursor-pointer disabled:opacity-40"
+          style={{ backgroundColor: communityShell.navActiveBg, color: communityShell.navActiveText }}
         >
-          {busy ? 'Đang đăng…' : 'Đăng bài'}
+          {busy ? 'Đang đăng…' : 'Đăng'}
         </button>
       </div>
+
+      {showTopics && (
+        <div className="flex flex-wrap gap-2 mt-3 ml-14">
+          {POST_TOPICS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                onTopicChange(t.id);
+                setShowTopics(false);
+              }}
+              className="text-xs px-3 py-1.5 rounded-full border cursor-pointer"
+              style={
+                topic === t.id
+                  ? { backgroundColor: communityShell.navActiveBg, borderColor: 'transparent' }
+                  : { borderColor: communityShell.cardBorder, color: communityShell.navText }
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

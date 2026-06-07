@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { apiFetch, canUseWebSocket } from '../../lib/api';
 import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';

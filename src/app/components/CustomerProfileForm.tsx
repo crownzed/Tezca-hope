@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api';
 import { FormAlert } from './tezca/FormAlert';
 import { ProfileSectionHeader, ProfileSectionNote } from './profile/ProfileSectionNote';
 import { tezcaCardStyle, tezcaTheme } from '../lib/tezcaTheme';
+import { saveProfileCache, loadProfileCache } from '../lib/profileCache';
 
 export type CustomerBasicProfile = {
   fullName: string;
@@ -35,10 +36,11 @@ function genderLabel(gender: string) {
 
 type Props = {
   token: string | null;
+  userId?: string | null;
   onSaved?: () => void;
 };
 
-export function CustomerProfileForm({ token, onSaved }: Props) {
+export function CustomerProfileForm({ token, userId, onSaved }: Props) {
   const [saved, setSaved] = useState<CustomerBasicProfile>(EMPTY_CUSTOMER_PROFILE);
   const [draft, setDraft] = useState<CustomerBasicProfile>(EMPTY_CUSTOMER_PROFILE);
   const [editing, setEditing] = useState(false);
@@ -50,23 +52,55 @@ export function CustomerProfileForm({ token, onSaved }: Props) {
     if (!token) return;
     setLoading(true);
     apiFetch<{ profile: CustomerBasicProfile & { email?: string } }>('/api/me/profile', { token })
-      .then((r) => {
-        if (r.profile) {
-          const profile = {
-            fullName: r.profile.fullName || '',
-            gender: r.profile.gender || '',
-            dob: r.profile.dob || '',
-            phone: r.profile.phone || '',
-            address: r.profile.address || '',
-            notes: r.profile.notes || '',
+      .then(async (r) => {
+        const serverProfile = r.profile;
+        const isServerEmpty = !serverProfile?.fullName?.trim();
+
+        if (!isServerEmpty) {
+          // Server has data — use it and update cache
+          const profile: CustomerBasicProfile = {
+            fullName: serverProfile!.fullName || '',
+            gender: serverProfile!.gender || '',
+            dob: serverProfile!.dob || '',
+            phone: serverProfile!.phone || '',
+            address: serverProfile!.address || '',
+            notes: serverProfile!.notes || '',
           };
           setSaved(profile);
           setDraft(profile);
+          if (userId) saveProfileCache(userId, profile);
+        } else {
+          // Server is empty (cold start) — restore from localStorage cache
+          const cached = userId ? loadProfileCache(userId) : null;
+          if (cached?.fullName?.trim()) {
+            // Sync cache back to server silently
+            try {
+              const res = await apiFetch<{ profile: CustomerBasicProfile & { email?: string } }>(
+                '/api/me/profile',
+                { method: 'PUT', token, body: JSON.stringify(cached) },
+              );
+              const synced: CustomerBasicProfile = {
+                fullName: res.profile?.fullName || cached.fullName,
+                gender: res.profile?.gender || cached.gender,
+                dob: res.profile?.dob || cached.dob,
+                phone: res.profile?.phone || cached.phone,
+                address: res.profile?.address || cached.address,
+                notes: res.profile?.notes || cached.notes,
+              };
+              setSaved(synced);
+              setDraft(synced);
+              window.dispatchEvent(new Event('tezca:profile-saved'));
+            } catch {
+              // Sync failed — still show cached data locally
+              setSaved(cached);
+              setDraft(cached);
+            }
+          }
         }
       })
       .catch(() => setMessage('Không tải được hồ sơ'))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, userId]);
 
   const setField = (key: keyof CustomerBasicProfile, value: string) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -115,6 +149,8 @@ export function CustomerProfileForm({ token, onSaved }: Props) {
       setDraft(confirmed);
       setEditing(false);
       setMessage('Đã cập nhật hồ sơ. Thông tin sẽ gửi tới chuyên gia khi bạn yêu cầu đồng hành.');
+      if (userId) saveProfileCache(userId, confirmed);
+      window.dispatchEvent(new Event('tezca:profile-saved'));
       onSaved?.();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Không lưu được hồ sơ');

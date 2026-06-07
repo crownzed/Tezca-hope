@@ -125,27 +125,20 @@ export function ExpertWeeklyReportPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6" style={{ color: tezcaTheme.text }}>
+    <div className="space-y-6 max-w-5xl" style={{ color: tezcaTheme.text }}>
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold m-0 flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-bold m-0 flex items-center gap-2">
               <CalendarRange style={{ color: tezcaTheme.accent }} size={26} />
               Báo cáo theo tuần
             </h1>
-            <p className="text-sm mt-2 m-0 max-w-xl" style={{ color: tezcaTheme.textMuted }}>
+            <p className="text-sm mt-1.5 m-0 max-w-xl opacity-70">
               Tổng hợp hoạt động khách hàng được gán trong tuần (Thứ Hai – Chủ Nhật): chat, BMI, nhật ký cảm xúc và Tezca AI.
               Dùng để theo dõi đồng hành — không thay cho khám trực tiếp.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link
-              to={ROUTES.expert.doctorDesk}
-              className="text-sm font-medium rounded-xl px-4 py-2.5 border transition-colors"
-              style={{ borderColor: 'rgba(45, 212, 191, 0.35)', color: tezcaTheme.accentDark, backgroundColor: 'rgba(45, 212, 191, 0.08)' }}
-            >
-              Doctor Desk
-            </Link>
             <button
               type="button"
               onClick={copySummary}

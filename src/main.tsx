@@ -6,7 +6,10 @@ import { CustomerAuthProvider } from './app/context/CustomerAuthContext';
 import { ExpertAuthProvider } from './app/context/ExpertAuthContext';
 import { AdminAuthProvider } from './app/context/AdminAuthContext';
 import App from './app/App.tsx';
+import { initFirebaseClient } from './app/lib/firebaseClient';
 import './styles/index.css';
+
+initFirebaseClient();
 
 /** Khi build với VITE_BASE_PATH=/tezca/ — router khớp URL trên website có sẵn */
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '');

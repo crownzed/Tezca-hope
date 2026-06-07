@@ -23,8 +23,9 @@ export function registerHandler(req, res, next) {
   try {
     const { email, password, name } = req.body || {};
     const normalized = normalizeEmail(email);
+    const passwordStr = password != null ? String(password) : '';
 
-    if (!normalized || !password) {
+    if (!normalized || !passwordStr) {
       res.status(400).json({ error: 'Cần email và mật khẩu' });
       return;
     }
@@ -32,7 +33,7 @@ export function registerHandler(req, res, next) {
       res.status(400).json({ error: 'Email không hợp lệ' });
       return;
     }
-    const pwErr = validatePassword(password);
+    const pwErr = validatePassword(passwordStr);
     if (pwErr) {
       res.status(400).json({ error: pwErr });
       return;
@@ -45,7 +46,7 @@ export function registerHandler(req, res, next) {
     const user = {
       id: crypto.randomUUID(),
       email: normalized,
-      passwordHash: bcrypt.hashSync(String(password), 10),
+      passwordHash: bcrypt.hashSync(passwordStr, 10),
       role: 'user',
       name: name ? String(name).trim().slice(0, 120) : normalized.split('@')[0],
     };
@@ -67,11 +68,11 @@ export function registerHandler(req, res, next) {
 function roleMismatchMessage(requiredRole) {
   switch (requiredRole) {
     case 'expert':
-      return 'Tài khoản không phải chuyên gia. Dùng trang đăng nhập khách hàng.';
+      return 'Tài khoản không phải chuyên gia. Dùng cổng khách hàng hoặc quản trị tại trang đăng nhập.';
     case 'admin':
       return 'Tài khoản không có quyền quản trị.';
     case 'user':
-      return 'Tài khoản không phải khách hàng. Dùng trang đăng nhập chuyên gia.';
+      return 'Tài khoản không phải khách hàng. Dùng cổng chuyên gia hoặc quản trị tại trang đăng nhập.';
     default:
       return 'Tài khoản không đúng loại đăng nhập.';
   }
@@ -81,12 +82,13 @@ function loginHandler(requiredRole) {
   return (req, res) => {
     const { email, password } = req.body || {};
     const normalized = normalizeEmail(email);
-    if (!normalized || !password) {
+    const passwordStr = password != null ? String(password) : '';
+    if (!normalized || !passwordStr) {
       res.status(400).json({ error: 'Cần email và mật khẩu' });
       return;
     }
     const user = findUserByEmail(normalized);
-    if (!user || !bcrypt.compareSync(String(password), user.passwordHash)) {
+    if (!user || !user.passwordHash || !bcrypt.compareSync(passwordStr, user.passwordHash)) {
       res.status(401).json({ error: 'Sai email hoặc mật khẩu' });
       return;
     }
@@ -163,7 +165,8 @@ export function resetPasswordHandler(req, res, next) {
       res.status(400).json({ error: 'Thiếu mã đặt lại mật khẩu' });
       return;
     }
-    const pwErr = validatePassword(password);
+    const passwordStr = password != null ? String(password) : '';
+    const pwErr = validatePassword(passwordStr);
     if (pwErr) {
       res.status(400).json({ error: pwErr });
       return;
@@ -175,7 +178,7 @@ export function resetPasswordHandler(req, res, next) {
       });
       return;
     }
-    updateUserPasswordHash(userId, bcrypt.hashSync(String(password), 10));
+    updateUserPasswordHash(userId, bcrypt.hashSync(passwordStr, 10));
     res.json({ message: 'Đặt lại mật khẩu thành công. Hãy đăng nhập bằng mật khẩu mới.' });
   } catch (err) {
     next(err);

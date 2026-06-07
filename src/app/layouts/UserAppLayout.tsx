@@ -17,8 +17,8 @@ import {
 import { useCustomerSession } from '../lib/customerSessionGate';
 import { AccountProfileButton } from '../components/AccountProfileRail';
 import { MobileBottomNav, type MobileNavItem } from '../components/tezca/MobileBottomNav';
-import { PageBreadcrumb } from '../components/tezca/PageBreadcrumb';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { TezcaLogoLink } from '../components/TezcaLogo';
 
 const nav = [
   { to: ROUTES.app.dashboard, end: true, label: 'Trung tâm Kỷ luật', icon: Flame },
@@ -96,12 +96,15 @@ export function UserAppLayout() {
   return (
     <div className="min-h-screen flex flex-col xl:flex-row" style={{ backgroundColor: pageBg }}>
       <aside
-        className="hidden xl:flex xl:w-64 shrink-0 flex-col border-b xl:border-b-0 xl:border-r px-4 py-4 xl:py-8"
+        className="hidden xl:flex xl:w-64 shrink-0 flex-col min-h-screen border-b xl:border-b-0 xl:border-r px-4 py-4 xl:py-6"
         style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.sidebarSurface }}
       >
+        <div className="mb-4">
+          <AccountProfileButton {...profileProps} menuPlacement="bottom" menuAlign="start" />
+        </div>
         <Link
           to={ROUTES.home}
-          className="flex items-center gap-2 mb-6 px-2 text-sm font-medium opacity-70 hover:opacity-100 no-underline"
+          className="flex items-center gap-2 mb-4 px-2 text-sm font-medium opacity-70 hover:opacity-100 no-underline"
           style={{ color: tezcaTheme.text }}
         >
           <Home size={18} aria-hidden />
@@ -113,14 +116,11 @@ export function UserAppLayout() {
         >
           Ứng dụng khách hàng
         </p>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-1 flex-1">
           {nav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
         </nav>
-        <div className="mt-auto pt-6">
-          <AccountProfileButton {...profileProps} menuPlacement="top" menuAlign="start" />
-        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-h-0 min-w-0 pb-[4.5rem] xl:pb-0">
@@ -128,13 +128,10 @@ export function UserAppLayout() {
           className="xl:hidden shrink-0 border-b px-4 py-3 flex items-center justify-between gap-2"
           style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.sidebarSurface }}
         >
-          <Link to={ROUTES.home} className="font-semibold text-sm no-underline" style={{ color: tezcaTheme.text }}>
-            Tezca
-          </Link>
+          <TezcaLogoLink to={ROUTES.home} size="sm" />
           <AccountProfileButton {...profileProps} compact className="shrink-0" buttonClassName="px-2 py-2 rounded-xl" />
         </header>
         <div className="flex-1 p-4 sm:p-6 md:p-10 overflow-auto" style={{ backgroundColor: pageBg, color: tezcaTheme.text }}>
-          <PageBreadcrumb pathname={pathname} />
           <Outlet />
         </div>
       </div>

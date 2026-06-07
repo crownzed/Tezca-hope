@@ -14,11 +14,14 @@ import {
   requestExpertAssignment,
   getCustomerHealthProfile,
   upsertCustomerHealthProfile,
+  getCustomerProfile,
+  upsertCustomerProfile,
+  buildCustomerProfilePacket,
   getTrainingPlanForCustomer,
   integrateTrainingPlanFromAi,
   syncTrainingPlanProgress,
 } from '../db.js';
-import { parseExercisesFromPlanMarkdown } from '../planToExercises.js';
+import { parseExercisesByDayFromPlanMarkdown } from '../trainingPlanSchedule.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { authMiddleware } from '../auth.js';
 import { aiChat, isAiConfigured } from '../ai.js';
@@ -28,9 +31,16 @@ import { planChatTurn, runChatTurn, runChatTurnStream } from '../chatTurn.js';
 import { aiChatLimiter, aiPlanLimiter } from '../rateLimit.js';
 import { sanitizeClientError } from '../secrets.js';
 import { DbError, mapDbDomainError } from '../dbErrors.js';
+import { buildPlanUserContext } from '../planUserContext.js';
 
 export const userRouter = Router();
 const requireUser = authMiddleware('user');
+
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
 
 userRouter.get('/me', requireUser, (req, res) => {
   const u = req.dbUser;
@@ -117,15 +127,29 @@ userRouter.get('/me/experts/requests', requireUser, (req, res) => {
   res.json({ requests });
 });
 
-userRouter.get('/me/health-profile', requireUser, (req, res) => {
-  const profile = getCustomerHealthProfile(req.user.sub);
-  res.json({ profile: profile || null });
-});
+userRouter.get('/me/profile', requireUser, asyncRoute(async (req, res) => {
+  const profile = await getCustomerProfile(req.user.sub);
+  res.json({ profile });
+}));
 
-userRouter.put('/me/health-profile', requireUser, (req, res) => {
-  upsertCustomerHealthProfile(req.user.sub, req.body || {});
+userRouter.put('/me/profile', requireUser, asyncRoute(async (req, res) => {
+  const saved = await upsertCustomerProfile(req.user.sub, req.body || {});
+  res.json({ profile: saved });
+}));
+
+userRouter.get('/me/profile-packet', requireUser, asyncRoute(async (req, res) => {
+  res.json(await buildCustomerProfilePacket(req.user.sub));
+}));
+
+userRouter.get('/me/health-profile', requireUser, asyncRoute(async (req, res) => {
+  const profile = await getCustomerHealthProfile(req.user.sub);
+  res.json({ profile: profile || null });
+}));
+
+userRouter.put('/me/health-profile', requireUser, asyncRoute(async (req, res) => {
+  await upsertCustomerHealthProfile(req.user.sub, req.body || {});
   res.json({ ok: true });
-});
+}));
 
 userRouter.get('/me/bot-messages', requireUser, (req, res) => {
   const list = listBotMessagesForUser(req.user.sub);
@@ -269,15 +293,24 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
     });
     return;
   }
-  const { age, goal, activity, dietNote } = req.body || {};
-  const a = Number(age);
-  if (!a || a < 14 || a > 100) {
-    res.status(400).json({ error: 'Tuổi không hợp lệ (14–100)' });
+  const { goal, activity, dietNote } = req.body || {};
+  const ctx = buildPlanUserContext({
+    profile: await getCustomerProfile(req.user.sub),
+    healthProfile: await getCustomerHealthProfile(req.user.sub),
+    bmiEntries: listBmiForUser(req.user.sub),
+  });
+  const a = ctx.age;
+  if (a == null) {
+    res.status(400).json({
+      error: 'Chưa có ngày sinh trong hồ sơ. Cập nhật Hồ sơ & cài đặt trước khi sinh kế hoạch.',
+      code: 'PROFILE_DOB_REQUIRED',
+    });
     return;
   }
   const g = ['lose', 'maintain', 'gain'].includes(goal) ? goal : 'maintain';
   const act = ['low', 'medium', 'high'].includes(activity) ? activity : 'medium';
-  const note = typeof dietNote === 'string' ? dietNote.trim().slice(0, 2000) : '';
+  const clientNote = typeof dietNote === 'string' ? dietNote.trim() : '';
+  const note = [clientNote, ctx.healthSummary].filter(Boolean).join('\n\n').slice(0, 2000);
 
   const goalVi =
     g === 'lose' ? 'giảm cân bền vững' : g === 'gain' ? 'tăng cân / tăng khối lượng nạc' : 'duy trì cân nặng';
@@ -288,35 +321,68 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
         ? 'trung bình'
         : 'cao (tập thường xuyên)';
 
-  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động cho **7 ngày đầu** (tiếng Việt, Markdown có tiêu đề ## / ###).
-Đầu vào cố định:
-- Tuổi: ${a}
+  const profileBlock =
+    ctx.profileLines.length > 0 ? `\n**Hồ sơ khách (từ tài khoản):**\n${ctx.profileLines.map((l) => `- ${l}`).join('\n')}` : '';
+
+  const userPrompt = `Soạn **kế hoạch tập luyện 7 ngày** (tiếng Việt, Markdown). Khách chỉ cần lịch tập đầy đủ + hướng dẫn ngắn — **không** viết kế hoạch dinh dưỡng chi tiết, không mục theo dõi cân/đo riêng.
+
+**Đầu vào:**
+- Tuổi: ${a} (từ ngày sinh hồ sơ)
 - Mục tiêu: ${goalVi}
 - Mức vận động hiện tại: ${actVi}
-${note ? `- Ghi chú người dùng (ưu tiên nếu không mâu thuẫn an toàn): ${note}` : ''}
+${profileBlock}
+${note ? `\n**Ghi chú / sức khỏe (ưu tiên nếu an toàn):**\n${note}` : ''}
 
-Yêu cầu nội dung:
-1) **Tóm tắt** 2–3 câu (định hướng tuần đầu, không hứa kết quả cụ thể).
-2) **Dinh dưỡng:** nguyên tắc calo/macro phù hợp mục tiêu; ví dụ khẩu phần **bữa sáng/trưa/tối** linh hoạt; nhắc nước/chất xơ/protein theo mục tiêu.
-3) **Vận động:** khởi động, buổi chính, phục hồi; tiến triển theo tuần; tránh gắng sức khi đau cấp.
-4) **Theo dõi:** cân, vòng eo (nếu giảm cân), giấc ngủ/cảm xúc — gợi ý tần suất đo.
-5) Luôn có đoạn **tuyên bố miễn trừ**: nội dung chỉ mang tính gợi ý lối sống, không thay thế khám và tư vấn trực tiếp; người có bệnh nền, phụ nữ có thai/cho con bú, vận động viên hoặc đang điều trị phải làm theo hướng dẫn của người hành nghề.
+**ĐÚNG format — chỉ 3 mục ## sau (không thêm mục khác):**
 
-Không kê thuốc, không liều bổ sung cụ thể trừ khi chỉ là “thảo luận với bác sĩ”.`;
+## Hướng dẫn ngắn
+- Tối đa **4 câu** hoặc **4 bullet**: định hướng tuần, nghỉ/ngày nhẹ, khi nào giảm cường độ.
+- Tối đa **1 bullet** gợi ý ăn uống chung (protein/nước) — không liệt kê bữa sáng/trưa/tối.
 
-  const PLAN_SYSTEM = `Bạn là chuyên gia dinh dưỡng & hoạt động thể chất — viết tiếng Việt tự nhiên, thực tế.
-Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
-Không chẩn đoán hay kê đơn; chỉ giáo dục sức khỏe. Tôn trọng ghi chú y tế của người dùng.
-Markdown gọn: tiêu đề ##, đoạn ngắn, bullet khi cần danh sách; câu nối mạch lạc, không lặp ý; một disclaimer ngắn ở cuối.`;
+## Lịch tập 7 ngày
+Bắt buộc **đúng 7** tiêu đề con, lần lượt:
+### Ngày 1 (Thứ 2)
+### Ngày 2 (Thứ 3)
+### Ngày 3 (Thứ 4)
+### Ngày 4 (Thứ 5)
+### Ngày 5 (Thứ 6)
+### Ngày 6 (Thứ 7)
+### Ngày 7 (Chủ nhật)
+
+Mỗi ngày **4–6 bullet**, tên bài **cụ thể** (VD: "Khởi động hông vai 8 phút", "Goblet squat 3×10"). Mỗi ngày có: khởi động → buổi chính → giãn/phục hồi ngắn.
+**Cấm** lặp cùng tên bài (hoặc cùng động tác chính) giữa các ngày trong tuần.
+
+## Lưu ý an toàn
+1–2 câu: gợi ý lối sống, không thay khám; bệnh nền/thai kỳ/đang điều trị phải theo bác sĩ. Không kê thuốc hay liều bổ sung.`;
+
+  const PLAN_SYSTEM = `Bạn là huấn luyện viên thể hình — viết tiếng Việt, thực tế, an toàn.
+Ưu tiên: lịch 7 ngày đủ, mỗi ngày bài khác nhau; hướng dẫn ngắn gọn.
+Không chẩn đoán, không kê đơn. Không viết mục "Dinh dưỡng" hay "Theo dõi" riêng.
+Tuân thủ đúng 3 mục ## trong yêu cầu người dùng; dùng ### Ngày 1 … ### Ngày 7 như mẫu.`;
+
+  const planMessages = [
+    { role: 'system', content: PLAN_SYSTEM },
+    { role: 'user', content: userPrompt },
+  ];
 
   try {
-    const plan = await aiChat(
-      [
-        { role: 'system', content: PLAN_SYSTEM },
-        { role: 'user', content: userPrompt },
-      ],
-      { temperature: 0.65, max_tokens: 2500 },
-    );
+    let plan = await aiChat(planMessages, { temperature: 0.45, max_tokens: 3200 });
+    let parsed = parseExercisesByDayFromPlanMarkdown(plan);
+    const dayCount = Object.values(parsed.byDay).filter((list) => list.length > 0).length;
+    if (parsed.mode !== 'daily' || dayCount < 5) {
+      plan = await aiChat(
+        [
+          ...planMessages,
+          { role: 'assistant', content: plan },
+          {
+            role: 'user',
+            content:
+              'Phản hồi trước thiếu đủ 7 ngày tập riêng biệt. Viết lại TOÀN BỘ theo đúng format 3 mục ##; phần ## Lịch tập 7 ngày phải có đủ ### Ngày 1 … ### Ngày 7, mỗi ngày 4–6 bullet, không lặp tên bài giữa các ngày.',
+          },
+        ],
+        { temperature: 0.35, max_tokens: 3200 },
+      );
+    }
     res.json({ plan: polishAiText(plan) });
   } catch (e) {
     const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
@@ -337,7 +403,9 @@ userRouter.post('/me/training-plan/integrate', requireUser, (req, res) => {
       res.status(400).json({ error: 'Thiếu nội dung kế hoạch để tích hợp' });
       return;
     }
-    let exercises = parseExercisesFromPlanMarkdown(planMd);
+    const parsed = parseExercisesByDayFromPlanMarkdown(planMd);
+    let exercises = parsed.flat;
+    let exercisesByDay = parsed.mode === 'daily' ? parsed.byDay : undefined;
     if (exercises.length === 0) {
       exercises = [
         {
@@ -350,8 +418,9 @@ userRouter.post('/me/training-plan/integrate', requireUser, (req, res) => {
           actualWeight: '',
         },
       ];
+      exercisesByDay = undefined;
     }
-    const saved = integrateTrainingPlanFromAi(req.user.sub, planMd, exercises);
+    const saved = integrateTrainingPlanFromAi(req.user.sub, planMd, exercises, exercisesByDay);
     res.status(201).json({ plan: saved });
   } catch (e) {
     const err = mapDbDomainError(e);

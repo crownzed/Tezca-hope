@@ -238,28 +238,24 @@ export function DoctorDashboardPage() {
 
   return (
     <div
-      className="flex flex-col h-full min-h-0 font-[Inter,ui-sans-serif,system-ui,sans-serif] tabular-nums"
+      className="flex flex-col flex-1 min-h-0 font-[Inter,ui-sans-serif,system-ui,sans-serif] tabular-nums"
       style={{ backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}
     >
-      <div
-        className="lg:hidden shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 border-b"
-        style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
-      >
-        <Link to={ROUTES.home} className="text-sm font-semibold truncate no-underline" style={{ color: tezcaTheme.text }}>
-          Tezca
-        </Link>
-        <Link to={ROUTES.expert.customers.root} className="text-xs font-medium shrink-0" style={{ color: tezcaTheme.accent }}>
-          Danh sách khách hàng
-        </Link>
-      </div>
       <div className="flex flex-1 min-h-0 flex-col min-w-0">
-          <header className="h-16 shrink-0 flex items-center gap-3 md:gap-4 px-3 md:px-6 bg-white border-b border-slate-200/90 shadow-sm">
+          <header
+            className="h-14 shrink-0 flex items-center gap-3 md:gap-4 px-4 md:px-5 border-b"
+            style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+          >
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 m-0 truncate">Doctor Desk</p>
+              <p className="text-sm font-semibold m-0 truncate" style={{ color: tezcaTheme.text }}>
+                Doctor Desk
+              </p>
+              <p className="text-xs m-0 mt-0.5 truncate opacity-60">{customerLabel}</p>
             </div>
             <button
               type="button"
-              className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100 shrink-0"
+              className="relative p-2 rounded-lg shrink-0 opacity-70 hover:opacity-100"
+              style={{ color: tezcaTheme.text }}
               aria-label="Thông báo"
             >
               <Bell className="w-5 h-5" />
@@ -267,14 +263,6 @@ export function DoctorDashboardPage() {
                 <span className="absolute top-1.5 right-1.5 min-w-[8px] h-2 px-0.5 rounded-full bg-rose-500 ring-2 ring-white" />
               ) : null}
             </button>
-            <div className="flex items-center gap-3 pl-2 border-l border-slate-200 shrink-0">
-              <div className="text-right hidden sm:block min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate m-0 max-w-[140px]">{user?.name ?? 'Bác sĩ'}</p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 text-white text-sm font-semibold flex items-center justify-center ring-2 ring-white shadow">
-                {(user?.name ?? 'BS').slice(0, 2)}
-              </div>
-            </div>
           </header>
 
           {loadError && (

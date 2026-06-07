@@ -1,4 +1,4 @@
-import { Bell, MessagesSquare } from 'lucide-react';
+import { Bell, MessagesSquare, UserPlus } from 'lucide-react';
 import { communityShell } from '../../lib/communityShellTheme';
 import { tezcaTheme } from '../../lib/tezcaTheme';
 import { POST_TOPICS, type CommunityPostTopic } from '../../lib/communityTopics';
@@ -154,7 +154,16 @@ export function ForumFeed({
 
       {loading && <p className="text-sm opacity-60">Đang tải…</p>}
 
-      {!loading && posts.length === 0 && (
+      {!loading && posts.length === 0 && feedMode === 'following' && (
+        <EmptyState
+          icon={UserPlus}
+          title="Chưa có bài từ người bạn theo dõi"
+          description={'Theo dõi thành viên hoặc chủ đề bằng cách nhấn chuông bên cạnh chủ đề hoặc nút "Theo dõi" ở cột bên phải.'}
+          actionLabel="Xem tất cả bài viết"
+          onAction={() => onFeedModeChange('for_you')}
+        />
+      )}
+      {!loading && posts.length === 0 && feedMode !== 'following' && (
         <EmptyState
           icon={MessagesSquare}
           title="Chưa có bài viết"

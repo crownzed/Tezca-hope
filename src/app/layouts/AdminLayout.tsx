@@ -3,6 +3,7 @@ import { ROUTES } from '../routes';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { AdminSidebar } from '../components/admin/AdminSidebar';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { TezcaLogoLink } from '../components/TezcaLogo';
 
 export function AdminLayout() {
   const { user, sessionReady, logout } = useAdminAuth();
@@ -20,9 +21,12 @@ export function AdminLayout() {
           className="border-b px-5 py-3 flex items-center justify-between shrink-0"
           style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
         >
-          <div>
-            <p className="font-semibold m-0 text-sm">Tezca Admin Console</p>
-            <p className="text-xs opacity-60 m-0 mt-0.5">{user.email}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <TezcaLogoLink to={ROUTES.home} variant="mark" size="sm" className="shrink-0" />
+            <div className="min-w-0">
+              <p className="font-semibold m-0 text-sm">Admin Console</p>
+              <p className="text-xs opacity-60 m-0 mt-0.5 truncate">{user.email}</p>
+            </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
             <Link to={ROUTES.home} className="underline opacity-80 hover:opacity-100">

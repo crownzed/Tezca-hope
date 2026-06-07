@@ -1,34 +1,30 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 import { ROUTES } from '../../routes';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { useAnyCommunitySession } from '../../lib/useCommunitySession';
+import { SessionLoading } from '../../components/tezca/SessionLoading';
+
+function useActivePortal(): { ready: boolean; portal: string | null } {
+  const { isAuthenticated, isVerifying, role } = useAnyCommunitySession();
+  if (isVerifying) return { ready: false, portal: null };
+  if (!isAuthenticated) return { ready: true, portal: null };
+  if (role === 'expert') return { ready: true, portal: ROUTES.expert.customers.root };
+  if (role === 'admin') return { ready: true, portal: ROUTES.admin.dashboard };
+  return { ready: true, portal: ROUTES.app.dashboard };
+}
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
-  const { user, login, logout } = useAdminAuth();
+  const { login } = useAdminAuth();
+  const { ready, portal } = useActivePortal();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  if (user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="rounded-2xl border p-6 bg-white max-w-md w-full space-y-3">
-          <h1 className="text-xl font-semibold">Đã đăng nhập quản trị</h1>
-          <p className="text-sm opacity-70">{user.email}</p>
-          <div className="flex gap-2">
-            <Link to={ROUTES.admin.dashboard} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm">
-              Vào Admin Console
-            </Link>
-            <button type="button" className="px-4 py-2 rounded-lg border text-sm" onClick={() => logout()}>
-              Đăng xuất
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!ready) return <SessionLoading title="Đang kiểm tra phiên…" />;
+  if (portal) return <Navigate to={portal} replace />;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

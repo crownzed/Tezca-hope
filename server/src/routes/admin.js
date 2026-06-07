@@ -209,49 +209,65 @@ adminRouter.delete('/users/:userId/roles/:role', requireAdmin, (req, res) => {
   res.json({ ok: true, roles: listUserGrantedRoles(userId) });
 });
 
-adminRouter.get('/community/posts', requireAdmin, (req, res) => {
-  const topic = req.query.topic ? String(req.query.topic) : undefined;
-  const posts = adminManagementService.listPostsForModeration({
-    topic,
-    viewerId: req.user.sub,
-    limit: 50,
-  });
-  res.json({ posts });
+adminRouter.get('/community/posts', requireAdmin, async (req, res) => {
+  try {
+    const topic = req.query.topic ? String(req.query.topic) : undefined;
+    const posts = await adminManagementService.listPostsForModeration({
+      topic,
+      viewerId: req.user.sub,
+      limit: 50,
+    });
+    res.json({ posts });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
+  }
 });
 
-adminRouter.patch('/community/posts/:postId', requireAdmin, (req, res) => {
-  const postId = String(req.params.postId);
-  const status = String(req.body?.status || '').trim();
-  const actor = { id: req.user.sub, role: req.user.role };
-  if (status === 'hidden') {
-    const ok = adminManagementService.moderatePost(actor, postId, 'hide');
+adminRouter.patch('/community/posts/:postId', requireAdmin, async (req, res) => {
+  try {
+    const postId = String(req.params.postId);
+    const status = String(req.body?.status || '').trim();
+    const actor = { id: req.user.sub, role: req.user.role };
+    if (status === 'hidden') {
+      const ok = await adminManagementService.moderatePost(actor, postId, 'hide');
+      if (!ok) {
+        res.status(404).json({ error: 'Không tìm thấy bài viết' });
+        return;
+      }
+      res.json({ ok: true });
+      return;
+    }
+    res.status(400).json({ error: 'status không hợp lệ' });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
+  }
+});
+
+adminRouter.get('/community/reports', requireAdmin, async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const reports = await adminManagementService.listReports({ status });
+    res.json({ reports });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
+  }
+});
+
+adminRouter.patch('/community/reports/:reportId', requireAdmin, async (req, res) => {
+  try {
+    const reportId = String(req.params.reportId);
+    const status = String(req.body?.status || '').trim();
+    if (!['resolved', 'dismissed', 'pending'].includes(status)) {
+      res.status(400).json({ error: 'Trạng thái báo cáo không hợp lệ' });
+      return;
+    }
+    const ok = await adminManagementService.resolveReport(reportId, status);
     if (!ok) {
-      res.status(404).json({ error: 'Không tìm thấy bài viết' });
+      res.status(404).json({ error: 'Không tìm thấy báo cáo' });
       return;
     }
     res.json({ ok: true });
-    return;
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
   }
-  res.status(400).json({ error: 'status không hợp lệ' });
-});
-
-adminRouter.get('/community/reports', requireAdmin, (req, res) => {
-  const status = req.query.status ? String(req.query.status) : undefined;
-  const reports = adminManagementService.listReports({ status });
-  res.json({ reports });
-});
-
-adminRouter.patch('/community/reports/:reportId', requireAdmin, (req, res) => {
-  const reportId = String(req.params.reportId);
-  const status = String(req.body?.status || '').trim();
-  if (!['resolved', 'dismissed', 'pending'].includes(status)) {
-    res.status(400).json({ error: 'Trạng thái báo cáo không hợp lệ' });
-    return;
-  }
-  const ok = adminManagementService.resolveReport(reportId, status);
-  if (!ok) {
-    res.status(404).json({ error: 'Không tìm thấy báo cáo' });
-    return;
-  }
-  res.json({ ok: true });
 });

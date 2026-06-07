@@ -23,7 +23,9 @@ import { PlansPage } from './pages/app/PlansPage';
 import { RewardsPage } from './pages/app/RewardsPage';
 import { CustomerExpertChatPage } from './pages/app/CustomerExpertChatPage';
 import { ChooseExpertPage } from './pages/app/ChooseExpertPage';
+import { CustomerProfilePage } from './pages/app/CustomerProfilePage';
 import { CommunityLayout } from './layouts/CommunityLayout';
+import { CommunityGate } from './layouts/CommunityGate';
 import { CommunityForumPage } from './pages/community/CommunityForumPage';
 import { CommunityRoomsPage } from './pages/community/CommunityRoomsPage';
 import { CommunityAnnouncementsPage } from './pages/community/CommunityAnnouncementsPage';
@@ -107,7 +109,7 @@ function AppRoutes() {
 
       {/* —— Cộng đồng (khu chức năng riêng) —— */}
       <Route path="/cong-dong" element={<CommunityLayout />}>
-        <Route element={<CustomerAppGate />}>
+        <Route element={<CommunityGate />}>
           <Route index element={<CommunityIndexRedirect />} />
           <Route path="dien-dan" element={<CommunityForumPage />} />
           <Route path="phong-chat" element={<CommunityRoomsPage />} />
@@ -134,6 +136,7 @@ function AppRoutes() {
             <Route path="tezca-ai" element={<AiChatPage />} />
             <Route path="chat-chuyen-gia" element={<CustomerExpertChatPage />} />
             <Route path="chon-chuyen-gia" element={<ChooseExpertPage />} />
+            <Route path="ho-so" element={<CustomerProfilePage />} />
           </Route>
 
           <Route path="ke-hoach">

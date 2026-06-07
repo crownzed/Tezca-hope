@@ -2,6 +2,7 @@ import { NavLink } from 'react-router';
 import { BarChart3, GraduationCap, Users } from 'lucide-react';
 import { ROUTES } from '../../routes';
 import { tezcaTheme } from '../../lib/tezcaTheme';
+import { TezcaLogoLink } from '../TezcaLogo';
 
 const navItems = [
   { to: ROUTES.admin.dashboard, label: 'Tổng quan hệ thống', icon: BarChart3, end: true },
@@ -15,7 +16,10 @@ export function AdminSidebar() {
       className="w-full md:w-64 shrink-0 md:min-h-screen p-5 flex flex-col"
       style={{ backgroundColor: '#1e293b', color: '#f8fafc' }}
     >
-      <h2 className="text-xl font-bold mb-6 text-center m-0">Admin Panel</h2>
+      <div className="mb-6 flex flex-col items-center gap-2">
+        <TezcaLogoLink to={ROUTES.home} size="sm" wordmarkColor="#f8fafc" />
+        <p className="text-xs text-slate-400 m-0">Admin Console</p>
+      </div>
       <nav aria-label="Quản trị hệ thống">
         <ul className="space-y-1 list-none m-0 p-0">
           {navItems.map(({ to, label, icon: Icon, ...rest }) => (

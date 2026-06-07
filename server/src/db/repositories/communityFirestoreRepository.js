@@ -458,6 +458,7 @@ export async function listCommunityFeed({
       listFollowedCommunityTopics(viewerId),
     ]);
     const userSet = new Set(userIds);
+    userSet.add(viewerId);
     const topicSet = new Set(topics);
     rows = rows.filter((p) => userSet.has(p.userId) || topicSet.has(p.topic));
   }

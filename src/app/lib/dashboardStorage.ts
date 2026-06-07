@@ -15,12 +15,22 @@ export {
   MEAT_CATALOG,
   MEAT_CATALOG_GROUPS,
   resolveDailyNutritionTargets,
+  resolveDailyNutritionTargetsDetailed,
+  loadNutritionProfile,
+  saveNutritionProfile,
+  rememberFoodEstimate,
+  ACTIVITY_LEVEL_OPTIONS,
+  GOAL_OPTIONS,
+  SEX_OPTIONS,
   sumNutrition,
   todayIsoLocal,
   nutritionProgressPct,
   type FoodEstimateResult,
   type MeatPickOption,
   type MeatCatalogGroup,
+  type NutritionProfileInput,
+  type NutritionTotals,
+  type DailyNutritionTargetsResult,
 } from './nutritionEngine';
 
 export type DashboardExercise = {
@@ -82,6 +92,19 @@ export function saveDailyProgressLocal(userId: string | null, map: DailyProgress
 
 export function saveDashboardExercises(userId: string | null, exercises: DashboardExercise[]) {
   writeJson(key('tezca_dashboard_exercises_v1', userId), exercises);
+}
+
+const SCHEDULE_KEY = 'tezca_dashboard_schedule_v1';
+
+export function loadExerciseSchedule(userId: string | null): Record<string, DashboardExercise[]> {
+  return readJson<Record<string, DashboardExercise[]>>(key(SCHEDULE_KEY, userId), {});
+}
+
+export function saveExerciseSchedule(
+  userId: string | null,
+  byDay: Record<string, DashboardExercise[]>,
+) {
+  writeJson(key(SCHEDULE_KEY, userId), byDay);
 }
 
 /** Cấu trúc bài tập (không lưu completed theo ngày — dùng trainingDayProgress). */

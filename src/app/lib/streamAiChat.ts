@@ -23,8 +23,10 @@ export async function streamAiChat({
     ? [apiUrl('/api/me/ai-chat/stream'), '/api/me/ai-chat/stream']
     : [apiUrl('/api/me/ai-chat/stream')];
   let lastRes: Response | null = null;
+  let lastError: unknown;
 
-  for (const url of urls) {
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]!;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -92,7 +94,8 @@ export async function streamAiChat({
       return finalText;
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') throw e;
-      if (base === bases[bases.length - 1]) throw e;
+      lastError = e;
+      if (i === urls.length - 1) throw e;
     }
   }
 
@@ -100,6 +103,7 @@ export async function streamAiChat({
     const err = (await lastRes.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error || `${lastRes.status} ${lastRes.statusText}`);
   }
+  if (lastError instanceof Error) throw lastError;
   throw new Error('Không kết nối được stream AI');
 }
 

@@ -4,6 +4,7 @@
 import { getDb } from './connection.js';
 import { DbError, mapSqliteError } from '../dbErrors.js';
 import { normalizeEmail } from '../validate.js';
+import { buildCustomerProfilePacket } from './customerProfileStore.js';
 
 function findUserById(id) {
   const row = getDb()
@@ -143,12 +144,38 @@ export function removeExpertCustomerAssignment(expertId, customerId) {
     .run(expertId, customerId);
 }
 
+export function getExpertProfile(userId) {
+  const u = findUserById(userId);
+  if (!u || u.role !== 'expert') return null;
+  const row = getDb()
+    .prepare(
+      `SELECT full_name AS fullName, gender, specialty, license_no AS licenseNo,
+              bio, COALESCE(is_active, 1) AS isActive, updated_at AS updatedAt
+       FROM expert_profiles WHERE user_id = ?`,
+    )
+    .get(userId);
+  return {
+    userId,
+    email: u.email,
+    fullName: row?.fullName || u.name || '',
+    gender: row?.gender || '',
+    specialty: row?.specialty || 'General',
+    licenseNo: row?.licenseNo || '',
+    bio: row?.bio || '',
+    isActive: row ? Boolean(row.isActive) : true,
+    updatedAt: row?.updatedAt ?? null,
+  };
+}
+
 export function listAvailableExperts() {
   return getDb()
     .prepare(
       `SELECT u.id, u.email, u.name,
               COALESCE(ep.full_name, u.name) AS fullName,
-              COALESCE(ep.specialty, '') AS specialty
+              COALESCE(ep.specialty, '') AS specialty,
+              COALESCE(ep.bio, '') AS bio,
+              COALESCE(ep.license_no, '') AS licenseNo,
+              COALESCE(ep.gender, '') AS gender
        FROM users u
        LEFT JOIN expert_profiles ep ON ep.user_id = u.id
        WHERE u.role = 'expert' AND COALESCE(ep.is_active, 1) = 1
@@ -193,8 +220,8 @@ export function requestExpertAssignment(customerId, expertId) {
   return { ok: true };
 }
 
-export function listPendingCustomersForExpert(expertId) {
-  return getDb()
+export async function listPendingCustomersForExpert(expertId) {
+  const rows = getDb()
     .prepare(
       `SELECT a.id, a.customer_id AS customerId, a.status, a.requested_by AS requestedBy,
               a.created_at AS createdAt, u.email, u.name
@@ -204,6 +231,12 @@ export function listPendingCustomersForExpert(expertId) {
        ORDER BY a.created_at DESC`,
     )
     .all(expertId);
+  return Promise.all(
+    rows.map(async (r) => ({
+      ...r,
+      intake: await buildCustomerProfilePacket(r.customerId),
+    })),
+  );
 }
 
 export function decideExpertAssignment(expertId, customerId, action) {
@@ -224,51 +257,6 @@ export function decideExpertAssignment(expertId, customerId, action) {
   return { ok: true };
 }
 
-export function getCustomerHealthProfile(userId) {
-  const row = getDb()
-    .prepare(
-      `SELECT user_id AS userId, current_conditions AS currentConditions,
-              medical_history AS medicalHistory, allergies, medications,
-              contraindications, updated_at AS updatedAt
-       FROM customer_health_profiles WHERE user_id = ?`,
-    )
-    .get(userId);
-  return row || null;
-}
-
-export function upsertCustomerHealthProfile(userId, fields = {}) {
-  const now = Date.now();
-  const existing = getCustomerHealthProfile(userId);
-  const payload = {
-    currentConditions: String(fields.currentConditions ?? existing?.currentConditions ?? '').slice(0, 4000),
-    medicalHistory: String(fields.medicalHistory ?? existing?.medicalHistory ?? '').slice(0, 4000),
-    allergies: String(fields.allergies ?? existing?.allergies ?? '').slice(0, 2000),
-    medications: String(fields.medications ?? existing?.medications ?? '').slice(0, 2000),
-    contraindications: String(fields.contraindications ?? existing?.contraindications ?? '').slice(0, 2000),
-  };
-  getDb()
-    .prepare(
-      `INSERT INTO customer_health_profiles
-         (user_id, current_conditions, medical_history, allergies, medications, contraindications, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET
-         current_conditions = excluded.current_conditions,
-         medical_history = excluded.medical_history,
-         allergies = excluded.allergies,
-         medications = excluded.medications,
-         contraindications = excluded.contraindications,
-         updated_at = excluded.updated_at`,
-    )
-    .run(
-      userId,
-      payload.currentConditions,
-      payload.medicalHistory,
-      payload.allergies,
-      payload.medications,
-      payload.contraindications,
-      now,
-    );
-}
 
 export function listCustomersWithProfiles() {
   return getDb()
@@ -382,36 +370,15 @@ export function listAssignmentRelations() {
     .all();
 }
 
-export function upsertCustomerProfile(userId, fields = {}) {
-  const now = Date.now();
-  getDb()
-    .prepare(
-      `INSERT INTO customer_profiles (user_id, full_name, gender, dob, phone, address, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET
-         full_name = excluded.full_name,
-         gender = excluded.gender,
-         dob = excluded.dob,
-         phone = excluded.phone,
-         address = excluded.address,
-         notes = excluded.notes,
-         updated_at = excluded.updated_at`,
-    )
-    .run(
-      userId,
-      String(fields.fullName ?? fields.full_name ?? '').slice(0, 120),
-      String(fields.gender ?? '').slice(0, 32),
-      String(fields.dob ?? '').slice(0, 32),
-      String(fields.phone ?? '').slice(0, 32),
-      String(fields.address ?? '').slice(0, 256),
-      String(fields.notes ?? '').slice(0, 2000),
-      now,
-      now,
-    );
-}
 
 export function upsertExpertProfile(userId, fields = {}) {
   const now = Date.now();
+  const u = findUserById(userId);
+  const fullNameInput = String(fields.fullName ?? fields.full_name ?? '').trim().slice(0, 120);
+  const existing = getDb()
+    .prepare(`SELECT full_name, gender, specialty, license_no, bio, is_active FROM expert_profiles WHERE user_id = ?`)
+    .get(userId);
+  const fullName = fullNameInput || existing?.full_name || u?.name || '';
   getDb()
     .prepare(
       `INSERT INTO expert_profiles (user_id, full_name, gender, specialty, license_no, bio, is_active, created_at, updated_at)
@@ -427,15 +394,21 @@ export function upsertExpertProfile(userId, fields = {}) {
     )
     .run(
       userId,
-      String(fields.fullName ?? fields.full_name ?? '').slice(0, 120),
-      String(fields.gender ?? '').slice(0, 32),
-      String(fields.specialty ?? 'General').slice(0, 120),
-      String(fields.licenseNo ?? fields.license_no ?? '').slice(0, 64),
-      String(fields.bio ?? '').slice(0, 4000),
-      fields.isActive === false ? 0 : 1,
+      fullName,
+      fields.gender != null ? String(fields.gender).slice(0, 32) : existing?.gender || '',
+      fields.specialty != null ? String(fields.specialty).slice(0, 120) : existing?.specialty || 'General',
+      fields.licenseNo != null || fields.license_no != null
+        ? String(fields.licenseNo ?? fields.license_no ?? '').slice(0, 64)
+        : existing?.license_no || '',
+      fields.bio != null ? String(fields.bio).slice(0, 4000) : existing?.bio || '',
+      fields.isActive === false ? 0 : fields.isActive === true ? 1 : existing?.is_active ?? 1,
       now,
       now,
     );
+  if (fullName) {
+    getDb().prepare(`UPDATE users SET name = ? WHERE id = ?`).run(fullName, userId);
+  }
+  return getExpertProfile(userId);
 }
 
 export function listUserGrantedRoles(userId) {

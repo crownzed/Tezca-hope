@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { getDatabaseInfo, runDatabaseDiagnostics, subscribeNewsletter } from '../db.js';
+import { isFirestoreConfigured, runFirestoreDiagnostics } from '../db/firestore.js';
+import { useCommunityFirestore } from '../db/communityStore.js';
 import { isAiConfigured, aiProvider } from '../ai.js';
 import { isProduction } from '../secrets.js';
 import { newsletterLimiter } from '../rateLimit.js';
@@ -17,6 +19,22 @@ publicApiRouter.get('/health/ai', (_req, res) => {
     return;
   }
   res.json({ configured: isAiConfigured(), provider: aiProvider() });
+});
+
+publicApiRouter.get('/health/firestore', async (_req, res) => {
+  try {
+    const diagnostics = await runFirestoreDiagnostics();
+    res.status(diagnostics.ok ? 200 : diagnostics.configured ? 503 : 200).json({
+      ok: diagnostics.ok,
+      configured: diagnostics.configured,
+      engine: 'firestore',
+      communityStorage: useCommunityFirestore() ? 'firestore' : 'sqlite',
+      errors: diagnostics.errors,
+      checks: diagnostics.checks,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, configured: isFirestoreConfigured(), error: String(e) });
+  }
 });
 
 publicApiRouter.get('/health/db', (_req, res) => {

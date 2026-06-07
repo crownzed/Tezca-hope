@@ -1,89 +1,61 @@
-import { Link } from 'react-router';
-import { ArrowLeft, CalendarRange, LayoutGrid, MessageSquare, Shield } from 'lucide-react';
+import { UserCircle } from 'lucide-react';
 import { useExpertAuth } from '../../context/ExpertAuthContext';
-import { ROUTES } from '../../routes';
-import { tezcaTheme } from '../../lib/tezcaTheme';
-
-const cardStyle = {
-  backgroundColor: tezcaTheme.surface,
-  borderColor: tezcaTheme.border,
-};
+import { ExpertProfileForm } from '../../components/ExpertProfileForm';
+import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 export function ExpertSettingsPage() {
-  const { user } = useExpertAuth();
+  const { user, token } = useExpertAuth();
 
   return (
-    <div className="p-4 md:p-8 max-w-xl mx-auto space-y-6" style={{ color: tezcaTheme.text }}>
-      <Link
-        to={ROUTES.expert.customers.root}
-        className="inline-flex items-center gap-2 text-sm opacity-70 hover:opacity-100"
-        style={{ color: tezcaTheme.text }}
-      >
-        <ArrowLeft size={18} />
-        Danh sách khách hàng
-      </Link>
-
+    <div className="space-y-6 max-w-3xl" style={{ color: tezcaTheme.text }}>
       <div>
-        <h1 className="text-2xl font-bold m-0">Cài đặt chuyên gia</h1>
-        <p className="text-sm mt-1 m-0" style={{ color: tezcaTheme.textMuted }}>
-          Tài khoản và liên kết pháp lý
+        <h1 className="text-2xl md:text-3xl font-bold m-0 flex items-center gap-2">
+          <UserCircle size={26} style={{ color: tezcaTheme.accentDark }} aria-hidden />
+          Hồ sơ chuyên gia
+        </h1>
+        <p className="text-sm mt-1.5 m-0 opacity-70">
+          Xem và cập nhật thông tin hiển thị công khai với khách hàng.
         </p>
       </div>
 
-      <div className="rounded-2xl border p-5 space-y-4" style={cardStyle}>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide m-0 mb-1" style={{ color: tezcaTheme.textMuted }}>
-            Đăng nhập hiện tại
-          </p>
-          <p className="text-lg font-semibold m-0">{user?.name ?? '—'}</p>
-          <p className="text-sm m-0 mt-0.5" style={{ color: tezcaTheme.textMuted }}>
-            {user?.email ?? ''}
-          </p>
-        </div>
-      </div>
-
-      <nav className="rounded-2xl border divide-y overflow-hidden" style={cardStyle}>
-        {[
-          { to: ROUTES.expert.weeklyReport, icon: CalendarRange, label: 'Báo cáo theo tuần', sub: 'Tổng hợp hoạt động' },
-          { to: ROUTES.expert.doctorDesk, icon: MessageSquare, label: 'Doctor Desk', sub: 'Chat & chỉ số' },
-          { to: ROUTES.expert.customers.root, icon: LayoutGrid, label: 'Khách hàng được gán', sub: '' },
-          { to: ROUTES.legal.root, icon: Shield, label: 'Trung tâm pháp lý', sub: 'Bảo mật, điều khoản, GDPR' },
-          { to: ROUTES.legal.community, icon: Shield, label: 'Quy tắc cộng đồng', sub: '' },
-        ].map(({ to, icon: Icon, label, sub }) => (
-          <Link
-            key={to}
-            to={to}
-            className="flex items-center gap-3 px-4 py-3.5 hover:opacity-90 transition-colors"
-            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.text }}
+      {/* Thông tin tài khoản */}
+      <section className="rounded-xl border p-5" style={tezcaCardStyle}>
+        <p className="text-xs font-semibold uppercase tracking-wide m-0 mb-3" style={{ color: tezcaTheme.textMuted }}>
+          Tài khoản đăng nhập
+        </p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
+            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
           >
-            <Icon className="w-5 h-5 shrink-0" style={{ color: tezcaTheme.accent }} />
-            <span className="font-medium">{label}</span>
-            {sub ? (
-              <span className="text-xs ml-auto" style={{ color: tezcaTheme.textMuted }}>
-                {sub}
-              </span>
-            ) : null}
-          </Link>
-        ))}
-        <Link
-          to={ROUTES.legal.cookie}
-          className="flex items-center gap-3 px-4 py-3.5 pl-12 hover:opacity-90"
-          style={{ color: tezcaTheme.text }}
-        >
-          <span className="font-medium">Cookie</span>
-        </Link>
-        <Link
-          to={ROUTES.legal.gdpr}
-          className="flex items-center gap-3 px-4 py-3.5 pl-12 hover:opacity-90"
-          style={{ color: tezcaTheme.text }}
-        >
-          <span className="font-medium">Thông báo GDPR</span>
-        </Link>
-      </nav>
+            {user?.name
+              ? user.name.trim().split(/\s+/).filter(Boolean)
+                  .map((p, i, arr) => i === 0 || i === arr.length - 1 ? p[0] : '')
+                  .filter(Boolean).join('').slice(0, 2).toUpperCase()
+              : '?'}
+          </div>
+          <div className="min-w-0">
+            <p className="text-base font-semibold m-0 truncate">{user?.name ?? '—'}</p>
+            <p className="text-sm m-0 mt-0.5 truncate" style={{ color: tezcaTheme.textMuted }}>
+              {user?.email ?? ''}
+            </p>
+            <span
+              className="inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-md"
+              style={{ backgroundColor: 'rgba(45, 212, 191, 0.15)', color: tezcaTheme.accentDark }}
+            >
+              Chuyên gia Tezca
+            </span>
+          </div>
+        </div>
+        <p className="text-xs m-0 mt-3 leading-relaxed" style={{ color: tezcaTheme.textMuted }}>
+          Đổi mật khẩu hoặc cần hỗ trợ kỹ thuật: liên hệ quản trị hệ thống Tezca.
+        </p>
+      </section>
 
-      <p className="text-xs m-0 leading-relaxed" style={{ color: tezcaTheme.textMuted }}>
-        Đổi mật khẩu hoặc hỗ trợ kỹ thuật: liên hệ quản trị hệ thống Tezca. Đăng xuất dùng nút trên thanh header chuyên gia.
-      </p>
+      {/* Hồ sơ công khai */}
+      <section className="rounded-xl border p-5 md:p-6" style={tezcaCardStyle}>
+        <ExpertProfileForm token={token} />
+      </section>
     </div>
   );
 }

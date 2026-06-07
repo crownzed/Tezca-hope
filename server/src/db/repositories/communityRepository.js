@@ -428,10 +428,11 @@ export function listCommunityFeed({
 
   if (mode === 'following' && viewerId) {
     sql += ` AND (
-      p.user_id IN (SELECT following_id FROM community_user_follows WHERE follower_id = ?)
+      p.user_id = ?
+      OR p.user_id IN (SELECT following_id FROM community_user_follows WHERE follower_id = ?)
       OR p.topic IN (SELECT topic FROM community_topic_follows WHERE user_id = ?)
     )`;
-    params.push(viewerId, viewerId);
+    params.push(viewerId, viewerId, viewerId);
   }
 
   if (beforeTs) {

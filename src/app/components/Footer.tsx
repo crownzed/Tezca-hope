@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { ROUTES, LANDING_HASH } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { TezcaLogoLink } from './TezcaLogo';
 
 const productLinks = [
   { label: 'Tính năng', to: { pathname: ROUTES.home, hash: LANDING_HASH.features } },
@@ -26,16 +27,9 @@ export function Footer() {
       <div className="max-w-7xl mx-auto">
         <div className="grid md:grid-cols-4 gap-12 mb-12">
           <div className="md:col-span-2">
-            <Link to={ROUTES.home} className="inline-flex items-center gap-2 mb-4 no-underline">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: tezcaTheme.accentLight }}>
-                <span className="text-white text-xl font-bold">T</span>
-              </div>
-              <span className="text-3xl font-semibold" style={{ color: tezcaTheme.text }}>
-                Tezca
-              </span>
-            </Link>
-            <p className="opacity-60 leading-relaxed max-w-md" style={{ color: tezcaTheme.text }}>
-              Nền tảng chăm sóc sức khỏe toàn diện, kết hợp AI và chuyên gia y tế để mang đến trải nghiệm cá nhân hóa tốt nhất.
+            <TezcaLogoLink to={ROUTES.home} size="xl" className="mb-4" />
+            <p className="leading-relaxed max-w-sm text-sm" style={{ color: 'rgba(26,32,44,0.58)' }}>
+              Trợ lý AI sức khoẻ kết hợp chuyên gia thực — theo dõi dinh dưỡng, tinh thần và nhận tư vấn cá nhân hoá.
             </p>
           </div>
 

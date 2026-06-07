@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import { HEALTH_PROFILE_SECTIONS, hasHealthProfileData } from '../lib/healthProfileSections';
 import { FormAlert } from './tezca/FormAlert';
+import { ProfileSectionField, ProfileSectionHeader, ProfileSectionNote } from './profile/ProfileSectionNote';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { saveHealthCache, loadHealthCache } from '../lib/profileCache';
 
 export type HealthProfile = {
   currentConditions: string;
@@ -19,16 +22,16 @@ export const EMPTY_HEALTH_PROFILE: HealthProfile = {
   contraindications: '',
 };
 
-const inputClass = 'mt-1 w-full rounded-xl px-4 py-3 border text-sm resize-y min-h-[72px]';
-const inputStyle = { borderColor: 'rgba(26, 32, 44, 0.12)' };
-
 type Props = {
   token: string | null;
+  userId?: string | null;
   compact?: boolean;
 };
 
-export function HealthProfileForm({ token, compact }: Props) {
-  const [form, setForm] = useState<HealthProfile>(EMPTY_HEALTH_PROFILE);
+export function HealthProfileForm({ token, userId, compact }: Props) {
+  const [saved, setSaved] = useState<HealthProfile>(EMPTY_HEALTH_PROFILE);
+  const [draft, setDraft] = useState<HealthProfile>(EMPTY_HEALTH_PROFILE);
+  const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,18 +40,52 @@ export function HealthProfileForm({ token, compact }: Props) {
     if (!token) return;
     setLoading(true);
     apiFetch<{ profile: HealthProfile | null }>('/api/me/health-profile', { token })
-      .then((r) => setForm(r.profile || EMPTY_HEALTH_PROFILE))
+      .then(async (r) => {
+        const isServerEmpty = !r.profile || !Object.values(r.profile).some((v) => String(v).trim());
+        if (!isServerEmpty) {
+          const profile = r.profile!;
+          setSaved(profile);
+          setDraft(profile);
+          if (userId) saveHealthCache(userId, profile);
+        } else {
+          const cached = userId ? loadHealthCache(userId) : null;
+          const hasCache = cached && Object.values(cached).some((v) => String(v).trim());
+          if (hasCache) {
+            try {
+              await apiFetch('/api/me/health-profile', {
+                method: 'PUT',
+                token,
+                body: JSON.stringify(cached),
+              });
+            } catch {}
+            setSaved(cached!);
+            setDraft(cached!);
+          }
+        }
+      })
       .catch(() => setMessage('Không tải được hồ sơ bệnh lý'))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, userId]);
 
   const setField = (key: keyof HealthProfile, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const startEdit = () => {
+    setDraft(saved);
+    setEditing(true);
+    setMessage('');
+  };
+
+  const cancelEdit = () => {
+    setDraft(saved);
+    setEditing(false);
+    setMessage('');
   };
 
   const save = async () => {
     if (!token) {
-      setMessage('Đăng nhập để lưu hồ sơ bệnh lý lên máy chủ.');
+      setMessage('Đăng nhập để lưu hồ sơ bệnh lý.');
       return;
     }
     setSaving(true);
@@ -57,9 +94,13 @@ export function HealthProfileForm({ token, compact }: Props) {
       await apiFetch('/api/me/health-profile', {
         method: 'PUT',
         token,
-        body: JSON.stringify(form),
+        body: JSON.stringify(draft),
       });
-      setMessage('Đã lưu hồ sơ bệnh lý.');
+      setSaved(draft);
+      setEditing(false);
+      setMessage('Đã cập nhật hồ sơ bệnh lý.');
+      if (userId) saveHealthCache(userId, draft);
+      window.dispatchEvent(new Event('tezca:profile-saved'));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Không lưu được hồ sơ');
     } finally {
@@ -71,77 +112,63 @@ export function HealthProfileForm({ token, compact }: Props) {
     return <p className="text-sm opacity-60 m-0">Đang tải hồ sơ bệnh lý…</p>;
   }
 
+  const hasData = hasHealthProfileData(saved);
+
   return (
     <div className={compact ? 'space-y-4' : 'space-y-4'}>
-      {!compact && (
-        <p className="text-sm opacity-70 m-0" style={{ color: tezcaTheme.text }}>
-          Bệnh nền, dị ứng và chống chỉ định giúp AI và chuyên gia đưa phác đồ phù hợp hơn — bổ sung cùng chỉ số BMI.
-        </p>
-      )}
+      <ProfileSectionHeader
+        title="Ghi chú theo mục"
+        subtitle={
+          hasData
+            ? 'Mỗi mục lưu riêng — chuyên gia và AI đọc theo từng phần.'
+            : 'Chưa có ghi chú. Nhấn Sửa để bổ sung từng mục.'
+        }
+        editing={editing}
+        onEdit={!editing ? startEdit : undefined}
+        onCancel={editing ? cancelEdit : undefined}
+      />
+
       {message && (
-        <FormAlert variant={message.includes('Đã lưu') ? 'success' : undefined}>{message}</FormAlert>
+        <FormAlert variant={message.includes('Đã cập nhật') ? 'success' : undefined}>{message}</FormAlert>
       )}
-      <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-        Tình trạng hiện tại (bệnh đang mắc, đau ốm gần đây)
-        <textarea
-          value={form.currentConditions}
-          onChange={(e) => setField('currentConditions', e.target.value)}
-          placeholder="Ví dụ: tiểu đường type 2, đau lưng cấp tính tuần trước…"
-          className={inputClass}
-          style={inputStyle}
-          rows={3}
-        />
-      </label>
-      <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-        Tiền sử bệnh lý
-        <textarea
-          value={form.medicalHistory}
-          onChange={(e) => setField('medicalHistory', e.target.value)}
-          placeholder="Các vấn đề từng trải qua, phẫu thuật, nằm viện…"
-          className={inputClass}
-          style={inputStyle}
-          rows={3}
-        />
-      </label>
-      <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-        Dị ứng
-        <textarea
-          value={form.allergies}
-          onChange={(e) => setField('allergies', e.target.value)}
-          className={inputClass}
-          style={inputStyle}
-          rows={2}
-        />
-      </label>
-      <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-        Thuốc đang dùng
-        <textarea
-          value={form.medications}
-          onChange={(e) => setField('medications', e.target.value)}
-          className={inputClass}
-          style={inputStyle}
-          rows={2}
-        />
-      </label>
-      <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-        Chống chỉ định vận động / dinh dưỡng
-        <textarea
-          value={form.contraindications}
-          onChange={(e) => setField('contraindications', e.target.value)}
-          className={inputClass}
-          style={inputStyle}
-          rows={2}
-        />
-      </label>
-      <button
-        type="button"
-        disabled={saving}
-        onClick={() => void save()}
-        className="rounded-full px-8 py-3 font-semibold text-white border-0 cursor-pointer disabled:opacity-60"
-        style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
-      >
-        {saving ? 'Đang lưu…' : 'Lưu hồ sơ bệnh lý'}
-      </button>
+
+      {!editing && (
+        <div className="space-y-3">
+          {HEALTH_PROFILE_SECTIONS.map((section) => (
+            <ProfileSectionNote
+              key={section.key}
+              title={section.title}
+              hint={section.hint}
+              value={saved[section.key]}
+            />
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <div className="space-y-3">
+          {HEALTH_PROFILE_SECTIONS.map((section) => (
+            <ProfileSectionField
+              key={section.key}
+              title={section.title}
+              hint={section.hint}
+              value={draft[section.key]}
+              placeholder={section.placeholder}
+              rows={section.rows}
+              onChange={(v) => setField(section.key, v)}
+            />
+          ))}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save()}
+            className="rounded-full px-8 py-3 font-semibold border-0 cursor-pointer disabled:opacity-60"
+            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
+          >
+            {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

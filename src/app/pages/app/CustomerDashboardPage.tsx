@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import {
   Activity,
   Check,
+  CheckCircle2,
   ClipboardList,
   Flame,
   Lock,
@@ -12,24 +13,35 @@ import {
   Trash2,
   Trophy,
   UtensilsCrossed,
+  UserCircle,
 } from 'lucide-react';
 import { EmptyState } from '../../components/tezca/EmptyState';
 import { SessionLoading } from '../../components/tezca/SessionLoading';
 import { useCustomerSession } from '../../lib/customerSessionGate';
+import { apiFetch } from '../../lib/api';
+import type { CustomerBasicProfile } from '../../components/CustomerProfileForm';
+import { loadProfileCache, saveProfileCache } from '../../lib/profileCache';
 import { deriveGamificationState } from '../../lib/gamification';
 import { loadBmiEntries } from '../../lib/healthStorage';
+import { FoodConfirmPanel } from '../../components/FoodConfirmPanel';
 import { MeatCatalogReference, MeatTypePicker } from '../../components/MeatNutritionPanel';
+import { NutritionTargetsPanel } from '../../components/NutritionTargetsPanel';
 import {
   analyzeFoodInput,
   estimateFromMeatId,
   foodLogForDay,
+  loadNutritionProfile,
   nutritionProgressPct,
-  resolveDailyNutritionTargets,
+  rememberFoodEstimate,
+  resolveDailyNutritionTargetsDetailed,
+  saveNutritionProfile,
   sumNutrition,
   todayIsoLocal,
   type DashboardExercise,
   type FoodEstimateResult,
   type FoodLogItem,
+  type NutritionProfileInput,
+  type NutritionTotals,
 } from '../../lib/dashboardStorage';
 import { useDisciplineDataScope } from '../../lib/disciplineDataScope';
 import { ROUTES } from '../../routes';
@@ -90,13 +102,71 @@ const DASHBOARD_STYLES = `
   .tezca-animate-slide-up { animation: tezcaDashSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 `;
 
+function userInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
+}
+
+function profileCompleteness(p: CustomerBasicProfile | null): { pct: number; missing: string[] } {
+  if (!p) return { pct: 0, missing: ['Họ tên', 'Ngày sinh', 'Giới tính', 'Điện thoại'] };
+  const checks: [boolean, string][] = [
+    [Boolean(p.fullName?.trim()), 'Họ tên'],
+    [Boolean(p.dob?.trim()), 'Ngày sinh'],
+    [Boolean(p.gender?.trim()), 'Giới tính'],
+    [Boolean(p.phone?.trim()), 'Điện thoại'],
+  ];
+  const done = checks.filter(([ok]) => ok).length;
+  const missing = checks.filter(([ok]) => !ok).map(([, label]) => label);
+  return { pct: Math.round((done / checks.length) * 100), missing };
+}
+
 export function CustomerDashboardPage() {
   const { user, token, isAuthenticated, isAnonymous, isVerifying } = useCustomerSession();
+  const [customerProfile, setCustomerProfile] = useState<CustomerBasicProfile | null>(null);
+
+  useEffect(() => {
+    if (!token || !user?.id) return;
+    const uid = user.id;
+
+    // Show cached profile immediately while fetching
+    const cached = loadProfileCache(uid);
+    if (cached?.fullName?.trim()) setCustomerProfile(cached);
+
+    const loadProfile = async () => {
+      try {
+        const r = await apiFetch<{ profile: CustomerBasicProfile | null }>('/api/me/profile', { token });
+        const p = r.profile;
+        if (p?.fullName?.trim()) {
+          setCustomerProfile(p);
+          saveProfileCache(uid, p);
+        } else if (cached?.fullName?.trim()) {
+          // Server empty (cold start) — sync cache back quietly
+          try {
+            await apiFetch('/api/me/profile', {
+              method: 'PUT', token, body: JSON.stringify(cached),
+            });
+          } catch {}
+          setCustomerProfile(cached);
+        }
+      } catch {}
+    };
+
+    void loadProfile();
+    const onRefresh = () => void loadProfile();
+    window.addEventListener('focus', onRefresh);
+    window.addEventListener('tezca:profile-saved', onRefresh);
+    return () => {
+      window.removeEventListener('focus', onRefresh);
+      window.removeEventListener('tezca:profile-saved', onRefresh);
+    };
+  }, [token, user?.id]);
 
   const discipline = useDisciplineDataScope({ userId: user?.id ?? null, token });
   const {
     canSync,
-    baseExercises,
+    getDayStructure,
     dailyProgress,
     setDailyProgress,
     foodLog,
@@ -109,6 +179,10 @@ export function CustomerDashboardPage() {
 
   const [foodInput, setFoodInput] = useState('');
   const [meatPick, setMeatPick] = useState<Extract<FoodEstimateResult, { kind: 'pick_meat' }> | null>(null);
+  const [foodConfirm, setFoodConfirm] = useState<Extract<FoodEstimateResult, { kind: 'confirm' }> | null>(null);
+  const [nutritionProfile, setNutritionProfile] = useState<NutritionProfileInput>(() =>
+    loadNutritionProfile(null),
+  );
   const [showCelebration, setShowCelebration] = useState(false);
   const [quote, setQuote] = useState(MOTIVATIONAL_QUOTES[0]!);
   const weekDays = useMemo(() => buildWeekDaysWithIso(), []);
@@ -119,23 +193,47 @@ export function CustomerDashboardPage() {
     [activeDay, weekDays],
   );
 
+  const dayStructure = useMemo(
+    () => getDayStructure(activeIso),
+    [getDayStructure, activeIso],
+  );
+
   const exercises = useMemo(
-    () => applyDayProgress(baseExercises, dailyProgress[activeIso]),
-    [baseExercises, dailyProgress, activeIso],
+    () => applyDayProgress(dayStructure, dailyProgress[activeIso]),
+    [dayStructure, dailyProgress, activeIso],
   );
   const bmiList = useMemo(() => loadBmiEntries().sort((a, b) => b.date.localeCompare(a.date)), []);
   const latestBmi = bmiList[0];
   const weightDelta = weightDeltaText(bmiList);
+
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    setNutritionProfile(loadNutritionProfile(userId));
+  }, [userId]);
+
+  useEffect(() => {
+    saveNutritionProfile(userId, nutritionProfile);
+  }, [nutritionProfile, userId]);
+
+  const sessionsPerWeek = useMemo(() => {
+    let n = 0;
+    for (const d of weekDays) {
+      if (getDayStructure(d.isoDate).length > 0) n += 1;
+    }
+    return n;
+  }, [weekDays, getDayStructure]);
 
   const todayFoodIso = todayIsoLocal();
   const todayFoodLog = useMemo(
     () => foodLogForDay(foodLog, todayFoodIso),
     [foodLog, todayFoodIso],
   );
-  const targetNutrition = useMemo(
-    () => resolveDailyNutritionTargets(latestBmi),
-    [latestBmi],
+  const nutritionTargetsResult = useMemo(
+    () => resolveDailyNutritionTargetsDetailed(latestBmi, nutritionProfile, { sessionsPerWeek }),
+    [latestBmi, nutritionProfile, sessionsPerWeek],
   );
+  const targetNutrition = nutritionTargetsResult.targets;
   const nutrition = useMemo(() => sumNutrition(todayFoodLog), [todayFoodLog]);
   const gam = deriveGamificationState();
   const streak = gam.stats.moodStreak;
@@ -155,11 +253,22 @@ export function CustomerDashboardPage() {
     setShowCelebration(false);
   }, [isAllDone, exercises.length]);
 
-  const appendFoodLog = (item: Omit<FoodLogItem, 'id' | 'dateIso'>) => {
+  const appendFoodLog = (
+    item: Omit<FoodLogItem, 'id' | 'dateIso'>,
+    learnInput?: string,
+  ) => {
     setFoodLog((prev) => [
       { ...item, id: Date.now(), dateIso: todayFoodIso },
       ...prev,
     ]);
+    if (learnInput?.trim()) {
+      rememberFoodEstimate(userId, learnInput.trim(), {
+        pro: item.pro,
+        carb: item.carb,
+        fat: item.fat,
+        cal: item.cal,
+      }, item.name);
+    }
   };
 
   const handleAddFood = (e: React.FormEvent) => {
@@ -167,9 +276,15 @@ export function CustomerDashboardPage() {
     const raw = foodInput.trim();
     if (!raw) return;
 
-    const analysis = analyzeFoodInput(raw);
+    const analysis = analyzeFoodInput(raw, userId);
     if (analysis.kind === 'pick_meat') {
       setMeatPick(analysis);
+      setFoodConfirm(null);
+      return;
+    }
+    if (analysis.kind === 'confirm') {
+      setFoodConfirm(analysis);
+      setMeatPick(null);
       return;
     }
 
@@ -177,24 +292,49 @@ export function CustomerDashboardPage() {
       name: analysis.displayName || raw,
       pro: analysis.macros.pro,
       carb: analysis.macros.carb,
+      fat: analysis.macros.fat,
       cal: analysis.macros.cal,
+      estimateConfidence: analysis.confidence,
     });
     setFoodInput('');
     setMeatPick(null);
+    setFoodConfirm(null);
   };
 
   const confirmMeatPick = (meatId: string) => {
     if (!meatPick) return;
     const result = estimateFromMeatId(meatPick.input, meatId);
     if (result.kind !== 'ready') return;
-    appendFoodLog({
-      name: result.displayName,
-      pro: result.macros.pro,
-      carb: result.macros.carb,
-      cal: result.macros.cal,
-    });
+    appendFoodLog(
+      {
+        name: result.displayName,
+        pro: result.macros.pro,
+        carb: result.macros.carb,
+        fat: result.macros.fat,
+        cal: result.macros.cal,
+        estimateConfidence: result.confidence,
+      },
+      meatPick.input,
+    );
     setFoodInput('');
     setMeatPick(null);
+  };
+
+  const confirmFoodEstimate = (macros: NutritionTotals, displayName: string) => {
+    if (!foodConfirm) return;
+    appendFoodLog(
+      {
+        name: displayName,
+        pro: macros.pro,
+        carb: macros.carb,
+        fat: macros.fat,
+        cal: macros.cal,
+        estimateConfidence: foodConfirm.confidence,
+      },
+      foodConfirm.input,
+    );
+    setFoodInput('');
+    setFoodConfirm(null);
   };
 
   const removeFood = (id: number) => {
@@ -227,7 +367,6 @@ export function CustomerDashboardPage() {
   );
 
   const progressPct = exercises.length ? (completedCount / exercises.length) * 100 : 0;
-  const firstName = user?.name?.trim().split(/\s+/)[0];
 
   return (
     <div
@@ -258,35 +397,98 @@ export function CustomerDashboardPage() {
           </div>
         )}
 
-        <header className="w-full max-w-6xl mb-6 md:mb-8 flex flex-wrap justify-between items-end gap-4">
-          <div>
+        {/* ── Profile Banner ── */}
+        {isAuthenticated && (
+          <div
+            className="w-full max-w-6xl mb-6 rounded-2xl border overflow-hidden"
+            style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+          >
+            {/* Top row */}
+            <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+              {/* Avatar */}
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-base font-black shrink-0"
+                style={{ background: tezcaTheme.accentGradient, color: '#fff' }}
+              >
+                {user?.name ? userInitials(user.name) : <UserCircle size={28} />}
+              </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold uppercase tracking-widest m-0 mb-0.5" style={{ color: tezcaTheme.accentDark }}>
+                  Trung tâm Kỷ luật
+                </p>
+                <h1 className="text-xl md:text-2xl font-black tracking-tight m-0 truncate">
+                  {customerProfile?.fullName?.trim() || user?.name || 'Tezca'}
+                </h1>
+                <p className="text-xs opacity-60 m-0 mt-0.5 capitalize">{formatHeaderDate()}</p>
+              </div>
+
+              {/* Profile completion */}
+              <div className="flex flex-col items-end shrink-0">
+                {(() => {
+                  const { pct } = profileCompleteness(customerProfile);
+                  return pct < 100 ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-0.5">
+                        {[25, 50, 75, 100].map((step) => (
+                          <div
+                            key={step}
+                            className="w-4 h-1.5 rounded-full"
+                            style={{ backgroundColor: pct >= step ? tezcaTheme.accent : tezcaTheme.subtleBg }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-[11px] font-semibold" style={{ color: tezcaTheme.accentDark }}>
+                        {pct}%
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                      <CheckCircle2 size={13} />
+                      Hồ sơ đầy đủ
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Missing info prompt */}
+            {(() => {
+              const { missing } = profileCompleteness(customerProfile);
+              return missing.length > 0 ? (
+                <div
+                  className="px-5 py-2.5 border-t flex flex-wrap items-center justify-between gap-2"
+                  style={{ borderColor: tezcaTheme.border, backgroundColor: 'rgba(254,243,199,0.5)' }}
+                >
+                  <p className="text-xs m-0" style={{ color: '#78350f' }}>
+                    Thiếu: {missing.join(' · ')} — hoàn thiện để gửi hồ sơ cho chuyên gia.
+                  </p>
+                  <Link
+                    to={ROUTES.app.profile}
+                    className="text-xs font-bold no-underline hover:underline shrink-0"
+                    style={{ color: '#92400e' }}
+                  >
+                    Điền ngay →
+                  </Link>
+                </div>
+              ) : null;
+            })()}
+          </div>
+        )}
+
+        {/* Guest header */}
+        {!isAuthenticated && !isVerifying && (
+          <header className="w-full max-w-6xl mb-6 md:mb-8">
             <p className="text-xs font-bold uppercase tracking-widest m-0 mb-1" style={{ color: tezcaTheme.accentDark }}>
-              {isAuthenticated && firstName ? `Xin chào, ${firstName}` : 'Tezca'}
+              Tezca
             </p>
             <h1 className="text-3xl md:text-4xl font-black tracking-tighter m-0">
               TRUNG TÂM <span style={{ color: tezcaTheme.accent }}>KỶ LUẬT</span>
             </h1>
             <p className="mt-1 font-medium m-0 capitalize opacity-70">{formatHeaderDate()}</p>
-          </div>
-          <nav className="flex flex-wrap gap-2 text-xs">
-            {[
-              { to: ROUTES.app.bmi, label: 'BMI' },
-              { to: ROUTES.app.mood, label: 'Cảm xúc' },
-              { to: ROUTES.app.chat, label: 'Tezca AI' },
-              { to: ROUTES.app.plans, label: 'Kế hoạch' },
-              { to: ROUTES.app.rewards, label: 'Phần thưởng' },
-            ].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="px-3 py-1.5 rounded-lg border no-underline transition-colors hover:opacity-100 opacity-80"
-                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text, backgroundColor: tezcaTheme.surface }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </header>
+          </header>
+        )}
 
         <main className="w-full max-w-6xl flex-1 grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 md:gap-8 pb-8">
           <section className="min-h-[420px]">
@@ -340,10 +542,16 @@ export function CustomerDashboardPage() {
                   <span className="text-[10px] font-medium opacity-50 uppercase tracking-wide">Hôm nay</span>
                 </div>
                 {latestBmi && (
-                  <p className="text-[11px] m-0 mb-3 opacity-60">
-                    Mục tiêu theo cân nặng {latestBmi.weightKg.toFixed(1)} kg · BMI {latestBmi.bmi.toFixed(1)}
+                  <p className="text-[11px] m-0 mb-2 opacity-60">
+                    Cân nặng {latestBmi.weightKg.toFixed(1)} kg · BMI {latestBmi.bmi.toFixed(1)}
                   </p>
                 )}
+
+                <NutritionTargetsPanel
+                  profile={nutritionProfile}
+                  onChange={setNutritionProfile}
+                  targetsResult={nutritionTargetsResult}
+                />
 
                 <div className="mb-5 space-y-3">
                   <div>
@@ -360,7 +568,7 @@ export function CustomerDashboardPage() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <div className="flex justify-between text-xs mb-1">
                         <span className="opacity-70">Protein</span>
@@ -385,6 +593,18 @@ export function CustomerDashboardPage() {
                         />
                       </div>
                     </div>
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="opacity-70">Béo</span>
+                        <span className="text-amber-700 font-bold">{nutrition.fat}g</span>
+                      </div>
+                      <div className="w-full rounded-full h-1.5" style={{ backgroundColor: tezcaTheme.subtleBg }}>
+                        <div
+                          className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${nutritionProgressPct(nutrition.fat, targetNutrition.fat)}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -397,6 +617,14 @@ export function CustomerDashboardPage() {
                     options={meatPick.options}
                     onSelect={confirmMeatPick}
                     onCancel={() => setMeatPick(null)}
+                  />
+                )}
+
+                {foodConfirm && (
+                  <FoodConfirmPanel
+                    result={foodConfirm}
+                    onConfirm={confirmFoodEstimate}
+                    onCancel={() => setFoodConfirm(null)}
                   />
                 )}
 
@@ -432,6 +660,7 @@ export function CustomerDashboardPage() {
                         <div className="flex items-center gap-2 text-xs shrink-0">
                           <span className="text-blue-600">{food.pro}g P</span>
                           <span className="text-orange-600">{food.carb}g C</span>
+                          <span className="text-amber-700">{food.fat}g F</span>
                           <span className="text-emerald-600 font-bold">{food.cal}</span>
                           <button
                             type="button"
@@ -511,7 +740,10 @@ export function CustomerDashboardPage() {
                 style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
               >
                 {weekDays.map((day) => {
-                  const { done, total } = countDayDone(baseExercises, dailyProgress[day.isoDate]);
+                  const { done, total } = countDayDone(
+                    getDayStructure(day.isoDate),
+                    dailyProgress[day.isoDate],
+                  );
                   const allDone = total > 0 && done === total;
                   const partial = done > 0 && !allDone;
                   return (

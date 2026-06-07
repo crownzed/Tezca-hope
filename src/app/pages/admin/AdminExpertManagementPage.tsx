@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X } from 'lucide-react';
+import { GraduationCap, Plus, X, Eye, EyeOff } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { FormAlert } from '../../components/tezca/FormAlert';
 import { EmptyState } from '../../components/tezca/EmptyState';
 import { authInputClass, authInputStyle } from '../../components/tezca/AuthFormCard';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
+import { EXPERT_SPECIALTY_TYPES, expertSpecialtyIcon, expertSpecialtyLabel } from '../../lib/communityTopics';
 
 type ExpertRow = {
   id: string;
@@ -20,10 +21,11 @@ type ExpertForm = {
   fullName: string;
   email: string;
   password: string;
+  confirmPassword: string;
   specialty: string;
 };
 
-const emptyForm: ExpertForm = { fullName: '', email: '', password: '', specialty: '' };
+const emptyForm: ExpertForm = { fullName: '', email: '', password: '', confirmPassword: '', specialty: '' };
 
 function StatusBadge({ active }: { active: boolean }) {
   return active ? (
@@ -48,6 +50,8 @@ export function AdminExpertManagementPage() {
   const [editing, setEditing] = useState<ExpertRow | null>(null);
   const [form, setForm] = useState<ExpertForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -74,6 +78,8 @@ export function AdminExpertManagementPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setShowPassword(false);
+    setShowConfirm(false);
     setModalOpen(true);
   };
 
@@ -83,8 +89,11 @@ export function AdminExpertManagementPage() {
       fullName: expert.fullName || expert.name || '',
       email: expert.email,
       password: '',
+      confirmPassword: '',
       specialty: expert.specialty || '',
     });
+    setShowPassword(false);
+    setShowConfirm(false);
     setModalOpen(true);
   };
 
@@ -92,11 +101,23 @@ export function AdminExpertManagementPage() {
     setModalOpen(false);
     setEditing(null);
     setForm(emptyForm);
+    setShowPassword(false);
+    setShowConfirm(false);
   };
 
   const saveExpert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    if (!editing) {
+      if (form.password !== form.confirmPassword) {
+        setError('Mật khẩu xác nhận không khớp. Vui lòng nhập lại.');
+        return;
+      }
+      if (form.password.trim().length < 8) {
+        setError('Mật khẩu cần ít nhất 8 ký tự (không chỉ khoảng trắng).');
+        return;
+      }
+    }
     setSaving(true);
     setError('');
     try {
@@ -258,8 +279,17 @@ export function AdminExpertManagementPage() {
                       <td className="p-3 border-b" style={{ borderColor: tezcaTheme.border }}>
                         {expert.email}
                       </td>
-                      <td className="p-3 border-b opacity-80" style={{ borderColor: tezcaTheme.border }}>
-                        {expert.specialty || '—'}
+                      <td className="p-3 border-b" style={{ borderColor: tezcaTheme.border }}>
+                        {expert.specialty ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: 'rgba(45, 212, 191, 0.15)', color: tezcaTheme.accentDark }}
+                          >
+                            {expertSpecialtyIcon(expert.specialty)} {expertSpecialtyLabel(expert.specialty)}
+                          </span>
+                        ) : (
+                          <span className="opacity-50">—</span>
+                        )}
                       </td>
                       <td className="p-3 border-b" style={{ borderColor: tezcaTheme.border }}>
                         <StatusBadge active={active} />
@@ -354,29 +384,79 @@ export function AdminExpertManagementPage() {
                 />
               </label>
               {!editing && (
-                <label className="block text-sm">
-                  Mật khẩu
-                  <input
-                    required
-                    type="password"
-                    minLength={8}
-                    value={form.password}
-                    onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
-                    className={authInputClass}
-                    style={authInputStyle()}
-                    placeholder="Tối thiểu 8 ký tự"
-                  />
-                </label>
+                <>
+                  <label className="block text-sm">
+                    Mật khẩu
+                    <div className="relative mt-1">
+                      <input
+                        required
+                        type={showPassword ? 'text' : 'password'}
+                        minLength={8}
+                        value={form.password}
+                        onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                        className={authInputClass}
+                        style={{ ...authInputStyle(), marginTop: 0, paddingRight: '2.5rem' }}
+                        placeholder="Tối thiểu 8 ký tự"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => setShowPassword((s) => !s)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 border-0 bg-transparent cursor-pointer p-0 opacity-50 hover:opacity-90"
+                        aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </label>
+                  <label className="block text-sm">
+                    Xác nhận mật khẩu
+                    <div className="relative mt-1">
+                      <input
+                        required
+                        type={showConfirm ? 'text' : 'password'}
+                        minLength={8}
+                        value={form.confirmPassword}
+                        onChange={(e) => setForm((s) => ({ ...s, confirmPassword: e.target.value }))}
+                        className={authInputClass}
+                        style={{ ...authInputStyle(), marginTop: 0, paddingRight: '2.5rem' }}
+                        placeholder="Nhập lại mật khẩu"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => setShowConfirm((s) => !s)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 border-0 bg-transparent cursor-pointer p-0 opacity-50 hover:opacity-90"
+                        aria-label={showConfirm ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      >
+                        {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {form.confirmPassword && form.password !== form.confirmPassword && (
+                      <span className="block text-xs mt-1" style={{ color: '#e53e3e' }}>
+                        Mật khẩu không khớp
+                      </span>
+                    )}
+                  </label>
+                </>
               )}
               <label className="block text-sm">
-                Chuyên môn
-                <input
+                Loại chuyên gia
+                <select
                   value={form.specialty}
                   onChange={(e) => setForm((s) => ({ ...s, specialty: e.target.value }))}
                   className={authInputClass}
-                  style={authInputStyle()}
-                  placeholder="Dinh dưỡng, vận động…"
-                />
+                  style={{ ...authInputStyle(), cursor: 'pointer' }}
+                >
+                  <option value="">— Chọn loại chuyên gia —</option>
+                  {EXPERT_SPECIALTY_TYPES.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.icon} {type.label} — {type.description}
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="flex gap-3 pt-2">
                 <button
@@ -389,7 +469,7 @@ export function AdminExpertManagementPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (!editing && form.confirmPassword !== '' && form.password !== form.confirmPassword)}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold border-0 cursor-pointer disabled:opacity-50"
                   style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
                 >

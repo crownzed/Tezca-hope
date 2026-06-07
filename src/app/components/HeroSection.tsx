@@ -1,11 +1,15 @@
 import { Link } from 'react-router';
-import { MessageCircle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ROUTES } from '../routes';
 import { LandingAmbient } from './landing/LandingAmbient';
 import { landingEase, landingSpring, staggerContainer, staggerItem } from '../lib/landingMotion';
 
-const stats = ['100%', '24/7', 'Miễn phí'] as const;
+const stats = [
+  { value: '24/7', label: 'Hỗ trợ mọi lúc' },
+  { value: '100%', label: 'Miễn phí dùng thử' },
+  { value: 'AI', label: 'Cá nhân hoá' },
+] as const;
 
 const chatMessages = [
   { side: 'user' as const, text: 'Mình vừa ăn phở gà với trứng 🍜', delay: 0.9 },
@@ -41,50 +45,40 @@ export function HeroSection() {
 
             <motion.p
               variants={staggerItem}
-              className="text-xl md:text-2xl leading-relaxed opacity-60"
-              style={{ color: '#1A202C' }}
+              className="text-xl md:text-2xl leading-relaxed"
+              style={{ color: '#1A202C', opacity: 0.65 }}
             >
-              Trợ lý AI thấu cảm kết hợp chuyên gia y tế. Theo dõi dinh dưỡng, sức khỏe tinh thần và nhận tư vấn 24/7.
+              Trò chuyện với AI, theo dõi dinh dưỡng và sức khỏe tinh thần — cùng chuyên gia thực sự khi bạn cần.
             </motion.p>
 
             <motion.div variants={staggerItem} className="flex flex-col sm:flex-row gap-4">
               <motion.div whileHover={reduce ? undefined : { scale: 1.04 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
                 <Link
-                  to={ROUTES.app.chat}
+                  to={ROUTES.app.dashboard}
                   className="px-8 py-4 rounded-full text-lg font-semibold flex items-center justify-center gap-3 shadow-lg shadow-teal-500/20"
                   style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
                 >
-                  <MessageCircle size={24} />
-                  Trò chuyện ẩn danh ngay
-                </Link>
-              </motion.div>
-
-              <motion.div whileHover={reduce ? undefined : { scale: 1.02 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
-                <Link
-                  to={ROUTES.app.dashboard}
-                  className="px-8 py-4 rounded-full text-lg font-medium inline-flex items-center justify-center"
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: '#1A202C',
-                    border: '2px solid rgba(26, 32, 44, 0.1)',
-                  }}
-                >
                   Vào ứng dụng
+                  <ArrowRight size={18} />
                 </Link>
               </motion.div>
             </motion.div>
 
-            <motion.div variants={staggerItem} className="flex gap-8 pt-8">
-              {stats.map((value, i) => (
+            <motion.div variants={staggerItem} className="flex gap-8 pt-4">
+              {stats.map((s, i) => (
                 <motion.div
-                  key={value}
-                  className="text-3xl font-bold"
-                  style={{ color: '#1A202C' }}
+                  key={s.value}
+                  className="flex flex-col"
                   initial={reduce ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 + i * 0.08, duration: 0.45, ease: landingEase }}
                 >
-                  {value}
+                  <span className="text-3xl font-bold" style={{ color: '#1A202C' }}>
+                    {s.value}
+                  </span>
+                  <span className="text-sm mt-0.5" style={{ color: '#1A202C', opacity: 0.55 }}>
+                    {s.label}
+                  </span>
                 </motion.div>
               ))}
             </motion.div>
@@ -158,8 +152,13 @@ export function HeroSection() {
                           >
                             <span className="text-lg">✨</span>
                           </motion.div>
-                          <div className="text-sm font-semibold" style={{ color: '#1A202C' }}>
-                            Tezca AI
+                          <div>
+                            <div className="text-sm font-semibold" style={{ color: '#1A202C' }}>
+                              Tezca AI
+                            </div>
+                            <div className="text-xs" style={{ color: 'rgba(26,32,44,0.5)' }}>
+                              Trợ lý sức khoẻ
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -183,7 +182,7 @@ export function HeroSection() {
                                 }}
                               >
                                 <p className="text-sm mb-3 font-medium m-0" style={{ color: '#1A202C' }}>
-                                  Tuyệt vời! Đã ghi nhận 💚
+                                  Đã ghi nhận bữa trưa! 💚
                                 </p>
                                 <div
                                   className="p-3 rounded-2xl mb-3"
@@ -194,7 +193,7 @@ export function HeroSection() {
                                       Phở gà
                                     </span>
                                     <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>
-                                      350 cal
+                                      350 kcal
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center">
@@ -202,7 +201,7 @@ export function HeroSection() {
                                       Trứng luộc
                                     </span>
                                     <span className="text-xs font-bold" style={{ color: '#2DD4BF' }}>
-                                      70 cal
+                                      70 kcal
                                     </span>
                                   </div>
                                 </div>
@@ -214,7 +213,7 @@ export function HeroSection() {
                                     Tổng cộng
                                   </span>
                                   <span className="text-sm font-bold" style={{ color: '#2DD4BF' }}>
-                                    420 cal
+                                    420 kcal
                                   </span>
                                 </div>
                               </div>

@@ -32,6 +32,18 @@ function previewText(row: ExpertCustomerInboxRow) {
   return prefix + text;
 }
 
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Vừa xong';
+  if (mins < 60) return `${mins} ph`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} giờ`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days} ngày`;
+  return new Date(ts).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+}
+
 type Props = {
   customers: ExpertCustomerInboxRow[];
   activeCustomerId?: string;
@@ -79,7 +91,19 @@ export function ExpertCustomerList({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loading && (
-          <p className="text-xs text-slate-500 px-3 py-4 m-0">Đang tải danh sách…</p>
+          <ul className="p-2 space-y-1 m-0 list-none">
+            {[1, 2, 3].map((i) => (
+              <li key={i} className="rounded-xl px-3 py-2.5">
+                <div className="flex gap-3 items-start">
+                  <div className="w-10 h-10 rounded-full shrink-0 animate-pulse bg-slate-200" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3 rounded animate-pulse bg-slate-200" style={{ width: '60%' }} />
+                    <div className="h-2.5 rounded animate-pulse bg-slate-100" style={{ width: '80%' }} />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
         {!loading && filtered.length === 0 && (
           <div className="px-3 py-6 text-center">
@@ -122,6 +146,11 @@ export function ExpertCustomerList({
                         <span className={`text-sm font-semibold truncate m-0 ${active ? 'text-teal-900' : 'text-slate-800'}`}>
                           {p.name}
                         </span>
+                        {p.lastLiveMessage?.ts && (
+                          <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">
+                            {relativeTime(p.lastLiveMessage.ts)}
+                          </span>
+                        )}
                       </div>
                       <p className={`text-xs truncate m-0 mt-1 ${p.needsReply ? 'text-slate-800 font-medium' : 'text-slate-500'}`}>
                         {previewText(p)}

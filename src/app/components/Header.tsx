@@ -4,27 +4,63 @@ import { Menu, X } from 'lucide-react';
 import { ROUTES, LANDING_HASH } from '../routes';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { useExpertAuth } from '../context/ExpertAuthContext';
+import { useAdminAuth } from '../context/AdminAuthContext';
+import { useMarketingPortal } from '../lib/marketingPortal';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { TezcaLogoLink } from './TezcaLogo';
 
 const marketingNav = [
   { label: 'Tính năng', to: { pathname: ROUTES.home, hash: LANDING_HASH.features } },
   { label: 'Cộng đồng', to: ROUTES.community.forum },
   { label: 'Tin cậy', to: { pathname: ROUTES.home, hash: LANDING_HASH.trust } },
-  { label: 'Tư vấn', to: { pathname: ROUTES.home, hash: LANDING_HASH.consult } },
+  { label: 'Bắt đầu', to: { pathname: ROUTES.home, hash: LANDING_HASH.consult } },
 ];
 
 type HeaderProps = {
   variant?: 'marketing' | 'minimal';
 };
 
+function portalButtonLabel(
+  portal: ReturnType<typeof useMarketingPortal>,
+  customerName?: string,
+  expertName?: string,
+): string {
+  if (portal.role === 'customer' && customerName?.trim()) return customerName.trim();
+  if (portal.role === 'expert' && expertName?.trim()) return expertName.trim();
+  return portal.label;
+}
+
 export function Header({ variant = 'minimal' }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const isMarketing = variant === 'marketing';
-  const { user: expertUser, sessionReady: expertSessionReady } = useExpertAuth();
-  const { user: customerUser, sessionReady: customerSessionReady } = useCustomerAuth();
-  const showExpertPortal = expertUser?.role === 'expert';
-  const showCustomerApp = customerSessionReady && !!customerUser;
-  const isLoggedIn = showCustomerApp || showExpertPortal;
+  const portal = useMarketingPortal();
+  const { user: customerUser } = useCustomerAuth();
+  const { user: expertUser } = useExpertAuth();
+  const { user: adminUser } = useAdminAuth();
+
+  const portalHref = portal.href;
+  const portalLabel = portalButtonLabel(portal, customerUser?.name, expertUser?.name);
+  const isAdmin = portal.role === 'admin' && !!adminUser;
+
+  const portalButtonStyle =
+    portal.role === 'admin'
+      ? {
+          borderColor: 'rgba(30, 41, 59, 0.25)',
+          color: '#0f172a',
+          backgroundColor: 'rgba(148, 163, 184, 0.15)',
+        }
+      : portal.role === 'expert'
+        ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
+        : {
+            borderColor: 'rgba(15, 118, 110, 0.35)',
+            color: tezcaTheme.accentDark,
+            backgroundColor: 'rgba(45, 212, 191, 0.12)',
+          };
+
+  const portalButtonClass =
+    portal.role === 'expert'
+      ? 'hidden sm:inline-flex px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90 max-w-[160px] truncate'
+      : 'hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-semibold border transition-colors max-w-[160px] truncate';
 
   return (
     <header
@@ -32,14 +68,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
       style={{ backgroundColor: 'rgba(249, 249, 251, 0.88)', borderColor: tezcaTheme.borderStrong }}
     >
       <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
-        <Link to={ROUTES.home} className="flex items-center gap-2 shrink-0" onClick={() => setOpen(false)}>
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: tezcaTheme.accentLight }}>
-            <span className="text-white text-lg font-bold">T</span>
-          </div>
-          <span className="text-2xl font-semibold tracking-tight" style={{ color: tezcaTheme.text }}>
-            Tezca
-          </span>
-        </Link>
+        <TezcaLogoLink to={ROUTES.home} size="lg" onClick={() => setOpen(false)} />
 
         {isMarketing && (
           <nav className="hidden md:flex items-center gap-10">
@@ -57,7 +86,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
         )}
 
         <div className="flex items-center gap-2">
-          {!isLoggedIn && (
+          {!portal.isAuthenticated && (
             <>
               <Link
                 to={ROUTES.expert.login}
@@ -75,32 +104,14 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
               </Link>
             </>
           )}
-          {showCustomerApp && (
+          {portalHref && (
             <Link
-              to={ROUTES.app.dashboard}
-              className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-semibold border transition-colors max-w-[140px] truncate"
-              style={{ borderColor: 'rgba(15, 118, 110, 0.35)', color: tezcaTheme.accentDark, backgroundColor: 'rgba(45, 212, 191, 0.12)' }}
-              title={customerUser?.email}
+              to={portalHref}
+              className={portalButtonClass}
+              style={portalButtonStyle}
+              title={isAdmin ? adminUser?.email : customerUser?.email ?? expertUser?.email}
             >
-              {customerUser?.name ?? 'Ứng dụng'}
-            </Link>
-          )}
-          {!showCustomerApp && (
-            <Link
-              to={ROUTES.app.dashboard}
-              className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-medium border transition-colors"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-            >
-              Trung tâm Kỷ luật
-            </Link>
-          )}
-          {showExpertPortal && (
-            <Link
-              to={ROUTES.expert.doctorDesk}
-              className="hidden sm:inline-flex px-6 py-2.5 rounded-full text-sm font-semibold border transition-all hover:opacity-90"
-              style={{ borderColor: 'rgba(15, 118, 110, 0.35)', color: tezcaTheme.accentDark, backgroundColor: 'rgba(45, 212, 191, 0.12)' }}
-            >
-              Dashboard chuyên gia
+              {portalLabel}
             </Link>
           )}
           <button
@@ -133,7 +144,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
                 {item.label}
               </Link>
             ))}
-            {!isLoggedIn && (
+            {!portal.isAuthenticated ? (
               <>
                 <Link
                   to={ROUTES.expert.login}
@@ -152,25 +163,16 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
                   Đăng nhập
                 </Link>
               </>
-            )}
-            <Link
-              to={ROUTES.app.dashboard}
-              className="mt-1 py-3 text-center rounded-full text-sm font-semibold border"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-              onClick={() => setOpen(false)}
-            >
-              Trung tâm Kỷ luật
-            </Link>
-            {showExpertPortal && (
+            ) : portalHref ? (
               <Link
-                to={ROUTES.expert.doctorDesk}
-                className="py-3 rounded-full text-sm font-semibold text-center border"
-                style={{ borderColor: 'rgba(15, 118, 110, 0.35)', color: tezcaTheme.accentDark, backgroundColor: 'rgba(45, 212, 191, 0.12)' }}
+                to={portalHref}
+                className="mt-1 py-3 text-center rounded-full text-sm font-semibold border"
+                style={portalButtonStyle}
                 onClick={() => setOpen(false)}
               >
-                Dashboard chuyên gia
+                {portalLabel}
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
       )}
@@ -180,7 +182,7 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
           className="md:hidden mt-4 pb-2 border-t pt-4 -mx-6 px-6 flex flex-col gap-2"
           style={{ borderColor: tezcaTheme.border }}
         >
-          {!isLoggedIn && (
+          {!portal.isAuthenticated ? (
             <>
               <Link to={ROUTES.expert.login} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
                 Chuyên gia
@@ -189,15 +191,11 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
                 Đăng nhập
               </Link>
             </>
-          )}
-          <Link to={ROUTES.app.dashboard} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
-            Ứng dụng
-          </Link>
-          {showExpertPortal && (
-            <Link to={ROUTES.expert.doctorDesk} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
-              Dashboard chuyên gia
+          ) : portalHref ? (
+            <Link to={portalHref} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.accentDark }}>
+              {portalLabel}
             </Link>
-          )}
+          ) : null}
           <Link to={ROUTES.home} onClick={() => setOpen(false)} className="py-2 text-sm opacity-70" style={{ color: tezcaTheme.text }}>
             Trang chủ
           </Link>

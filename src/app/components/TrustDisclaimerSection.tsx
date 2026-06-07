@@ -15,14 +15,14 @@ const trustCards = [
   {
     to: ROUTES.product.security,
     icon: Lock,
-    title: 'Quyền riêng tư tuyệt đối',
-    body: 'Mọi cuộc trò chuyện được mã hóa đầu cuối. Dữ liệu của bạn thuộc về bạn và chỉ bạn mới có quyền truy cập.',
+    title: 'Dữ liệu thuộc về bạn',
+    body: 'Hồ sơ sức khoẻ và nhật ký trò chuyện chỉ dành cho bạn. Tezca không chia sẻ thông tin cá nhân với bên thứ ba mà không có sự đồng ý của bạn.',
   },
   {
     to: ROUTES.product.security,
     icon: Shield,
-    title: 'Bảo mật cấp ngân hàng',
-    body: 'Chúng tôi sử dụng công nghệ bảo mật tiên tiến nhất để đảm bảo thông tin sức khỏe của bạn luôn an toàn.',
+    title: 'Bảo vệ thông tin sức khoẻ',
+    body: 'Dữ liệu được mã hóa và lưu trữ an toàn. Tezca dùng xác thực token và kết nối bảo mật để bảo vệ tài khoản của bạn.',
   },
 ] as const;
 
@@ -40,9 +40,15 @@ export function TrustDisclaimerSection() {
     >
       <div className="max-w-5xl mx-auto">
         <LandingReveal className="text-center mb-12">
+          <p className="text-sm font-semibold uppercase tracking-wider mb-3 m-0" style={{ color: tezcaTheme.accentDark }}>
+            Tin cậy
+          </p>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3 m-0" style={{ color: tezcaTheme.text }}>
-            Tin cậy & minh bạch
+            Minh bạch và an toàn
           </h2>
+          <p className="text-lg m-0" style={{ color: 'rgba(26,32,44,0.6)' }}>
+            Chúng tôi nói rõ Tezca làm được gì và giới hạn ở đâu.
+          </p>
         </LandingReveal>
 
         <motion.div
@@ -64,10 +70,10 @@ export function TrustDisclaimerSection() {
                     >
                       <Icon size={28} style={{ color: 'white' }} />
                     </div>
-                    <h3 className="text-2xl font-bold mb-3 m-0" style={{ color: tezcaTheme.text }}>
+                    <h3 className="text-xl font-bold mb-3 m-0" style={{ color: tezcaTheme.text }}>
                       {card.title}
                     </h3>
-                    <p className="leading-relaxed m-0 opacity-70" style={{ color: tezcaTheme.text }}>
+                    <p className="leading-relaxed m-0 text-sm" style={{ color: 'rgba(26,32,44,0.7)' }}>
                       {card.body}
                     </p>
                   </Link>
@@ -80,37 +86,35 @@ export function TrustDisclaimerSection() {
         <LandingReveal delay={0.1}>
           <div className="p-8 rounded-3xl" style={cardStyle}>
             <div className="flex gap-4">
-              <AlertCircle size={24} className="flex-shrink-0 mt-1" style={{ color: tezcaTheme.accent }} />
+              <AlertCircle size={22} className="flex-shrink-0 mt-0.5" style={{ color: tezcaTheme.accent }} />
               <div>
-                <h4 className="text-lg font-semibold mb-2 m-0" style={{ color: tezcaTheme.text }}>
-                  Lưu ý Y khoa
+                <h4 className="text-base font-semibold mb-2 m-0" style={{ color: tezcaTheme.text }}>
+                  Tezca không thay thế khám bệnh trực tiếp
                 </h4>
-                <p className="leading-relaxed text-sm m-0 opacity-70" style={{ color: tezcaTheme.text }}>
-                  Tezca cung cấp thông tin tham khảo về sức khỏe và không thay thế cho khám và tư vấn y tế trực tiếp từ
-                  chuyên khoa. Nếu bạn đang gặp vấn đề sức khỏe nghiêm trọng, vui lòng liên hệ với bác sĩ hoặc cơ sở y
-                  tế gần nhất. Trong trường hợp khẩn cấp, hãy gọi ngay đường dây nóng 115.
+                <p className="leading-relaxed text-sm m-0" style={{ color: 'rgba(26,32,44,0.7)' }}>
+                  Nội dung trên Tezca mang tính tham khảo về sức khỏe và không thay thế tư vấn y tế trực tiếp từ bác sĩ chuyên khoa. Khi gặp vấn đề sức khoẻ nghiêm trọng, hãy đến cơ sở y tế hoặc gọi đường dây khẩn cấp <strong>115</strong>.
                 </p>
               </div>
             </div>
           </div>
         </LandingReveal>
 
-        <LandingReveal delay={0.15} className="text-center mt-12">
+        <LandingReveal delay={0.15} className="text-center mt-10">
           <p className="text-sm m-0 flex flex-wrap justify-center gap-x-3 gap-y-1">
             <Link to={ROUTES.legal.root} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
               Trung tâm pháp lý
             </Link>
-            <span className="opacity-30">·</span>
+            <span style={{ opacity: 0.3 }}>·</span>
             <Link to={ROUTES.legal.privacy} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
-              Bảo mật
+              Chính sách bảo mật
             </Link>
-            <span className="opacity-30">·</span>
+            <span style={{ opacity: 0.3 }}>·</span>
             <Link to={ROUTES.legal.terms} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
-              Điều khoản
+              Điều khoản sử dụng
             </Link>
-            <span className="opacity-30">·</span>
+            <span style={{ opacity: 0.3 }}>·</span>
             <Link to={ROUTES.legal.community} className="font-medium hover:opacity-80" style={{ color: tezcaTheme.accentDark }}>
-              Cộng đồng
+              Quy tắc cộng đồng
             </Link>
           </p>
         </LandingReveal>

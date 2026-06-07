@@ -7,6 +7,9 @@ dist/
 .env.*.local
 server/.env
 
+firebase-service-account.json
+*-firebase-adminsdk-*.json
+
 server/data/database.json
 server/data/*.sqlite
 server/data/*.sqlite-wal

@@ -27,23 +27,20 @@ function resolveSelection(entry?: Pick<MoodEntry, 'moodLabel' | 'moodEmoji' | 'm
 export function MoodJournalPage() {
   const { token } = useCustomerAuth();
   const [entries, setEntries] = useState<MoodEntry[]>(() => loadMoodEntries());
-  const [date, setDate] = useState(todayIso);
   const [selected, setSelected] = useState<MoodOption>(DEFAULT_MOOD);
   const [freeText, setFreeText] = useState('');
   const [saveBusy, setSaveBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
-  const entryForDate = useMemo(
-    () => entries.find((e) => e.date === date),
-    [entries, date],
+  const entryForToday = useMemo(
+    () => entries.find((e) => e.date === todayIso()),
+    [entries],
   );
 
-  const isToday = date === todayIso();
-
   useEffect(() => {
-    setSelected(resolveSelection(entryForDate));
-    setFreeText(entryForDate?.freeText?.trim() ?? '');
-  }, [date, entryForDate]);
+    setSelected(resolveSelection(entryForToday));
+    setFreeText(entryForToday?.freeText?.trim() ?? '');
+  }, [entryForToday]);
 
   useEffect(() => {
     if (!token) return;
@@ -87,29 +84,15 @@ export function MoodJournalPage() {
     }
   };
 
-  const save = async () => {
+  const saveCurrentMoment = async () => {
     setSaveBusy(true);
     setSavedFlash(false);
     try {
-      await persistEntry(date);
+      await persistEntry(todayIso());
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 2500);
     } catch {
       /* local state already updated */
-    } finally {
-      setSaveBusy(false);
-    }
-  };
-
-  const saveCurrentMoment = async () => {
-    const today = todayIso();
-    setDate(today);
-    setSaveBusy(true);
-    setSavedFlash(false);
-    try {
-      await persistEntry(today);
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2500);
     } finally {
       setSaveBusy(false);
     }
@@ -219,103 +202,9 @@ export function MoodJournalPage() {
         >
           {saveBusy ? 'Đang lưu…' : 'Lưu cảm xúc hôm nay'}
         </button>
-        {savedFlash && isToday && (
+        {savedFlash && (
           <p className="text-sm m-0 font-medium" style={{ color: tezcaTheme.accentDark }} role="status">
             Đã lưu cảm xúc cho hôm nay.
-          </p>
-        )}
-      </div>
-
-      {/* Nhật ký theo ngày */}
-      <div
-        className="rounded-2xl p-6 md:p-8 border space-y-6"
-        style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
-      >
-        <h2 className="text-lg font-semibold m-0" style={{ color: tezcaTheme.text }}>
-          Nhật ký theo ngày
-        </h2>
-
-        <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
-          Ngày
-          <input
-            type="date"
-            value={date}
-            max={todayIso()}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 w-full max-w-xs rounded-xl px-4 py-3 border text-sm block"
-            style={{ borderColor: tezcaTheme.borderStrong }}
-          />
-        </label>
-
-        <div>
-          <p className="text-sm font-medium mb-1 m-0" style={{ color: tezcaTheme.text }}>
-            Cảm xúc trong ngày đã chọn
-          </p>
-          <p className="text-xl font-semibold m-0 mb-4">
-            <span className="mr-2" role="img" aria-hidden>
-              {selected.emoji}
-            </span>
-            {selected.label}
-          </p>
-          <div
-            className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2"
-            role="listbox"
-            aria-label="Chọn trạng thái cảm xúc theo ngày"
-          >
-            {MOOD_OPTIONS.map((m) => {
-              const active = selected.key === m.key;
-              return (
-                <button
-                  key={`day-${m.key}`}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  aria-label={m.label}
-                  title={m.label}
-                  onClick={() => setSelected(m)}
-                  className="flex flex-col items-center justify-center rounded-2xl border py-3 px-1 transition-all cursor-pointer"
-                  style={{
-                    borderColor: active ? tezcaTheme.accent : tezcaTheme.border,
-                    backgroundColor: active ? 'rgba(45, 212, 191, 0.18)' : tezcaTheme.subtleBg,
-                    boxShadow: active ? `0 0 0 2px ${tezcaTheme.accent}` : undefined,
-                  }}
-                >
-                  <span className="text-2xl md:text-3xl leading-none" role="img" aria-hidden>
-                    {m.emoji}
-                  </span>
-                  <span className="sr-only">{m.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <label className="block">
-          <span className="text-sm font-medium" style={{ color: tezcaTheme.text }}>
-            Ghi chú cho ngày {date}
-          </span>
-          <textarea
-            value={freeText}
-            onChange={(e) => setFreeText(e.target.value.slice(0, MAX_MOOD_NOTE))}
-            rows={3}
-            placeholder="Điều gì ảnh hưởng đến cảm xúc của bạn trong ngày này?"
-            className="mt-2 w-full rounded-xl border px-4 py-3 text-sm resize-y"
-            style={{ borderColor: tezcaTheme.border }}
-          />
-        </label>
-
-        <button
-          type="button"
-          onClick={save}
-          disabled={saveBusy}
-          className="rounded-full px-8 py-3 font-semibold border-0 cursor-pointer disabled:opacity-60"
-          style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
-        >
-          {saveBusy ? 'Đang lưu…' : 'Lưu nhật ký'}
-        </button>
-        {savedFlash && !isToday && (
-          <p className="text-sm m-0 font-medium" style={{ color: tezcaTheme.accentDark }} role="status">
-            Đã lưu cho ngày {date}.
           </p>
         )}
       </div>

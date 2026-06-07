@@ -17,7 +17,9 @@ import {
   updateTrainingPlanByExpert,
   listPendingCustomersForExpert,
   decideExpertAssignment,
-  getCustomerHealthProfile,
+  getExpertProfile,
+  upsertExpertProfile,
+  buildCustomerProfilePacket,
 } from '../db.js';
 import { authMiddleware } from '../auth.js';
 import { buildWeeklyReport } from '../weeklyReport.js';
@@ -27,6 +29,12 @@ import * as adminManagementService from '../services/adminManagementService.js';
 
 export const expertRouter = Router();
 const requireExpert = authMiddleware('expert');
+
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
 
 function customerIdFromReq(req) {
   return req.params.customerId ?? req.params.patientId;
@@ -55,6 +63,16 @@ expertRouter.get('/me', requireExpert, (req, res) => {
       role: 'expert',
     },
   });
+});
+
+expertRouter.get('/me/profile', requireExpert, (req, res) => {
+  const profile = getExpertProfile(req.user.sub);
+  res.json({ profile });
+});
+
+expertRouter.put('/me/profile', requireExpert, (req, res) => {
+  const saved = upsertExpertProfile(req.user.sub, req.body || {});
+  res.json({ profile: saved });
 });
 
 function listCustomersHandler(req, res) {
@@ -89,10 +107,10 @@ function listCustomersHandler(req, res) {
 expertRouter.get('/customers', requireExpert, listCustomersHandler);
 expertRouter.get('/patients', requireExpert, listCustomersHandler);
 
-expertRouter.get('/customers/requests', requireExpert, (req, res) => {
-  const items = listPendingCustomersForExpert(req.user.sub);
+expertRouter.get('/customers/requests', requireExpert, asyncRoute(async (req, res) => {
+  const items = await listPendingCustomersForExpert(req.user.sub);
   res.json({ requests: items });
-});
+}));
 
 /** Đặt TRƯỚC GET /customers/:customerId để không khớp nhầm customerId = "assign" */
 function assignCustomerHandler(req, res) {
@@ -217,26 +235,40 @@ function trainingPlanPutHandler(req, res) {
       res.status(404).json({ error: 'Khách hàng chưa có kế hoạch tập trên hệ thống' });
       return;
     }
-    const { exercises, status, expertNote, expectedUpdatedAt } = req.body || {};
+    const { exercises, exercisesByDay, status, expertNote, expectedUpdatedAt } = req.body || {};
     if (exercises != null && !Array.isArray(exercises)) {
       res.status(400).json({ error: 'exercises phải là mảng' });
       return;
     }
+    const sanitizeExercise = (ex, i) => ({
+      id: Number(ex.id) || Date.now() + i,
+      title: String(ex.title || 'Bài tập').trim().slice(0, 140),
+      sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
+      reps:
+        typeof ex.reps === 'string' || typeof ex.reps === 'number'
+          ? String(ex.reps).slice(0, 40)
+          : 'Theo kế hoạch',
+      isPTLocked: ex.isPTLocked !== false,
+    });
     const sanitized =
       exercises == null
         ? null
-        : exercises.slice(0, 20).map((ex, i) => ({
-            id: Number(ex.id) || Date.now() + i,
-            title: String(ex.title || 'Bài tập').trim().slice(0, 140),
-            sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
-            reps:
-              typeof ex.reps === 'string' || typeof ex.reps === 'number'
-                ? String(ex.reps).slice(0, 40)
-                : 'Theo kế hoạch',
-            isPTLocked: ex.isPTLocked !== false,
-          }));
+        : exercises.slice(0, 20).map((ex, i) => sanitizeExercise(ex, i));
+    let sanitizedByDay = null;
+    if (
+      exercisesByDay != null &&
+      typeof exercisesByDay === 'object' &&
+      !Array.isArray(exercisesByDay)
+    ) {
+      sanitizedByDay = {};
+      for (const [iso, list] of Object.entries(exercisesByDay)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || !Array.isArray(list)) continue;
+        sanitizedByDay[iso] = list.slice(0, 20).map((ex, i) => sanitizeExercise(ex, i));
+      }
+    }
     const saved = updateTrainingPlanByExpert(customerId, expertId, {
       exercises: sanitized,
+      exercisesByDay: sanitizedByDay,
       status,
       expertNote,
       expectedUpdatedAt,
@@ -259,7 +291,7 @@ function trainingPlanPutHandler(req, res) {
   }
 }
 
-function customerDetailHandler(req, res) {
+async function customerDetailHandler(req, res) {
   const expertId = req.user.sub;
   const customerId = customerIdFromReq(req);
   if (!canExpertAccessCustomer(expertId, customerId)) {
@@ -275,75 +307,92 @@ function customerDetailHandler(req, res) {
   const moods = listMoodsForUser(customerId).sort((a, b) => b.date.localeCompare(a.date));
   const botMessages = listBotMessagesForUser(customerId);
   const liveMessages = listLiveMessagesForCustomer(customerId);
-  const healthProfile = getCustomerHealthProfile(customerId);
+  const intake = await buildCustomerProfilePacket(customerId);
   pushAudit({ actorId: expertId, role: 'expert', action: 'view_customer', customerId });
   res.json({
     customer: { id: u.id, email: u.email, name: u.name },
+    profile: intake.profile,
     bmi,
     moods,
     botMessages,
     liveMessages,
-    healthProfile,
+    healthProfile: intake.healthProfile,
   });
 }
 
 const moderationActor = (req) => ({ id: req.user.sub, role: req.dbUser.role });
 
-expertRouter.get('/community/posts', requireExpert, (req, res) => {
-  const topic = req.query.topic ? String(req.query.topic) : undefined;
-  const posts = adminManagementService.listPostsForModeration({
-    topic,
-    viewerId: req.user.sub,
-    limit: 50,
-  });
-  res.json({ posts });
+expertRouter.get('/community/posts', requireExpert, async (req, res) => {
+  try {
+    const topic = req.query.topic ? String(req.query.topic) : undefined;
+    const posts = await adminManagementService.listPostsForModeration({
+      topic,
+      viewerId: req.user.sub,
+      limit: 50,
+    });
+    res.json({ posts });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
+  }
 });
 
-expertRouter.patch('/community/posts/:postId', requireExpert, (req, res) => {
-  const status = String(req.body?.status || 'hidden').trim();
-  if (status !== 'hidden') {
-    res.status(400).json({ error: 'Chuyên gia chỉ có thể ẩn bài viết (status=hidden)' });
-    return;
+expertRouter.patch('/community/posts/:postId', requireExpert, async (req, res) => {
+  try {
+    const status = String(req.body?.status || 'hidden').trim();
+    if (status !== 'hidden') {
+      res.status(400).json({ error: 'Chuyên gia chỉ có thể ẩn bài viết (status=hidden)' });
+      return;
+    }
+    const ok = await adminManagementService.moderatePost(
+      moderationActor(req),
+      String(req.params.postId),
+      'hide',
+    );
+    if (!ok) {
+      res.status(404).json({ error: 'Không tìm thấy bài viết' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
   }
-  const ok = adminManagementService.moderatePost(
-    moderationActor(req),
-    String(req.params.postId),
-    'hide',
-  );
-  if (!ok) {
-    res.status(404).json({ error: 'Không tìm thấy bài viết' });
-    return;
-  }
-  res.json({ ok: true });
 });
 
-expertRouter.delete('/community/posts/:postId', requireExpert, (req, res) => {
-  const ok = adminManagementService.moderatePost(
-    moderationActor(req),
-    String(req.params.postId),
-    'delete',
-  );
-  if (!ok) {
-    res.status(404).json({ error: 'Không tìm thấy bài viết' });
-    return;
+expertRouter.delete('/community/posts/:postId', requireExpert, async (req, res) => {
+  try {
+    const ok = await adminManagementService.moderatePost(
+      moderationActor(req),
+      String(req.params.postId),
+      'delete',
+    );
+    if (!ok) {
+      res.status(404).json({ error: 'Không tìm thấy bài viết' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
   }
-  res.json({ ok: true });
 });
 
-expertRouter.delete('/community/comments/:commentId', requireExpert, (req, res) => {
-  const commentId = String(req.params.commentId);
-  const postId = String(req.body?.postId || req.query.postId || '');
-  const ok = adminManagementService.moderateComment(
-    moderationActor(req),
-    commentId,
-    postId,
-    'delete',
-  );
-  if (!ok) {
-    res.status(404).json({ error: 'Không tìm thấy bình luận' });
-    return;
+expertRouter.delete('/community/comments/:commentId', requireExpert, async (req, res) => {
+  try {
+    const commentId = String(req.params.commentId);
+    const postId = String(req.body?.postId || req.query.postId || '');
+    const ok = await adminManagementService.moderateComment(
+      moderationActor(req),
+      commentId,
+      postId,
+      'delete',
+    );
+    if (!ok) {
+      res.status(404).json({ error: 'Không tìm thấy bình luận' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : 'Lỗi máy chủ' });
   }
-  res.json({ ok: true });
 });
 
 for (const base of ['/customers', '/patients']) {
@@ -357,6 +406,6 @@ for (const base of ['/customers', '/patients']) {
   expertRouter.get(`${base}/:patientId/training-plan`, requireExpert, trainingPlanGetHandler);
   expertRouter.put(`${base}/:customerId/training-plan`, requireExpert, trainingPlanPutHandler);
   expertRouter.put(`${base}/:patientId/training-plan`, requireExpert, trainingPlanPutHandler);
-  expertRouter.get(`${base}/:customerId`, requireExpert, customerDetailHandler);
-  expertRouter.get(`${base}/:patientId`, requireExpert, customerDetailHandler);
+  expertRouter.get(`${base}/:customerId`, requireExpert, asyncRoute(customerDetailHandler));
+  expertRouter.get(`${base}/:patientId`, requireExpert, asyncRoute(customerDetailHandler));
 }

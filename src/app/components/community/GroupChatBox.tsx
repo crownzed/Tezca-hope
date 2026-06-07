@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Hash, SendHorizontal, Users } from 'lucide-react';
+import { Hash, Loader2, SendHorizontal, Users } from 'lucide-react';
 import { ChatMentionInput, type MentionCandidate } from './ChatMentionInput';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 import { ROOM_TOPICS, roleBadgeLabel, type CommunityRoomTopic } from '../../lib/communityTopics';
@@ -24,10 +24,27 @@ function formatTime(ts: number) {
   });
 }
 
+function dayKey(ts: number) {
+  return new Date(ts).toLocaleDateString('sv-SE');
+}
+
+function dayLabel(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - target.getTime()) / 86400000);
+  if (diff === 0) return 'Hôm nay';
+  if (diff === 1) return 'Hôm qua';
+  return new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: 'numeric', month: 'short' }).format(d);
+}
+
 type GroupChatBoxProps = {
   currentUserName: string;
   roomTopic: CommunityRoomTopic;
   messages: RoomChatMessage[];
+  loading?: boolean;
   draft: string;
   unreadByTopic: Record<CommunityRoomTopic, boolean>;
   onlineMembers?: RoomPresenceMember[];
@@ -42,6 +59,7 @@ export function GroupChatBox({
   currentUserName,
   roomTopic,
   messages,
+  loading = false,
   draft,
   unreadByTopic,
   onlineMembers = [],
@@ -141,25 +159,62 @@ export function GroupChatBox({
               </p>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 && (
-                <p className="text-sm opacity-50 text-center m-0">
-                  Chưa có tin nhắn — hãy chào cộng đồng!
-                </p>
+            <div className="flex-1 overflow-y-auto p-4 space-y-1">
+              {loading && (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <Loader2 size={22} className="animate-spin opacity-40" style={{ color: tezcaTheme.accentDark }} />
+                  <p className="text-xs opacity-50 m-0">Đang tải tin nhắn…</p>
+                </div>
               )}
-              {messages.map((m) => (
-                <div key={m.id} className="rounded-lg px-3 py-2" style={{ backgroundColor: tezcaTheme.subtleBg }}>
-                  <p className="m-0 text-xs font-medium">
-                    {m.authorName}{' '}
-                    <span className="opacity-50">
-                      · {roleBadgeLabel(m.authorRole)} · {formatTime(m.createdAt)}
-                    </span>
-                  </p>
-                  <p className="m-0 text-sm mt-0.5 whitespace-pre-wrap">
-                    {renderCommunityMessageContent(m.content)}
+              {!loading && messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <Hash size={28} className="opacity-20" />
+                  <p className="text-sm opacity-50 text-center m-0">
+                    Chưa có tin nhắn — hãy chào cộng đồng!
                   </p>
                 </div>
-              ))}
+              )}
+              {!loading && (() => {
+                const rows: { type: 'day'; key: string; label: string } | { type: 'msg'; message: RoomChatMessage }[] = [];
+                let lastDay = '';
+                for (const m of messages) {
+                  const dk = dayKey(m.createdAt);
+                  if (dk !== lastDay) {
+                    lastDay = dk;
+                    rows.push({ type: 'day', key: dk, label: dayLabel(m.createdAt) });
+                  }
+                  rows.push({ type: 'msg', message: m });
+                }
+                return rows.map((row) => {
+                  if (row.type === 'day') {
+                    return (
+                      <div key={`day-${row.key}`} className="flex justify-center py-3">
+                        <span
+                          className="text-[11px] font-medium px-3 py-1 rounded-full"
+                          style={{ backgroundColor: tezcaTheme.surface, color: tezcaTheme.textMuted, border: `1px solid ${tezcaTheme.border}` }}
+                        >
+                          {row.label}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const m = row.message;
+                  const isMine = m.authorName === currentUserName;
+                  return (
+                    <div key={m.id} className={`rounded-xl px-3 py-2 ${isMine ? 'ml-4' : ''}`} style={{ backgroundColor: isMine ? 'rgba(45, 212, 191, 0.1)' : tezcaTheme.subtleBg }}>
+                      <p className="m-0 text-xs font-semibold" style={{ color: isMine ? tezcaTheme.accentDark : tezcaTheme.text }}>
+                        {m.authorName}{' '}
+                        <span className="font-normal opacity-50">
+                          · {roleBadgeLabel(m.authorRole)} · {formatTime(m.createdAt)}
+                        </span>
+                      </p>
+                      <p className="m-0 text-sm mt-0.5 whitespace-pre-wrap leading-relaxed">
+                        {renderCommunityMessageContent(m.content)}
+                      </p>
+                    </div>
+                  );
+                });
+              })()}
               <div ref={roomEndRef} />
             </div>
 

@@ -13,6 +13,15 @@ function model() {
   return process.env.GOOGLE_GENERATIVE_AI_MODEL?.trim() || 'gemini-2.5-flash';
 }
 
+/** Chat Tezca — tắt thinking để stream ổn định và không nuốt maxOutputTokens. */
+function chatGenerationConfig(opts = {}) {
+  return {
+    temperature: opts.temperature ?? 0.7,
+    maxOutputTokens: opts.max_tokens ?? 2048,
+    thinkingConfig: { thinkingBudget: 0 },
+  };
+}
+
 /**
  * @param {Array<{ role: 'system' | 'user' | 'assistant'; content: string }>} messages
  */
@@ -67,10 +76,7 @@ export async function geminiChat(messages, opts = {}) {
 
   const body = {
     contents,
-    generationConfig: {
-      temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: opts.max_tokens ?? 1200,
-    },
+    generationConfig: chatGenerationConfig(opts),
   };
   if (systemText) {
     body.systemInstruction = { parts: [{ text: systemText }] };
@@ -102,10 +108,7 @@ export async function geminiChat(messages, opts = {}) {
   }
 
   const parts = data?.candidates?.[0]?.content?.parts;
-  const text = parts
-    ?.map((p) => (typeof p?.text === 'string' ? p.text : ''))
-    .join('')
-    .trim();
+  const text = textFromStreamChunk({ candidates: [{ content: { parts } }] }).trim();
 
   if (!text) {
     const block = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
@@ -126,9 +129,12 @@ export async function geminiChat(messages, opts = {}) {
 function textFromStreamChunk(data) {
   const parts = data?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) return '';
-  return parts
+  const visible = parts
+    .filter((p) => !p?.thought)
     .map((p) => (typeof p?.text === 'string' ? p.text : ''))
     .join('');
+  if (visible) return visible;
+  return parts.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('');
 }
 
 /**
@@ -154,11 +160,7 @@ export async function* geminiChatStream(messages, opts = {}) {
 
   const body = {
     contents,
-    generationConfig: {
-      temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: opts.max_tokens ?? 1200,
-      topP: 0.92,
-    },
+    generationConfig: { ...chatGenerationConfig(opts), topP: 0.92 },
   };
   if (systemText) {
     body.systemInstruction = { parts: [{ text: systemText }] };
@@ -238,6 +240,11 @@ export async function* geminiChatStream(messages, opts = {}) {
   }
 
   if (!accumulated.trim()) {
+    const fallback = (await geminiChat(messages, opts)).trim();
+    if (fallback) {
+      yield fallback;
+      return;
+    }
     const err = new Error('Gemini không trả nội dung hợp lệ');
     err.code = 'GEMINI_EMPTY';
     throw err;

@@ -25,7 +25,7 @@ export function parseExercisesJson(raw) {
   return parseJsonColumn(
     raw,
     [],
-    (v) => Array.isArray(v),
+    (v) => Array.isArray(v) || (v !== null && typeof v === 'object' && v.v === 2),
   );
 }
 

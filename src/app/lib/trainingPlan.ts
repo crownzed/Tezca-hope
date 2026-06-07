@@ -8,6 +8,9 @@ export type CustomerTrainingPlan = {
   sourcePlanMd: string;
   status: TrainingPlanStatus;
   exercises: DashboardExercise[];
+  /** Bài tập riêng theo từng ngày (ISO). Có khi scheduleMode = daily. */
+  exercisesByDay?: Record<string, DashboardExercise[]>;
+  scheduleMode?: 'daily' | 'shared';
   dailyProgress: Record<string, Record<string, DayExerciseProgress>>;
   expertNote: string;
   integratedAt: number;

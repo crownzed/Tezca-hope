@@ -6,6 +6,7 @@ import { ROUTES } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
 import { FormAlert } from '../components/tezca/FormAlert';
 import { AuthPrimaryButton, authInputClass, authInputStyle } from '../components/tezca/AuthFormCard';
+import { TezcaLogoLink } from '../components/TezcaLogo';
 
 function AuthShell({
   title,
@@ -26,15 +27,7 @@ function AuthShell({
         className="sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b backdrop-blur-md"
         style={{ backgroundColor: 'rgba(249,249,251,0.92)', borderColor: tezcaTheme.borderStrong }}
       >
-        <Link to={ROUTES.home} className="flex items-center gap-2 font-semibold text-lg shrink-0">
-          <span
-            className="inline-flex w-8 h-8 rounded-lg items-center justify-center text-white text-sm font-bold"
-            style={{ backgroundColor: tezcaTheme.accentLight }}
-          >
-            T
-          </span>
-          <span>Tezca</span>
-        </Link>
+        <TezcaLogoLink to={ROUTES.home} size="md" />
         <Link to={backTo} className="text-sm font-medium" style={{ color: tezcaTheme.accentDark }}>
           {backLabel}
         </Link>

@@ -44,6 +44,7 @@ export const ROUTES = {
       aiChat: '/app/ho-tro/tezca-ai',
       expertChat: '/app/ho-tro/chat-chuyen-gia',
       chooseExpert: '/app/ho-tro/chon-chuyen-gia',
+      profile: '/app/ho-tro/ho-so',
     },
     planSection: {
       root: '/app/ke-hoach',
@@ -64,6 +65,7 @@ export const ROUTES = {
     chat: '/app/ho-tro/tezca-ai',
     expertChat: '/app/ho-tro/chat-chuyen-gia',
     chooseExpert: '/app/ho-tro/chon-chuyen-gia',
+    profile: '/app/ho-tro/ho-so',
     plans: '/app/ke-hoach/luyen-tap',
     rewards: '/app/thanh-tuu/phan-thuong',
     /** Alias → khu vực cộng đồng độc lập */

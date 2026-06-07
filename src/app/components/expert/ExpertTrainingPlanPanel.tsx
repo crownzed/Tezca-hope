@@ -9,6 +9,11 @@ import {
   countDayDone,
   normalizeDailyProgressFromApi,
 } from '../../lib/trainingDayProgress';
+import {
+  getExercisesForIso,
+  normalizePlanExercisesFromApi,
+  type ParsedPlanSchedule,
+} from '../../lib/trainingPlanSchedule';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 const inputStyle = {
@@ -24,7 +29,11 @@ type Props = {
 
 export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
   const [plan, setPlan] = useState<CustomerTrainingPlan | null>(null);
-  const [structure, setStructure] = useState<DashboardExercise[]>([]);
+  const [schedule, setSchedule] = useState<ParsedPlanSchedule>({
+    mode: 'shared',
+    byDay: {},
+    flat: [],
+  });
   const [dailyProgress, setDailyProgress] = useState<CustomerTrainingPlan['dailyProgress']>({});
   const [viewIso, setViewIso] = useState(() => {
     const d = new Date();
@@ -46,9 +55,14 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
     [dailyProgress],
   );
 
+  const dayStructure = useMemo(
+    () => getExercisesForIso(schedule, viewIso),
+    [schedule, viewIso],
+  );
+
   const viewExercises = useMemo(
-    () => applyDayProgress(structure, normalizedDaily[viewIso]),
-    [structure, normalizedDaily, viewIso],
+    () => applyDayProgress(dayStructure, normalizedDaily[viewIso]),
+    [dayStructure, normalizedDaily, viewIso],
   );
 
   const load = useCallback(() => {
@@ -60,7 +74,11 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
     )
       .then((r) => {
         setPlan(r.plan);
-        setStructure(r.plan?.exercises ?? []);
+        const next = normalizePlanExercisesFromApi(
+          r.plan?.exercises ?? [],
+          r.plan?.exercisesByDay,
+        );
+        setSchedule(next);
         setDailyProgress(r.plan?.dailyProgress ?? {});
         setExpertNote(r.plan?.expertNote ?? '');
         setToast('');
@@ -73,26 +91,50 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
     load();
   }, [load]);
 
+  const patchDayStructure = (updater: (list: DashboardExercise[]) => DashboardExercise[]) => {
+    setSchedule((s) => {
+      const current = getExercisesForIso(s, viewIso);
+      const next = updater(current);
+      if (s.mode === 'daily') {
+        const byDay = { ...s.byDay, [viewIso]: next };
+        return { mode: 'daily', byDay, flat: Object.values(byDay).flat() };
+      }
+      const byDay: Record<string, DashboardExercise[]> = {};
+      for (const iso of Object.keys(s.byDay)) {
+        byDay[iso] = next.map((ex) => ({ ...ex }));
+      }
+      return { mode: 'shared', byDay, flat: next };
+    });
+  };
+
   const save = async (status: 'pending_review' | 'approved') => {
     if (!plan) return;
     setBusy(true);
     setToast('');
     try {
+      const body: Record<string, unknown> = {
+        exercises: schedule.flat,
+        status,
+        expertNote: expertNote.trim(),
+        expectedUpdatedAt: plan.updatedAt,
+      };
+      if (schedule.mode === 'daily') {
+        body.exercisesByDay = schedule.byDay;
+      }
       const r = await apiFetch<TrainingPlanResponse>(
         `/api/expert/customers/${encodeURIComponent(customerId)}/training-plan`,
         {
           method: 'PUT',
           token,
-          body: JSON.stringify({
-            exercises: structure,
-            status,
-            expertNote: expertNote.trim(),
-            expectedUpdatedAt: plan.updatedAt,
-          }),
+          body: JSON.stringify(body),
         },
       );
       setPlan(r.plan);
-      setStructure(r.plan?.exercises ?? []);
+      const next = normalizePlanExercisesFromApi(
+        r.plan?.exercises ?? [],
+        r.plan?.exercisesByDay,
+      );
+      setSchedule(next);
       setDailyProgress(r.plan?.dailyProgress ?? {});
       setToast(status === 'approved' ? 'Đã duyệt — khách hàng thấy trên Chiến dịch tập luyện.' : 'Đã lưu chỉnh sửa.');
     } catch (e) {
@@ -108,11 +150,11 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
   };
 
   const updateExercise = (id: number, patch: Partial<DashboardExercise>) => {
-    setStructure((list) => list.map((ex) => (ex.id === id ? { ...ex, ...patch } : ex)));
+    patchDayStructure((list) => list.map((ex) => (ex.id === id ? { ...ex, ...patch } : ex)));
   };
 
   const addRow = () => {
-    setStructure((list) => [
+    patchDayStructure((list) => [
       ...list,
       {
         id: Date.now(),
@@ -127,7 +169,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
   };
 
   const removeRow = (id: number) => {
-    setStructure((list) => list.filter((ex) => ex.id !== id));
+    patchDayStructure((list) => list.filter((ex) => ex.id !== id));
   };
 
   if (loading) {
@@ -161,7 +203,9 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
       <span className="text-amber-700">Chờ duyệt</span>
     );
   const when = new Date(plan.integratedAt).toLocaleString('vi-VN');
-  const { done: viewDone, total: viewTotal } = countDayDone(structure, normalizedDaily[viewIso]);
+  const { done: viewDone, total: viewTotal } = countDayDone(dayStructure, normalizedDaily[viewIso]);
+  const scheduleHint =
+    schedule.mode === 'daily' ? ' · Lịch 7 ngày — mỗi ngày bài riêng' : '';
 
   return (
     <section className="xl:col-span-12 rounded-2xl border p-4 space-y-4" style={tezcaCardStyle}>
@@ -171,6 +215,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
         </h2>
         <p className="text-xs mt-1 m-0" style={{ color: tezcaTheme.textMuted }}>
           Tích hợp từ kế hoạch AI · {when} · {statusLabel}
+          {scheduleHint}
           {viewTotal > 0 && (
             <span className="opacity-80">
               {' '}
@@ -184,7 +229,10 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
 
       <div className="flex flex-wrap gap-1.5">
         {weekDays.map((day) => {
-          const { done, total } = countDayDone(structure, normalizedDaily[day.isoDate]);
+          const { done, total } = countDayDone(
+            getExercisesForIso(schedule, day.isoDate),
+            normalizedDaily[day.isoDate],
+          );
           const allDone = total > 0 && done === total;
           return (
             <button
@@ -222,7 +270,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
           className="text-xs border rounded-lg px-3 py-1.5 hover:opacity-90"
           style={{ borderColor: 'rgba(45,212,191,0.35)', color: tezcaTheme.accentDark }}
         >
-          + Thêm bài
+          + Thêm bài (ngày đang xem)
         </button>
       </div>
 
@@ -237,10 +285,11 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
 
       <p className="text-[10px] m-0" style={{ color: tezcaTheme.textMuted }}>
         Tiến độ hoàn thành / tạ thực tế do khách hàng nhập — chỉ xem theo ngày, không sửa tại đây.
+        {schedule.mode === 'daily' && ' Chỉnh sửa cấu trúc bài theo từng ngày trong tuần.'}
       </p>
 
       <div className="space-y-2">
-        {structure.map((ex) => {
+        {dayStructure.map((ex) => {
           const view = viewExercises.find((v) => v.id === ex.id);
           return (
             <div
@@ -300,9 +349,9 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
             </div>
           );
         })}
-        {structure.length === 0 && (
+        {dayStructure.length === 0 && (
           <p className="text-xs m-0" style={{ color: tezcaTheme.textMuted }}>
-            Chưa có bài tập — thêm ít nhất một dòng.
+            Chưa có bài tập cho ngày này — thêm ít nhất một dòng.
           </p>
         )}
       </div>

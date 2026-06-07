@@ -7,14 +7,6 @@ export type PlanInput = {
   dietNote: string;
 };
 
-type AgeBand = 'teen' | 'adult' | 'senior';
-
-function ageBand(age: number): AgeBand {
-  if (age < 18) return 'teen';
-  if (age >= 65) return 'senior';
-  return 'adult';
-}
-
 /** Trích ý ràng buộc / bối cảnh từ ghi chú người dùng (chỉ gợi ý lối sống, không phải tư vấn y khoa). */
 function dietContextBullets(note: string): string[] {
   const n = normalizeVi(note);
@@ -46,60 +38,201 @@ function dietContextBullets(note: string): string[] {
   return out;
 }
 
-function nutritionBlock(input: PlanInput, band: AgeBand): string[] {
-  const { goal, activity } = input;
-  const lines: string[] = [];
+const DAY_HEADERS = [
+  'Ngày 1 (Thứ 2)',
+  'Ngày 2 (Thứ 3)',
+  'Ngày 3 (Thứ 4)',
+  'Ngày 4 (Thứ 5)',
+  'Ngày 5 (Thứ 6)',
+  'Ngày 6 (Thứ 7)',
+  'Ngày 7 (Chủ nhật)',
+] as const;
 
-  const base =
-    goal === 'lose'
-      ? [
-          'Tạo **thiếu hụt năng lượng nhẹ** (khoảng 300–500 kcal/ngày so với duy trì) chủ yếu từ giảm đồ calo rỗng, không nhịn bữa.',
-          'Ưu tiên **protein nạc** (cá, thịt nạc, đậu, trứng, sữa chua ít đường) ~1.2–1.6 g/kg (tham khảo — điều chỉnh bệnh thận).',
-          '**Chất xơ** từ rau, quả, ngũ cốc nguyên hạt để no lâu và ổn định đường huyết.',
-        ]
-      : goal === 'gain'
-        ? [
-            'Tăng **surplus nhỏ** (+200–350 kcal/ngày), ưu tiên protein và carb chất lượng — tránh chỉ ăn đồ ngọt.',
-            'Chia **5–6 bữa** nếu khó ăn một lúc; snack lành mạnh (sữa chua, hạt, trái cây, bánh mì nguyên cám).',
-            'Theo dõi khối lượng/tỷ lệ mỡ-nạc nếu có vòng eo hoặc chỉ số để điều chỉnh.',
-          ]
-        : [
-            'Giữ **ổn định khối lượng**: khẩu phần nhất quán trong tuần; điều chỉnh ±10% khi cân dao động >1 kg.',
-            'Ăn đủ protein và rau mỗi bữa chính; hạn chế đồ chiên nhiều dầu và đồ uống có đường.',
-          ];
-
-  lines.push(...base);
-
-  if (activity === 'high' && goal !== 'lose') {
-    lines.push('Với vận động cao: thêm carb **trước/sau buổi tập** (chuối, cơm gạo lứt nhẹ) và đủ nước điện giải khi ra nhiều mồ hôi.');
-  }
-
-  if (band === 'teen') {
-    lines.push('**Vị thành niên:** không hạn calo gắt; cần đủ canxi, sắt, protein cho tăng trưởng — phối hợp phụ huynh/bác sĩ.');
-  }
-  if (band === 'senior') {
-    lines.push('**Người cao tuổi:** ưu tiên protein phân bổ đều bữa; kiểm tra nuốt/nhai; tránh giảm cân quá nhanh để bảo toàn cơ.');
-  }
-
-  lines.push('Uống **nước lọc** ~1,5–2 lít/ngày (điều chỉnh khi suy tim/thận/bác sĩ giới hạn).');
-
-  return lines.map((s) => `- ${s}`);
-}
-
-function exerciseBlock(input: PlanInput): string {
+/** Mỗi phần tử = bullet cho một ngày; không trùng tên bài trong tuần. */
+function weeklyTrainingBullets(input: PlanInput): string[][] {
   const { goal, activity } = input;
 
   if (activity === 'low') {
-    return goal === 'lose'
-      ? `- **NEAT + cardio nhẹ:** đi bộ nhanh **30–40 phút**/ngày (chia 2 lần được); leo cầu thang khi có thể.\n- **2 buổi/tuần** kháng nhẹ (gấp người, squat tự trọng) để giữ cơ.`
-      : `- **Mục tiêu vận động:** đi bộ **25–35 phút**/ngày + **2 buổi/tuần** sức nhẹ toàn thân.\n- Đứng/tập nhẹ **5 phút mỗi giờ** khi làm văn phòng.`;
+    return [
+      [
+        'Khởi động: đi bộ tại chỗ + xoay khớp cổ vai 5 phút',
+        'Đi bộ nhanh liên tục 30 phút (zone 2)',
+        'Squat tự trọng 3 hiệp × 12',
+        'Giãn cơ đùi sau + lưng dưới 5 phút',
+      ],
+      [
+        'Khởi động: nhảy dây nhẹ hoặc march 4 phút',
+        'Gấp người incline (bàn ghế) 3×8–10',
+        'Plank 3×30 giây',
+        'Đi bộ recovery 15 phút',
+      ],
+      [
+        'Khởi động: hip circle + ankle mobility 5 phút',
+        'Bước lên cầu thang 3×10 mỗi chân',
+        'Glute bridge 3×15',
+        'Thở sâu + thư giãn 5 phút',
+      ],
+      [
+        'Khởi động: cánh tay + xoay hông 5 phút',
+        'Đạp xe tĩnh hoặc đi bộ dốc nhẹ 25 phút',
+        'Wall sit 3×40 giây',
+        'Foam roll hoặc lăn bóng chân 5 phút',
+      ],
+      [
+        'Khởi động: march + squat không tạ 5 phút',
+        'Chống đẩy tường 3×12',
+        'Bird-dog 3×10 mỗi bên',
+        'Yoga nhẹ: tư thế trẻ em + xoay cột sống',
+      ],
+      [
+        'Khởi động: nhảy nhẹ hoặc đi bộ 5 phút',
+        'Đi bộ nhanh ngoài trời 35 phút',
+        'Calf raise 3×15',
+        'Giãn toàn thân 8 phút',
+      ],
+      [
+        'Khởi động: thở bụng + mobility vai 5 phút',
+        'Đi bộ thư giãn 20 phút',
+        'Stretch hông + ngực 10 phút',
+        'Nghỉ chủ động — ghi nhận mức mệt',
+      ],
+    ];
   }
 
   if (activity === 'medium') {
-    return `- **150–220 phút**/tuần hoạt động vừa (đi nhanh, đạp xe, bơi).\n- **2 buổi/tuần** sức (tạ nhẹ hoặc TRX), xen ngày nghỉ hoặc đi bộ.\n${goal === 'lose' ? '- Ưu tiên **zone 2** (nói được câu ngắn) để tối ưu mỡ mà vẫn phục hồi.' : ''}`;
+    const cardio =
+      goal === 'lose' ? 'Cardio zone 2 (đạp xe/đi nhanh) 30 phút' : 'Cardio vừa 25 phút';
+    return [
+      [
+        'Khởi động: hip + ankle mobility 6 phút',
+        'Goblet squat 3×10',
+        'Romanian deadlift tạ nhẹ 3×10',
+        cardio,
+        'Giãn cơ sau tập 5 phút',
+      ],
+      [
+        'Khởi động: band pull-apart + rotator 5 phút',
+        'Chống đẩy 3×8–12',
+        'Hàng tạ một tay hoặc tạ đôi 3×10',
+        'Face pull hoặc kéo cáp nhẹ 3×15',
+        'Plank 3×40 giây',
+      ],
+      [
+        'Khởi động: đạp xe nhẹ 5 phút',
+        'Lunges đi bộ 3×10 mỗi chân',
+        'Hip thrust 3×12',
+        'Bước bên (lateral lunge) 2×12',
+        'Cooldown đi bộ 8 phút',
+      ],
+      [
+        'Khởi động: xoay khớp + squat không tạ 5 phút',
+        'Kéo xà hoặc lat pulldown 3×10',
+        'Dumbbell row 3×10 mỗi tay',
+        'Bơi hoặc đi bộ dốc 20 phút',
+        'Giãn lưng + vai 6 phút',
+      ],
+      [
+        'Khởi động: nhảy dây 4 phút',
+        'Bench press hoặc chống đẩy tạ 3×8–10',
+        'Overhead press tạ nhẹ 3×10',
+        'Tricep extension dây 2×15',
+        'Mobility ngực + vai 5 phút',
+      ],
+      [
+        'Khởi động: march + leg swing 5 phút',
+        'Deadlift trap bar hoặc kettlebell 3×8',
+        'Farmer carry 3×30 mét',
+        goal === 'gain' ? 'Burpee có kiểm soát 3×6' : 'Đi bộ nhanh 20 phút',
+        'Stretch hông gập 6 phút',
+      ],
+      [
+        'Khởi động: yoga flow nhẹ 8 phút',
+        'Đi bộ hoặc bơi nhẹ 25 phút',
+        'Foam roll + thở sâu 10 phút',
+        'Ghi chú cảm giác khớp/cơ',
+      ],
+    ];
   }
 
-  return `- Duy trì **khối lượng & cường độ** hiện có; **1–2 ngày active recovery**/tuần (đi bộ, yoga, mobility).\n- Theo dõi **đau khớp/mệt kéo dài** — giảm tải trước khi chấn thương.\n${goal === 'lose' ? '- Xen **buổi HIIT ngắn** (tuần 1–2 lần) nếu đã quen — không khi chưa làm nền.' : ''}`;
+  return [
+    [
+      'Khởi động: activation glute + hip 8 phút',
+      'Back squat 4×6–8 (RPE 7–8)',
+      'Leg press 3×10',
+      'Walking lunge 3×10 mỗi chân',
+      'Cooldown bike 8 phút',
+    ],
+    [
+      'Khởi động: band shoulder 6 phút',
+      'Bench press 4×6–8',
+      'Incline dumbbell press 3×10',
+      'Dips hoặc tricep pushdown 3×12',
+      'Chest stretch 5 phút',
+    ],
+    [
+      'Khởi động: row nhẹ 5 phút',
+      'Deadlift 4×5',
+      'Barbell row 3×8',
+      'Lat pulldown 3×10',
+      'Hamstring stretch 6 phút',
+    ],
+    [
+      'Khởi động: skip + drill chân 6 phút',
+      goal === 'lose' ? 'HIIT bike 8×30s/90s nghỉ' : 'Tempo run 20 phút',
+      'Sled push hoặc battle rope 6×20 giây',
+      'Core pallof press 3×12',
+      'Giãn cơ đùi trước 5 phút',
+    ],
+    [
+      'Khởi động: mobility vai + T-spine 8 phút',
+      'Overhead press 4×6',
+      'Lateral raise 3×15',
+      'Pull-up hoặc assisted 3×max',
+      'Face pull 3×15',
+    ],
+    [
+      'Khởi động: hip hinge drill 6 phút',
+      'Front squat hoặc goblet 4×8',
+      'Romanian deadlift 3×10',
+      'Hip thrust 3×12',
+      'Calf raise nặng 4×12',
+    ],
+    [
+      'Khởi động: yoga / đi bộ nhẹ 10 phút',
+      'Swim hoặc đạp xe recovery 30 phút',
+      'Foam roll toàn thân',
+      'Ngày nghỉ chủ động — chuẩn bị tuần sau',
+    ],
+  ];
+}
+
+function trainingWeekMarkdown(input: PlanInput): string {
+  const weeks = weeklyTrainingBullets(input);
+  const lines: string[] = ['## Lịch tập 7 ngày', ''];
+  DAY_HEADERS.forEach((header, i) => {
+    lines.push(`### ${header}`);
+    for (const bullet of weeks[i]!) {
+      lines.push(`- ${bullet}`);
+    }
+    lines.push('');
+  });
+  return lines.join('\n').trimEnd();
+}
+
+function briefGuidanceBlock(input: PlanInput, goalVi: string, actVi: string): string[] {
+  const { goal } = input;
+  const lines = [
+    `- Tuần này: **${goalVi}**, mức vận động **${actVi}**. Tập theo lịch 7 ngày; nếu đau khớp kéo dài thì giảm tải hoặc bỏ buổi.`,
+    `- Ngày 7 là **phục hồi** — ưu tiên giấc ngủ và nước.`,
+  ];
+  if (goal === 'lose') {
+    lines.push('- Ăn uống: ưu tiên protein và rau; không nhịn bữa sau buổi tập nặng.');
+  } else if (goal === 'gain') {
+    lines.push('- Ăn uống: thêm bữa phụ lành mạnh sau buổi sức nếu khó đủ calo.');
+  } else {
+    lines.push('- Ăn uống: giữ khẩu phần ổn định; uống đủ nước trong ngày tập.');
+  }
+  return lines;
 }
 
 export function generatePersonalizedPlan(input: PlanInput): string {
@@ -117,35 +250,24 @@ export function generatePersonalizedPlan(input: PlanInput): string {
         ? 'trung bình (vài buổi/tuần)'
         : 'cao (tập thường xuyên hoặc lao động nặng)';
 
-  const band = ageBand(input.age);
   const dietExtras = dietContextBullets(input.dietNote);
-  const nutrition = nutritionBlock(input, band);
 
   const lines: string[] = [
     `## Kế hoạch gợi ý (ngoại tuyến)`,
     ``,
     `**Bối cảnh:** ${input.age} tuổi · Mục tiêu: ${goalVi} · Vận động: ${actVi}.`,
     ``,
-    `### Dinh dưỡng (7 ngày đầu)`,
-    ...nutrition,
+    `## Hướng dẫn ngắn`,
+    ...briefGuidanceBlock(input, goalVi, actVi),
   ];
 
   if (dietExtras.length) {
-    lines.push('', '**Theo ghi chú của bạn:**');
-    dietExtras.forEach((x) => lines.push(`- ${x}`));
+    lines.push(`- **Ghi chú của bạn:** ${dietExtras[0]}`);
   }
 
+  lines.push('', trainingWeekMarkdown(input), '', `## Lưu ý an toàn`);
   lines.push(
-    ``,
-    `### Vận động`,
-    exerciseBlock(input),
-    ``,
-    `### Theo dõi`,
-    `- Cân **cùng khung giờ** 1–2 lần/tuần; đo vòng eo thêm nếu giảm cân.`,
-    `- Ghi **nhật ký cảm xúc & giấc ngủ** — giúc nhận diện trigger ăn uống cảm xúc.`,
-    `- Đồng bộ **Tezca** khi đăng nhập để chuyên gia xem xu hướng an toàn.`,
-    ``,
-    `_Thông tin mang tính giáo dục sức khỏe; không thay cho khám hoặc điều trị chuyên môn._`,
+    `Nội dung chỉ mang tính gợi ý lối sống; không thay khám hoặc điều trị. Bệnh nền, thai kỳ hoặc đang điều trị cần theo bác sĩ.`,
   );
 
   return lines.join('\n');
