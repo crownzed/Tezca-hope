@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-012@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.934Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-012@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "f6434cd1-dc47-4eeb-a732-03f617e54bd1",
+      "email": "kh-demo-012@tezca.vn",
+      "name": "Đỗ Văn Mai",
+      "role": "user",
+      "createdAt": 1779624233717
+    },
+    "assignments": [
+      {
+        "expertId": "044fe0c5-1dce-4434-8040-738d7e42dd19",
+        "expertEmail": "cg-demo-04@tezca.vn",
+        "expertName": "BS. Lan Phương"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "ef12ee94-b629-410e-ab91-9ea503e36f1e",
+        "userId": "f6434cd1-dc47-4eeb-a732-03f617e54bd1",
+        "date": "2026-05-24",
+        "heightCm": 167,
+        "weightKg": 60,
+        "bmi": 21.5
+      }
+    ],
+    "moods": [
+      {
+        "id": "837b6180-e735-4c3a-b8e8-d6f6f58c78ee",
+        "userId": "f6434cd1-dc47-4eeb-a732-03f617e54bd1",
+        "date": "2026-05-24",
+        "moodLabel": "Vui",
+        "moodScore": 2,
+        "note": ""
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "f6434cd1-dc47-4eeb-a732-03f617e54bd1",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Đỗ Văn Mai\nChuyên gia phụ trách: BS. Lan Phương\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900120,
+          "title": "Plank",
+          "sets": 3,
+          "reps": "45 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900121,
+          "title": "Squat tại chỗ",
+          "sets": 3,
+          "reps": "12",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900122,
+          "title": "Đi bộ nhẹ",
+          "sets": 1,
+          "reps": "15 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515372,
+      "updatedAt": 1779624515373,
+      "progressUpdatedAt": 0,
+      "updatedBy": "044fe0c5-1dce-4434-8040-738d7e42dd19"
+    }
+  }
+}

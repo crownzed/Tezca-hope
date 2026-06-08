@@ -1,0 +1,284 @@
+{
+  "defaults": {
+    "maxTokens": 560,
+    "temperature": 0.58
+  },
+  "emptyMessage": {
+    "intent": "general",
+    "mode": "instant",
+    "reply": "Gửi giúp một câu hỏi ngắn — ví dụ ngủ, BMI, hoặc ăn uống."
+  },
+  "scenarios": [
+    {
+      "id": "emergency",
+      "label": "Khẩn cấp / tự hại / triệu chứng nặng",
+      "weight": 100,
+      "mode": "instant",
+      "reply": "Nếu bạn không an toàn hoặc có ý định tự hại: rời nơi nguy hiểm, báo người tin cậy, hoặc gọi **115** ngay. Tezca không can thiệp khẩn cấp.",
+      "match": {
+        "type": "regex",
+        "pattern": "(tu sat|tu tu|tu tong|chet di|khong muon song|muon chet|tim cach chet|tu tong dot ngot|dau nguc|nhoi nguc|ket dia|ta bien|me mi mat|yeu nua nguoi|thinh tho|kho tho|khet tho|choang)"
+      },
+      "llm": {
+        "systemAddon": "Tình huống **khẩn cấp**: trả lời **1–2 câu** — yêu cầu gọi **115** hoặc cấp cứu ngay; không tư vấn dài.",
+        "maxTokens": 220,
+        "temperature": 0.45
+      }
+    },
+    {
+      "id": "detail_request",
+      "label": "Xin chi tiết / kế hoạch / danh sách",
+      "weight": 72,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": [
+          "chi tiet",
+          "cu the hon",
+          "ke hoach",
+          "lap ke hoach",
+          "danh sach",
+          "tung buoc",
+          "huong dan day du",
+          "giai thich ky",
+          "phan tich sau",
+          "7 ngay",
+          "mot tuan",
+          "tuan dau"
+        ]
+      },
+      "llm": {
+        "systemAddon": "Tình huống **xin chi tiết / kế hoạch / danh sách**: được trả **đầy đủ hơn** (có thể bullet, từng bước); vẫn an toàn, không chẩn đoán/kê đơn.",
+        "maxTokens": 900,
+        "temperature": 0.62
+      }
+    },
+    {
+      "id": "greeting",
+      "label": "Chào hỏi",
+      "weight": 42,
+      "mode": "instant",
+      "reply": "Chào bạn! Hôm nay bạn muốn nói về **BMI**, **ăn uống**, **ngủ**, **stress** hay **vận động**?",
+      "match": {
+        "type": "regex",
+        "pattern": "(xin chao|chao ban|chao tezca|^hi\\b|hello|hey\\b|chao buoi)"
+      },
+      "llm": {
+        "systemAddon": "Tình huống **chào hỏi**: **một câu** chào ấm + hỏi ngắn muốn nói chủ đề nào.",
+        "maxTokens": 180,
+        "temperature": 0.55
+      }
+    },
+    {
+      "id": "thanks",
+      "label": "Cảm ơn",
+      "weight": 41,
+      "mode": "instant",
+      "reply": "Không có gì! Bạn cần hỗ trợ thêm chủ đề nào không?",
+      "match": {
+        "type": "regex",
+        "pattern": "(cam on|thank you|thanks|^tks\\b)"
+      },
+      "llm": {
+        "systemAddon": "Tình huống **cảm ơn**: **một câu** đáp lại.",
+        "maxTokens": 120,
+        "temperature": 0.55
+      }
+    },
+    {
+      "id": "ack",
+      "label": "Xác nhận ngắn (ok, vâng…)",
+      "weight": 38,
+      "mode": "instant",
+      "reply": "Bạn muốn mình gợi ý tiếp về **BMI**, **ăn uống**, **ngủ**, **stress** hay **vận động**?",
+      "match": {
+        "type": "exact",
+        "phrases": [
+          "ok",
+          "oke",
+          "uhm",
+          "um",
+          "vang",
+          "da",
+          "duoc",
+          "hieu roi",
+          "ro",
+          "yes",
+          "no",
+          "dung roi",
+          "chuan",
+          "hay lam",
+          "lam di"
+        ]
+      },
+      "llm": {
+        "systemAddon": "Tình huống **xác nhận ngắn**: **một câu** — hỏi tiếp hoặc gợi ý bước kế trên app.",
+        "maxTokens": 140,
+        "temperature": 0.55
+      }
+    },
+    {
+      "id": "topic_bmi",
+      "label": "BMI / cân nặng",
+      "weight": 62,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": ["bmi", "chi so dong khoi", "can nang", "giam can", "tang can", "kg", "kilogram", "so can"],
+        "none": [
+          "an kieng",
+          "an duoc khong",
+          "dinh duong",
+          "calo",
+          "protein",
+          "bua an",
+          "che do an",
+          "macro",
+          "tren app",
+          "huong dan app"
+        ]
+      },
+      "llm": {
+        "systemAddon": "Chủ đề **BMI/cân nặng**: 2–4 câu; nhắc mục BMI trên app; bệnh nền → bác sĩ.",
+        "maxTokens": 480,
+        "temperature": 0.58
+      }
+    },
+    {
+      "id": "topic_mood_sleep",
+      "label": "Cảm xúc / giấc ngủ / stress",
+      "weight": 60,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": [
+          "buon chan",
+          "tram cam",
+          "stress",
+          "cang thang",
+          "lo lang",
+          "met moi",
+          "kho ngu",
+          "mat ngu",
+          "tri hoan",
+          "giac ngu"
+        ],
+        "none": ["buon an", "them an"]
+      },
+      "llm": {
+        "systemAddon": "Chủ đề **cảm xúc/giấc ngủ/stress**: 2–4 câu đồng cảm; nhật ký cảm xúc; kéo dài/tự hại → 115.",
+        "maxTokens": 520,
+        "temperature": 0.58
+      }
+    },
+    {
+      "id": "topic_nutrition",
+      "label": "Dinh dưỡng",
+      "weight": 58,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": [
+          "dinh duong",
+          "calo",
+          "protein",
+          "chat xo",
+          "an kieng",
+          "bua an",
+          "che do an",
+          "macro",
+          "diet",
+          "an gi"
+        ]
+      },
+      "llm": {
+        "systemAddon": "Chủ đề **dinh dưỡng**: 2–4 câu; gợi ý **Kế hoạch** trên Tezca; không liều thuốc cụ thể.",
+        "maxTokens": 520,
+        "temperature": 0.58
+      }
+    },
+    {
+      "id": "topic_exercise",
+      "label": "Vận động / tập luyện",
+      "weight": 56,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": ["tap gym", "chay bo", "cardio", "hit", "the duc", "van dong", "tap luyen", "bai tap"]
+      },
+      "llm": {
+        "systemAddon": "Chủ đề **vận động**: 2–4 câu; tăng dần; đau/khó thở → dừng, gặp bác sĩ.",
+        "maxTokens": 480,
+        "temperature": 0.58
+      }
+    },
+    {
+      "id": "topic_clinical",
+      "label": "Khám / thuốc / chuyên gia",
+      "weight": 54,
+      "mode": "llm",
+      "match": {
+        "type": "keywords",
+        "any": [
+          "chuyen gia",
+          "bac si",
+          "bac sy",
+          "tu van y te",
+          "kham benh",
+          "don thuoc",
+          "thuoc gi",
+          "chan doan",
+          "xet nghiem"
+        ]
+      },
+      "llm": {
+        "systemAddon": "Chủ đề **khám/thuốc**: 1–3 câu — thông tin chung; khuyên khám/chat chuyên gia; không chẩn đoán.",
+        "maxTokens": 400,
+        "temperature": 0.56
+      }
+    },
+    {
+      "id": "follow_up_short",
+      "label": "Tin nhắn rất ngắn",
+      "weight": 30,
+      "mode": "llm",
+      "match": {
+        "type": "short",
+        "maxChars": 18,
+        "none": [
+          "dau nguc",
+          "kho tho",
+          "tu sat",
+          "chet",
+          "115",
+          "cap cuu",
+          "kham",
+          "thuoc",
+          "bmi",
+          "an ",
+          "tap ",
+          "ngu ",
+          "stress"
+        ],
+        "noneIfAny": ["chi tiet", "ke hoach", "danh sach"]
+      },
+      "llm": {
+        "systemAddon": "Tình huống **tin nhắn rất ngắn**: **1–2 câu** — làm rõ ý hoặc một câu hỏi gợi ý.",
+        "maxTokens": 200,
+        "temperature": 0.56
+      }
+    },
+    {
+      "id": "general",
+      "label": "Mặc định (không khớp rule nào)",
+      "weight": 0,
+      "mode": "llm",
+      "match": { "type": "fallback" },
+      "llm": {
+        "systemAddon": "Tình huống **chung**: 1–3 câu; thiếu ngữ cảnh thì hỏi thêm **một** câu (vấn đề + mục tiêu 1–2 tuần).",
+        "maxTokens": 560,
+        "temperature": 0.58
+      }
+    }
+  ]
+}

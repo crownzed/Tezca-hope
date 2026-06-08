@@ -1,0 +1,131 @@
+@startuml Tezca_System_Architecture
+top to bottom direction
+
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 90
+skinparam ranksep 90
+skinparam padding 14
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam roundcorner 8
+skinparam defaultFontSize 13
+skinparam titleFontSize 18
+skinparam packageFontSize 14
+skinparam componentFontSize 12
+skinparam actorFontSize 13
+skinparam databaseFontSize 12
+skinparam arrowFontSize 11
+
+skinparam package {
+  BackgroundColor #F8F9FA
+  BorderColor #90A4AE
+  TitleFontColor #263238
+  TitleFontStyle bold
+}
+
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #455A64
+  FontColor #263238
+}
+
+skinparam database {
+  BackgroundColor #ECEFF1
+  BorderColor #546E7A
+}
+
+title Sơ đồ Kiến trúc Hệ thống — Tezca Health
+
+' ===== Tác nhân =====
+actor "Chuyên gia\n(Web Portal)" as Expert
+actor "Khách hàng\n(Mobile / Web)" as Patient
+actor "Quản trị viên\n(Admin)" as Admin
+
+Expert -[hidden]right- Patient
+Patient -[hidden]right- Admin
+
+' ===== Client & Proxy =====
+package "① Tầng Client" {
+  component [React SPA (Vite)\nGiao diện người dùng] as Client
+}
+
+package "② Tầng Proxy" {
+  component [Reverse Proxy\nNginx · Apache · IIS] as Proxy
+}
+
+Client -[hidden]down- Proxy
+
+' ===== API + Ngoại vi (cùng khối ngang) =====
+package "③ Tầng API (Node.js + Express · cổng 3001)" {
+
+  component [REST API\n/api/*] as RestApi
+  component [WebSocket\n/ws] as WebSocket
+
+  component [Auth Service\nĐăng nhập · JWT] as Auth
+  component [Training Plan\nLộ trình · bài tập] as Training
+  component [Health Tracking\nBMI · Mood] as Health
+  component [Community Service\nDiễn đàn · Post/Comment] as Community
+  component [Admin Management\nQuản trị hệ thống] as AdminSvc
+  component [Live Chat\nChat realtime] as Chat
+
+  RestApi -[hidden]right- WebSocket
+  RestApi -[hidden]down- Auth
+  Auth -[hidden]right- Training
+  Training -[hidden]right- Health
+  Health -[hidden]right- Community
+  Community -[hidden]right- AdminSvc
+  WebSocket -[hidden]down- Chat
+}
+
+package "⑤ Dịch vụ ngoại vi" {
+  component [Resend\nEmail khôi phục MK] as Resend
+  component [Google Gemini\nLLM · lộ trình · AI chat] as Gemini
+  Resend -[hidden]down- Gemini
+}
+
+' Căn cột: Auth ↔ Resend, Training ↔ Gemini
+Auth -[hidden]right- Resend
+Training -[hidden]right- Gemini
+
+Proxy -[hidden]down- RestApi
+
+' ===== Dữ liệu =====
+package "④ Tầng Dữ liệu" {
+  database [SQLite\ntezca.sqlite] as DB
+}
+
+AdminSvc -[hidden]down- DB
+
+' ===== Luồng người dùng =====
+Expert -down-> Client : HTTPS
+Patient -down-> Client : HTTPS
+Admin -down-> Client : HTTPS
+
+Client -down-> Proxy : HTTPS / WSS
+
+Proxy -down-> RestApi : Proxy HTTP
+Proxy -down-> WebSocket : Proxy WSS
+
+' ===== Phân luồng API =====
+RestApi -down-> Auth
+RestApi -down-> Training
+RestApi -down-> Health
+RestApi -down-> Community
+RestApi -down-> AdminSvc
+
+WebSocket -down-> Chat
+
+' ===== Ngoại vi (ngang, không cắt luồng dọc) =====
+Auth -right-> Resend : email reset
+Training -right-> Gemini : sinh lộ trình
+
+' ===== Truy cập dữ liệu =====
+Auth -down-> DB
+Training -down-> DB
+Health -down-> DB
+Community -down-> DB
+AdminSvc -down-> DB
+Chat -down-> DB
+
+@enduml

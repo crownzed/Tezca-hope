@@ -1,0 +1,114 @@
+@startuml Tezca_Business_Flows
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam linetype ortho
+skinparam defaultFontName "Segoe UI", Arial, sans-serif
+skinparam defaultFontSize 12
+skinparam titleFontSize 16
+skinparam activity {
+  BackgroundColor #FEFECE
+  BorderColor #A80036
+  FontColor #263238
+}
+skinparam activityDiamond {
+  BackgroundColor #FFF9C4
+  BorderColor #F9A825
+}
+skinparam activityStart {
+  BackgroundColor #43A047
+  BorderColor #2E7D32
+}
+skinparam activityEnd {
+  BackgroundColor #FFFFFF
+  BorderColor #263238
+}
+skinparam partition {
+  BackgroundColor #F4F7FB
+  BorderColor #042e5a
+  FontColor #042e5a
+  FontStyle bold
+}
+skinparam arrow {
+  Color #A80036
+}
+
+title Luồng nghiệp vụ hệ thống Tezca Health
+
+' ============================================================
+partition "1. Quản lý & Vận hành (Admin)" {
+  start
+  :[Admin] Đăng nhập hệ thống\nAuth Service · JWT;
+
+  fork
+    :[Admin] Cấp quyền chuyên gia\nXác thực · Tạo TK · Gán role expert\nusers · audit_logs;
+  fork again
+    :[Admin] Kiểm duyệt cộng đồng\nDashboard rà soát bài báo cáo\nposts · comments;
+    if (Xác nhận vi phạm?) then (Có)
+      :[Admin] Delete bản ghi vi phạm\nposts / comments;
+      :[Hệ thống] Ghi lý do kiểm duyệt\naudit_logs · meta;
+    else (Không)
+      :[Admin] Giữ nguyên nội dung;
+    endif
+  end fork
+
+  :[Admin] Kết thúc phiên quản trị;
+  stop
+}
+
+' ============================================================
+partition "2. Chuyên môn (Chuyên gia & Khách hàng)" {
+  start
+  :[Khách hàng] Tra cứu danh sách chuyên gia\nXem thông tin chuyên ngành;
+  :[Khách hàng] Chọn chuyên gia đồng hành\nassignments;
+
+  :[Chuyên gia] Truy cập Doctor Desk;
+  :[Chuyên gia] Xem hồ sơ · BMI · mood\nbmi_entries · mood_entries;
+  :[Chuyên gia] Điều chỉnh kế hoạch · Ghi chú chuyên môn\ntraining_plans · expert_note;
+  :[Chuyên gia] Phê duyệt giáo án\nstatus = APPROVED;
+
+  :[Khách hàng] Nhận lộ trình cá nhân hóa;
+
+  fork
+    :[Chuyên gia] Tư vấn trực tiếp\nRealtimeChatService;
+  fork again
+    :[Khách hàng] Trao đổi realtime\nlive_messages · /ws;
+  end fork
+
+  stop
+}
+
+' ============================================================
+partition "3. Cộng đồng & Tương tác" {
+  start
+  :[User] Truy cập Diễn đàn cộng đồng;
+
+  fork
+    :[User] Đăng bài / Bình luận\nChia sẻ kinh nghiệm sức khỏe\nposts · comments;
+  fork again
+    :[User] Chat nhóm chủ đề\nDinh dưỡng · Tâm lý · Cơ xương khớp\ncommunity rooms;
+  end fork
+
+  :[User] Hỗ trợ lẫn nhau\ntrong quá trình cải thiện sức khỏe;
+  stop
+}
+
+' ============================================================
+partition "4. Trí tuệ nhân tạo (AI)" {
+  start
+  :[Khách hàng] Hỏi đáp sức khỏe qua Chatbot AI;
+
+  :[Hệ thống] Gửi prompt tới Gemini API;
+  :[Hệ thống] Phản hồi streaming;
+  :[Hệ thống] Lưu lịch sử hội thoại\nbot_messages;
+
+  :[Khách hàng] Cập nhật thông số cơ thể\nBMI · bệnh lý · mood;
+
+  :[Hệ thống] Sinh lộ trình động\nTổng hợp dữ liệu → Gemini → JSON;
+  :[Hệ thống] Lưu lộ trình Pending\ntraining_plans · exercises_json;
+  :[Hệ thống] Cập nhật tiến độ hàng ngày\ndaily_progress_json;
+
+  :[Khách hàng] Theo dõi chỉ số & tiến độ cá nhân;
+  stop
+}
+
+@enduml

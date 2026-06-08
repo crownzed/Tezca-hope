@@ -1,0 +1,43 @@
+{
+  "fileVersion": 1,
+  "recordType": "mood_import_batch",
+  "label": "Lô mood #6",
+  "generatedAt": "2026-05-24T12:13:13.991Z",
+  "tags": [
+    "data-management-demo",
+    "mood_import_batch"
+  ],
+  "payload": {
+    "rows": [
+      {
+        "date": "2026-05-18",
+        "moodLabel": "Vui",
+        "moodScore": 4,
+        "note": "Ghi chú import batch demo.",
+        "customerEmail": "kh-demo-007@tezca.vn"
+      },
+      {
+        "date": "2026-05-17",
+        "moodLabel": "Bình thường",
+        "moodScore": 5,
+        "note": "",
+        "customerEmail": "kh-demo-008@tezca.vn"
+      },
+      {
+        "date": "2026-05-16",
+        "moodLabel": "Mệt nhẹ",
+        "moodScore": 2,
+        "note": "",
+        "customerEmail": "kh-demo-009@tezca.vn"
+      },
+      {
+        "date": "2026-05-15",
+        "moodLabel": "Căng thẳng",
+        "moodScore": 3,
+        "note": "",
+        "customerEmail": "kh-demo-010@tezca.vn"
+      }
+    ],
+    "importMode": "upsert_by_customer_date"
+  }
+}

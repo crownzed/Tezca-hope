@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-011@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.933Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-011@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "1bb9e4b5-b055-4f3b-9c56-6a54196dbbff",
+      "email": "kh-demo-011@tezca.vn",
+      "name": "Bùi Văn Long",
+      "role": "user",
+      "createdAt": 1779624233717
+    },
+    "assignments": [
+      {
+        "expertId": "1e98a95e-4cc0-4952-be56-2ce75d52863d",
+        "expertEmail": "cg-demo-03@tezca.vn",
+        "expertName": "BS. Quang Huy"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "e16b70b3-661d-4e13-bf7d-3af21204a47e",
+        "userId": "1bb9e4b5-b055-4f3b-9c56-6a54196dbbff",
+        "date": "2026-05-24",
+        "heightCm": 166,
+        "weightKg": 59,
+        "bmi": 21.4
+      }
+    ],
+    "moods": [
+      {
+        "id": "75e5d352-080b-4a79-8b66-db2ead2e9766",
+        "userId": "1bb9e4b5-b055-4f3b-9c56-6a54196dbbff",
+        "date": "2026-05-24",
+        "moodLabel": "Bình thường",
+        "moodScore": 5,
+        "note": ""
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "1bb9e4b5-b055-4f3b-9c56-6a54196dbbff",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Bùi Văn Long\nChuyên gia phụ trách: BS. Quang Huy\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900110,
+          "title": "Nâng gối",
+          "sets": 3,
+          "reps": "10",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900111,
+          "title": "Plank",
+          "sets": 3,
+          "reps": "45 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900112,
+          "title": "Squat tại chỗ",
+          "sets": 3,
+          "reps": "12",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515372,
+      "updatedAt": 1779624515372,
+      "progressUpdatedAt": 0,
+      "updatedBy": "1e98a95e-4cc0-4952-be56-2ce75d52863d"
+    }
+  }
+}

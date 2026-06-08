@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-009@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.930Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-009@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "b2611f70-b25e-4626-8510-86c1aa7954d3",
+      "email": "kh-demo-009@tezca.vn",
+      "name": "Võ Văn Lan",
+      "role": "user",
+      "createdAt": 1779624233716
+    },
+    "assignments": [
+      {
+        "expertId": "f01632b9-e1a0-4e6c-a4f8-ce83cc10f227",
+        "expertEmail": "expert@tezca.vn",
+        "expertName": "BS. Minh Anh"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "d21a8668-6d4c-4077-8af6-50ec182c9e75",
+        "userId": "b2611f70-b25e-4626-8510-86c1aa7954d3",
+        "date": "2026-05-24",
+        "heightCm": 164,
+        "weightKg": 57,
+        "bmi": 21.2
+      }
+    ],
+    "moods": [
+      {
+        "id": "dee20935-c8ae-4083-936a-cc5d48ff43b3",
+        "userId": "b2611f70-b25e-4626-8510-86c1aa7954d3",
+        "date": "2026-05-24",
+        "moodLabel": "Căng thẳng",
+        "moodScore": 3,
+        "note": ""
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "b2611f70-b25e-4626-8510-86c1aa7954d3",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Võ Văn Lan\nChuyên gia phụ trách: BS. Minh Anh\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900090,
+          "title": "Thở 4-7-8",
+          "sets": 2,
+          "reps": "4 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900091,
+          "title": "Giãn cơ vai",
+          "sets": 2,
+          "reps": "30 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900092,
+          "title": "Nâng gối",
+          "sets": 3,
+          "reps": "10",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515370,
+      "updatedAt": 1779624515370,
+      "progressUpdatedAt": 0,
+      "updatedBy": "f01632b9-e1a0-4e6c-a4f8-ce83cc10f227"
+    }
+  }
+}

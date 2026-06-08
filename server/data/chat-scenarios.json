@@ -1,0 +1,15 @@
+{
+  "$schema": "./chat-scenarios.schema.json",
+  "version": 2,
+  "bundleFile": "chat-scenarios.bundle.json",
+  "description": "Manifest — dữ liệu 500+ tình huống trong bundle. Build: npm run chat:scenarios:build",
+  "defaults": {
+    "maxTokens": 560,
+    "temperature": 0.58
+  },
+  "emptyMessage": {
+    "intent": "general",
+    "mode": "instant",
+    "reply": "Gửi giúp một câu hỏi ngắn — ví dụ ngủ, BMI, hoặc ăn uống."
+  }
+}

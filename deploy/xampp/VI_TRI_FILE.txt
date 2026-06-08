@@ -1,0 +1,29 @@
+Tezca + XAMPP — file cấu hình ở đâu?
+
+1) FILE TRONG DỰ ÁN (sau khi clone/tải source)
+   deploy\xampp\httpd-tezca.conf
+
+   Đường dẫn đầy đủ tùy chỗ bạn đặt project, ví dụ:
+   C:\Users\Admin\Downloads\Tezca Landing Page Design\deploy\xampp\httpd-tezca.conf
+
+   File NÀY không tự có trong C:\xampp — đó là bình thường.
+
+2) CÁCH ĐƯA VÀO XAMPP
+
+   Cách A — tự copy vào Apache:
+   npm run xampp:install-apache
+
+   (Nếu XAMPP không ở C:\xampp, đặt biến môi trường XAMPP_APACHE_EXTRA trỏ tới
+   thư mục conf\extra của Apache.)
+
+   Cách B — copy tay:
+   Copy file httpd-tezca.conf vào:
+   C:\xampp\apache\conf\extra\httpd-tezca.conf
+
+3) KẾT NỐI VỚI APACHE
+
+   Trong C:\xampp\apache\conf\httpd.conf thêm (nếu chưa có):
+   Include conf/extra/httpd-tezca.conf
+
+   Và bật các dòng LoadModule cho proxy, proxy_http, proxy_wstunnel
+   (xem ghi chú đầu file httpd-tezca.conf).
