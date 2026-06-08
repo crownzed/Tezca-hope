@@ -200,20 +200,20 @@ userRouter.post('/me/live-messages', requireUser, (req, res) => {
   res.status(201).json({ message: msg });
 });
 
-const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca — trò chuyện trực tiếp bằng tiếng Việt (Việt Nam).
+const CHAT_SYSTEM = `Bạn là trợ lý sức khỏe Tezca - trò chuyện trực tiếp bằng tiếng Việt (Việt Nam).
 
 Độ dài (ưu tiên cao):
-- Mặc định **1–3 câu ngắn**; chỉ mở rộng khi người dùng xin chi tiết, danh sách, hoặc kế hoạch từng bước.
+- Mặc định **1-3 câu ngắn**; chỉ mở rộng khi người dùng xin chi tiết, danh sách, hoặc kế hoạch từng bước.
 - Chào / cảm ơn / xác nhận đơn giản → **một câu** là đủ.
-- Không lặp lại câu hỏi; không mở đầu dài ("Cảm ơn bạn đã hỏi…").
+- Không lặp lại câu hỏi; không mở đầu dài ("Cảm ơn bạn đã hỏi...").
 
 Cách viết:
 - Giọng ấm, đồng cảm; nối ý tự nhiên như chat.
 - Không bullet/đánh số trừ khi được yêu cầu.
 - Tránh mở đầu lặp ("Chào bạn") nếu vừa chào trong hội thoại.
-- Disclaimer "tham khảo, không thay khám" chỉ khi khuyên sức khỏe cụ thể — tối đa một cụm ngắn cuối, không lặp mỗi lượt.
+- Disclaimer "tham khảo, không thay khám" chỉ khi khuyên sức khỏe cụ thể - tối đa một cụm ngắn cuối, không lặp mỗi lượt.
 
-Phạm vi: dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress — giáo dục, không chẩn đoán/kê đơn.
+Phạm vi: dinh dưỡng, vận động an toàn, BMI/lối sống, giấc ngủ, stress - giáo dục, không chẩn đoán/kê đơn.
 Khẩn cấp / tự hại / đau ngực khó thở / co giật / yếu nửa người → gọi 115 hoặc cấp cứu ngay (ngắn, rõ).`;
 
 function trimChatMessages(messages) {
@@ -306,7 +306,7 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
     });
     return;
   }
-  const { age, goal, activity, dietNote } = req.body || {};
+  const { age, goal, activity, dietNote, weightKg, heightCm, sessionsPerWeek, equipment, focusArea } = req.body || {};
   const a = Number(age);
   if (!a || a < 14 || a > 100) {
     res.status(400).json({ error: 'Tuổi không hợp lệ (14–100)' });
@@ -315,6 +315,11 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
   const g = ['lose', 'maintain', 'gain'].includes(goal) ? goal : 'maintain';
   const act = ['low', 'medium', 'high'].includes(activity) ? activity : 'medium';
   const note = typeof dietNote === 'string' ? dietNote.trim().slice(0, 2000) : '';
+  const weight = Number(weightKg) || null;
+  const height = Number(heightCm) || null;
+  const sessions = Math.min(Math.max(Number(sessionsPerWeek) || 3, 1), 7);
+  const equip = ['gym', 'home', 'both'].includes(equipment) ? equipment : 'both';
+  const focus = typeof focusArea === 'string' ? focusArea.trim().slice(0, 200) : '';
 
   const goalVi =
     g === 'lose' ? 'giảm cân bền vững' : g === 'gain' ? 'tăng cân / tăng khối lượng nạc' : 'duy trì cân nặng';
@@ -324,27 +329,45 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
       : act === 'medium'
         ? 'trung bình'
         : 'cao (tập thường xuyên)';
+  const equipVi = equip === 'gym' ? 'phòng gym' : equip === 'home' ? 'tập tại nhà (không tạ máy)' : 'gym + tại nhà';
 
-  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động cho **7 ngày đầu** (tiếng Việt, Markdown có tiêu đề ## / ###).
-Đầu vào cố định:
+  // Tính BMI nếu có đủ data
+  let bmiInfo = '';
+  if (weight && height && height > 0) {
+    const bmi = (weight / ((height / 100) ** 2)).toFixed(1);
+    bmiInfo = `\n- Cân nặng: ${weight} kg | Chiều cao: ${height} cm | BMI: ${bmi}`;
+  } else if (weight) {
+    bmiInfo = `\n- Cân nặng: ${weight} kg`;
+  }
+
+  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động chi tiết cho **7 ngày** (tiếng Việt, Markdown có tiêu đề ## / ###).
+
+Đầu vào:
 - Tuổi: ${a}
 - Mục tiêu: ${goalVi}
-- Mức vận động hiện tại: ${actVi}
-${note ? `- Ghi chú người dùng (ưu tiên nếu không mâu thuẫn an toàn): ${note}` : ''}
+- Mức vận động hiện tại: ${actVi}${bmiInfo}
+- Số buổi tập mong muốn/tuần: ${sessions}
+- Thiết bị: ${equipVi}
+${focus ? `- Vùng cơ thể tập trung: ${focus}` : ''}
+${note ? `- Ghi chú (ưu tiên nếu không mâu thuẫn an toàn): ${note}` : ''}
 
 Yêu cầu nội dung:
-1) **Tóm tắt** 2–3 câu (định hướng tuần đầu, không hứa kết quả cụ thể).
-2) **Dinh dưỡng:** nguyên tắc calo/macro phù hợp mục tiêu; ví dụ khẩu phần **bữa sáng/trưa/tối** linh hoạt; nhắc nước/chất xơ/protein theo mục tiêu.
-3) **Vận động:** khởi động, buổi chính, phục hồi; tiến triển theo tuần; tránh gắng sức khi đau cấp.
-4) **Theo dõi:** cân, vòng eo (nếu giảm cân), giấc ngủ/cảm xúc — gợi ý tần suất đo.
-5) Luôn có đoạn **tuyên bố miễn trừ**: nội dung chỉ mang tính gợi ý lối sống, không thay thế khám và tư vấn trực tiếp; người có bệnh nền, phụ nữ có thai/cho con bú, vận động viên hoặc đang điều trị phải làm theo hướng dẫn của người hành nghề.
+1) **Tóm tắt** 2–3 câu (định hướng tuần, không hứa kết quả cụ thể).
+2) **Dinh dưỡng:** nguyên tắc calo/macro phù hợp mục tiêu & cân nặng; ví dụ khẩu phần **bữa sáng/trưa/tối** linh hoạt; protein target dựa trên cân nặng nếu có.
+3) **Vận động:** lịch ${sessions} buổi/tuần CHI TIẾT từng buổi (tên bài tập, số hiệp × số lần, thời gian nghỉ). Phân chia nhóm cơ hợp lý.${focus ? ` Ưu tiên vùng: ${focus}.` : ''} Thiết bị: ${equipVi}. Bao gồm khởi động + cool down.
+4) **Theo dõi:** cân, vòng eo (nếu giảm cân), giấc ngủ/cảm xúc.
+5) Cuối cùng có mục **### Vận động** với danh sách bullet các bài tập chính (để hệ thống trích xuất tự động).
+6) **Tuyên bố miễn trừ** ngắn gọn cuối.
 
-Không kê thuốc, không liều bổ sung cụ thể trừ khi chỉ là “thảo luận với bác sĩ”.`;
+Không kê thuốc, không liều bổ sung cụ thể trừ khi chỉ là "thảo luận với bác sĩ".`;
 
-  const PLAN_SYSTEM = `Bạn là chuyên gia dinh dưỡng & hoạt động thể chất — viết tiếng Việt tự nhiên, thực tế.
+  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) & chuyên gia dinh dưỡng thể thao — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
 Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
-Không chẩn đoán hay kê đơn; chỉ giáo dục sức khỏe. Tôn trọng ghi chú y tế của người dùng.
-Markdown gọn: tiêu đề ##, đoạn ngắn, bullet khi cần danh sách; câu nối mạch lạc, không lặp ý; một disclaimer ngắn ở cuối.`;
+Khi có cân nặng/chiều cao, tính TDEE ước tính và đề xuất calo target cụ thể.
+Lịch tập CHI TIẾT: từng buổi ghi rõ bài tập, hiệp, lần lặp, thời gian nghỉ giữa hiệp.
+Chọn bài tập phù hợp thiết bị có sẵn. Phân chia nhóm cơ khoa học (push/pull/legs hoặc upper/lower).
+Không chẩn đoán hay kê đơn; chỉ giáo dục sức khỏe. Tôn trọng ghi chú y tế.
+Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập, câu nối mạch lạc.`;
 
   try {
     const plan = await aiChat(
@@ -352,7 +375,7 @@ Markdown gọn: tiêu đề ##, đoạn ngắn, bullet khi cần danh sách; câ
         { role: 'system', content: PLAN_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.65, max_tokens: 2500 },
+      { temperature: 0.6, max_tokens: 4000 },
     );
     res.json({ plan: polishAiText(plan) });
   } catch (e) {
@@ -428,7 +451,7 @@ userRouter.patch('/me/training-plan/progress', requireUser, (req, res) => {
         : null;
     const saved = syncTrainingPlanProgress(req.user.sub, date, progress, bootstrap);
     if (!saved) {
-      res.status(400).json({ error: 'Không lưu được tiến độ — cần ít nhất một bài tập' });
+      res.status(400).json({ error: 'Không lưu được tiến độ - cần ít nhất một bài tập' });
       return;
     }
     res.json({ plan: saved });

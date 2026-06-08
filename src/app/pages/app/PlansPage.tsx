@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { generatePersonalizedPlan, type PlanInput } from '../../lib/planGenerator';
 import { ROUTES } from '../../routes';
@@ -10,14 +10,30 @@ import { saveDashboardExercises } from '../../lib/dashboardStorage';
 import { adoptGuestDisciplineDataIntoAccount } from '../../lib/disciplineDataScope';
 import { simulateTextStream } from '../../lib/streamAiChat';
 import { FormAlert } from '../../components/tezca/FormAlert';
+import { loadBmiEntries } from '../../lib/healthStorage';
 
 export function PlansPage() {
   const { token, user } = useCustomerAuth();
   const navigate = useNavigate();
   const [age, setAge] = useState('28');
+  const [weightKg, setWeightKg] = useState('');
+  const [heightCm, setHeightCm] = useState('');
   const [goal, setGoal] = useState<PlanInput['goal']>('maintain');
   const [activity, setActivity] = useState<PlanInput['activity']>('medium');
+  const [sessionsPerWeek, setSessionsPerWeek] = useState('3');
+  const [equipment, setEquipment] = useState<'gym' | 'home' | 'both'>('both');
+  const [focusArea, setFocusArea] = useState('');
   const [dietNote, setDietNote] = useState('');
+
+  // Tự động load BMI data gần nhất
+  useEffect(() => {
+    const entries = loadBmiEntries();
+    if (entries.length > 0) {
+      const latest = entries[entries.length - 1];
+      if (!weightKg) setWeightKg(String(latest.weightKg));
+      if (!heightCm) setHeightCm(String(latest.heightCm));
+    }
+  }, []);
   const [plan, setPlan] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [planSource, setPlanSource] = useState<'ai' | 'local' | null>(null);
@@ -44,6 +60,19 @@ export function PlansPage() {
       dietNote: dietNote.trim(),
     };
 
+    // Data mở rộng gửi cho AI
+    const extendedData = {
+      age: a,
+      goal,
+      activity,
+      dietNote: dietNote.trim(),
+      weightKg: weightKg ? parseFloat(weightKg) : undefined,
+      heightCm: heightCm ? parseFloat(heightCm) : undefined,
+      sessionsPerWeek: parseInt(sessionsPerWeek, 10) || 3,
+      equipment,
+      focusArea: focusArea.trim() || undefined,
+    };
+
     if (token) {
       setPending(true);
       setPlan(null);
@@ -52,12 +81,7 @@ export function PlansPage() {
         const r = await apiFetch<{ plan: string }>('/api/me/plan-ai', {
           method: 'POST',
           token,
-          body: JSON.stringify({
-            age: input.age,
-            goal: input.goal,
-            activity: input.activity,
-            dietNote: input.dietNote,
-          }),
+          body: JSON.stringify(extendedData),
         });
         setPlanSource('ai');
         setPlan('');
@@ -142,6 +166,35 @@ export function PlansPage() {
           />
         </label>
 
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Cân nặng (kg)
+            <input
+              type="number"
+              min={30}
+              max={300}
+              value={weightKg}
+              onChange={(e) => setWeightKg(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+              placeholder="Ví dụ: 65"
+            />
+          </label>
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Chiều cao (cm)
+            <input
+              type="number"
+              min={100}
+              max={250}
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+              placeholder="Ví dụ: 170"
+            />
+          </label>
+        </div>
+
         <div>
           <p className="text-sm font-medium mb-2" style={{ color: '#1A202C' }}>
             Mục tiêu
@@ -186,6 +239,48 @@ export function PlansPage() {
             <option value="high">Cao (tập thường xuyên)</option>
           </select>
         </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Số buổi tập/tuần
+            <select
+              value={sessionsPerWeek}
+              onChange={(e) => setSessionsPerWeek(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            >
+              <option value="2">2 buổi</option>
+              <option value="3">3 buổi</option>
+              <option value="4">4 buổi</option>
+              <option value="5">5 buổi</option>
+              <option value="6">6 buổi</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Thiết bị
+            <select
+              value={equipment}
+              onChange={(e) => setEquipment(e.target.value as 'gym' | 'home' | 'both')}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            >
+              <option value="gym">Phòng gym</option>
+              <option value="home">Tập tại nhà</option>
+              <option value="both">Cả hai</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+          Vùng cơ thể muốn tập trung (tuỳ chọn)
+          <input
+            value={focusArea}
+            onChange={(e) => setFocusArea(e.target.value)}
+            className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            placeholder="Ví dụ: bụng, chân, vai, toàn thân…"
+          />
+        </label>
 
         <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
           Ghi chú ăn uống / dị ứng / chế độ đặc biệt
