@@ -5,6 +5,9 @@
   "functions": {
     "api/**/*.js": { "maxDuration": 30, "includeFiles": "server/**" }
   },
+  "crons": [
+    { "path": "/api?path=health", "schedule": "*/5 * * * *" }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api?path=:path*" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
