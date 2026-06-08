@@ -78,14 +78,47 @@ export function PlansPage() {
       setPlan(null);
       setPlanSource(null);
       try {
-        const r = await apiFetch<{ plan: string }>('/api/me/plan-ai', {
+        // Streaming SSE — hiển thị dần text
+        const res = await fetch('/api/me/plan-ai/stream', {
           method: 'POST',
-          token,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
           body: JSON.stringify(extendedData),
         });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         setPlanSource('ai');
         setPlan('');
-        await simulateTextStream(r.plan, (t) => setPlan(t), { minMs: 8, maxMs: 22 });
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let accumulated = '';
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value, { stream: true });
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const payload = line.slice(6);
+                if (payload === '[DONE]') break;
+                try {
+                  const parsed = JSON.parse(payload);
+                  if (parsed.text) {
+                    accumulated += parsed.text;
+                    setPlan(accumulated);
+                  }
+                  if (parsed.error) {
+                    throw new Error(parsed.error);
+                  }
+                } catch {}
+              }
+            }
+          }
+        }
         recordPlanGenerated();
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Lỗi không xác định';

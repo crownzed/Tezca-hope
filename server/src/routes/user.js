@@ -21,7 +21,7 @@ import {
 import { parseExercisesFromPlanMarkdown } from '../planToExercises.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
 import { authMiddleware } from '../auth.js';
-import { aiChat, isAiConfigured } from '../ai.js';
+import { aiChat, aiChatStream, isAiConfigured } from '../ai.js';
 import { polishAiText } from '../polishAiText.js';
 import { getLastUserMessage } from '../chatIntent.js';
 import { planChatTurn, runChatTurn, runChatTurnStream } from '../chatTurn.js';
@@ -381,6 +381,81 @@ Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập, câu 
   } catch (e) {
     const status = e?.status >= 400 && e?.status < 600 ? e.status : 502;
     res.status(status).json({ error: sanitizeClientError(e, 'Lỗi AI') });
+  }
+});
+
+/** Plan AI streaming — trả dần text thay vì đợi hết */
+userRouter.post('/me/plan-ai/stream', requireUser, aiPlanLimiter, async (req, res) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({ error: 'AI chưa được cấu hình.' });
+    return;
+  }
+  const { age, goal, activity, dietNote, weightKg, heightCm, sessionsPerWeek, equipment, focusArea } = req.body || {};
+  const a = Number(age);
+  if (!a || a < 14 || a > 100) {
+    res.status(400).json({ error: 'Tuổi không hợp lệ (14–100)' });
+    return;
+  }
+  const g = ['lose', 'maintain', 'gain'].includes(goal) ? goal : 'maintain';
+  const act = ['low', 'medium', 'high'].includes(activity) ? activity : 'medium';
+  const note = typeof dietNote === 'string' ? dietNote.trim().slice(0, 2000) : '';
+  const weight = Number(weightKg) || null;
+  const height = Number(heightCm) || null;
+  const sessions = Math.min(Math.max(Number(sessionsPerWeek) || 3, 1), 7);
+  const equip = ['gym', 'home', 'both'].includes(equipment) ? equipment : 'both';
+  const focus = typeof focusArea === 'string' ? focusArea.trim().slice(0, 200) : '';
+
+  const goalVi = g === 'lose' ? 'giảm cân bền vững' : g === 'gain' ? 'tăng cân / tăng khối lượng nạc' : 'duy trì cân nặng';
+  const actVi = act === 'low' ? 'ít vận động (văn phòng)' : act === 'medium' ? 'trung bình' : 'cao (tập thường xuyên)';
+  const equipVi = equip === 'gym' ? 'phòng gym' : equip === 'home' ? 'tập tại nhà (không tạ máy)' : 'gym + tại nhà';
+
+  let bmiInfo = '';
+  if (weight && height && height > 0) {
+    const bmi = (weight / ((height / 100) ** 2)).toFixed(1);
+    bmiInfo = `\n- Cân nặng: ${weight} kg | Chiều cao: ${height} cm | BMI: ${bmi}`;
+  } else if (weight) {
+    bmiInfo = `\n- Cân nặng: ${weight} kg`;
+  }
+
+  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động chi tiết cho **7 ngày** (tiếng Việt, Markdown có tiêu đề ## / ###).
+
+Đầu vào:
+- Tuổi: ${a}
+- Mục tiêu: ${goalVi}
+- Mức vận động hiện tại: ${actVi}${bmiInfo}
+- Số buổi tập mong muốn/tuần: ${sessions}
+- Thiết bị: ${equipVi}
+${focus ? `- Vùng cơ thể tập trung: ${focus}` : ''}
+${note ? `- Ghi chú: ${note}` : ''}
+
+Yêu cầu: kế hoạch cụ thể, áp dụng ngay, an toàn. Markdown gọn.`;
+
+  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân & chuyên gia dinh dưỡng thể thao — viết tiếng Việt tự nhiên, cụ thể.
+Nguyên tắc: an toàn > hiệu quả; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
+Markdown gọn: tiêu đề ##/###, bullet cho lịch tập.`;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  try {
+    const stream = aiChatStream(
+      [
+        { role: 'system', content: PLAN_SYSTEM },
+        { role: 'user', content: userPrompt },
+      ],
+      { temperature: 0.6, max_tokens: 4000 },
+    );
+    for await (const chunk of stream) {
+      res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (e) {
+    res.write(`data: ${JSON.stringify({ error: 'Lỗi AI' })}\n\n`);
+    res.end();
   }
 });
 

@@ -48,7 +48,7 @@ adminRouter.get('/experts', requireAdmin, (_req, res) => {
   res.json({ experts: listExpertsWithProfiles() });
 });
 
-adminRouter.post('/experts', requireAdmin, (req, res) => {
+adminRouter.post('/experts', requireAdmin, async (req, res) => {
   const email = String(req.body?.email || '').trim();
   const password = String(req.body?.password || '');
   const fullName = String(req.body?.fullName || req.body?.name || '').trim();
@@ -69,7 +69,7 @@ adminRouter.post('/experts', requireAdmin, (req, res) => {
   try {
     const result = createExpertAccount({
       email,
-      passwordHash: bcrypt.hashSync(password, 10),
+      passwordHash: await bcrypt.hash(password, 10),
       fullName,
       specialty,
     });
