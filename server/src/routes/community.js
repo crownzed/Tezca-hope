@@ -225,6 +225,38 @@ communityRouter.get('/posts/:postId/replies', requireMember, (req, res) => {
   res.json({ replies });
 });
 
+// Tìm kiếm nội dung bài viết (hỗ trợ hashtag dạng #tu_khoa)
+communityRouter.get('/search', requireMember, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const topic = req.query.topic && isValidPostTopic(String(req.query.topic))
+    ? String(req.query.topic)
+    : undefined;
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  if (!q) {
+    res.json({ posts: [], members: [], nextCursor: undefined });
+    return;
+  }
+  // Bỏ dấu # để tìm hashtag như từ khóa thường
+  const cleaned = q.startsWith('#') ? q.slice(1) : q;
+  const posts = communityService.searchPosts({
+    query: cleaned,
+    topic,
+    beforeTs,
+    limit,
+    viewerId: req.user.sub,
+  });
+  // Kèm thêm thành viên khớp (chỉ trang đầu)
+  const members = beforeTs
+    ? []
+    : communityExtendedService.searchMembers({ query: cleaned, excludeUserId: req.user.sub, limit: 8 });
+  const nextCursor =
+    posts.length === Math.min(Math.max(limit, 1), 50)
+      ? posts[posts.length - 1].createdAt
+      : undefined;
+  res.json({ posts, members, nextCursor });
+});
+
 communityRouter.post('/posts/:postId/reply', requireMember, communityPostLimiter, (req, res) => {
   const postId = String(req.params.postId);
   const content = String(req.body?.content || '').trim();

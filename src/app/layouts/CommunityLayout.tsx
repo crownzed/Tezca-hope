@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
-import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Users } from 'lucide-react';
+import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Search, Users } from 'lucide-react';
 import { ROUTES } from '../routes';
 import { apiFetch } from '../lib/api';
 import { useCommunityNotificationRealtime } from '../hooks/useCommunityRealtime';
@@ -14,6 +14,7 @@ const sectionNav = [
   { to: ROUTES.community.rooms, label: 'Phòng chat', icon: Users, end: true },
   { to: ROUTES.community.announcements, label: '#thong-bao', icon: Megaphone, end: true },
   { to: ROUTES.community.dm, label: 'Tin nhắn', icon: MessageCircle, end: true },
+  { to: ROUTES.community.search, label: 'Tìm kiếm', icon: Search, end: true },
   { to: ROUTES.community.bookmarks, label: 'Đã lưu', icon: Bookmark, end: true },
 ] as const;
 

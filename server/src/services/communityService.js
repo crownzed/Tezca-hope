@@ -191,6 +191,10 @@ export function listBookmarks(userId, opts) {
   return listCommunityBookmarks(userId, opts);
 }
 
+export function searchPosts(opts) {
+  return searchCommunityPosts(opts);
+}
+
 export function likePost(postId, userId) {
   const result = toggleCommunityPostLike(postId, userId);
   // Chỉ thông báo khi vừa like (không phải bỏ like)

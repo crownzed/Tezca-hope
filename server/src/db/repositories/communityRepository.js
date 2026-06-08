@@ -622,3 +622,32 @@ export function markCommunityNotificationsRead(userId, ids = null) {
   }
   return { ok: true };
 }
+
+// ===== Tìm kiếm nội dung bài viết / hashtag =====
+export function searchCommunityPosts({ query, topic, limit = 30, beforeTs, viewerId } = {}) {
+  const trimmed = String(query || '').trim();
+  if (!trimmed) return [];
+  let sql = `
+    SELECT p.*, u.name AS author_name, u.role AS author_role,
+      (SELECT COUNT(*) FROM community_post_likes l WHERE l.post_id = p.id) AS likes_count,
+      (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.status = 'published') AS comment_count,
+      EXISTS(SELECT 1 FROM community_post_likes l2 WHERE l2.post_id = p.id AND l2.user_id = ?) AS liked_by_me,
+      EXISTS(SELECT 1 FROM community_post_bookmarks b WHERE b.post_id = p.id AND b.user_id = ?) AS bookmarked_by_me
+    FROM community_posts p
+    JOIN users u ON u.id = p.user_id
+    WHERE p.status = 'published' AND p.parent_post_id IS NULL
+      AND p.content LIKE ? COLLATE NOCASE`;
+  const params = [viewerId || '', viewerId || '', `%${trimmed}%`];
+  if (topic) {
+    sql += ` AND p.topic = ?`;
+    params.push(topic);
+  }
+  if (beforeTs) {
+    sql += ` AND p.created_at < ?`;
+    params.push(beforeTs);
+  }
+  sql += ` ORDER BY p.created_at DESC LIMIT ?`;
+  params.push(Math.min(Math.max(limit, 1), 50));
+  const rows = getDb().prepare(sql).all(...params);
+  return rows.map((r) => mapCommunityPostRow(r, viewerId));
+}

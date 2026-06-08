@@ -108,6 +108,7 @@ export const ROUTES = {
     dm: '/cong-dong/tin-nhan',
     bookmarks: '/cong-dong/da-luu',
     notifications: '/cong-dong/thong-bao-cua-toi',
+    search: '/cong-dong/tim-kiem',
   },
 } as const;
 

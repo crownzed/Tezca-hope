@@ -46,6 +46,7 @@ const CommunityAnnouncementsPage = lazy(() => import('./pages/community/Communit
 const CommunityDmPage = lazy(() => import('./pages/community/CommunityDmPage').then(m => ({ default: m.CommunityDmPage })));
 const CommunitySavedPage = lazy(() => import('./pages/community/CommunitySavedPage').then(m => ({ default: m.CommunitySavedPage })));
 const CommunityNotificationsPage = lazy(() => import('./pages/community/CommunityNotificationsPage').then(m => ({ default: m.CommunityNotificationsPage })));
+const CommunitySearchPage = lazy(() => import('./pages/community/CommunitySearchPage').then(m => ({ default: m.CommunitySearchPage })));
 const ExpertCustomerListPage = lazy(() => import('./pages/expert/ExpertCustomerListPage').then(m => ({ default: m.ExpertCustomerListPage })));
 const ExpertCustomerWorkspacePage = lazy(() => import('./pages/expert/ExpertCustomerWorkspacePage').then(m => ({ default: m.ExpertCustomerWorkspacePage })));
 const DoctorDashboardPage = lazy(() => import('./pages/expert/DoctorDashboardPage').then(m => ({ default: m.DoctorDashboardPage })));
@@ -133,6 +134,7 @@ function AppRoutes() {
           <Route path="tin-nhan" element={<CommunityDmPage />} />
           <Route path="da-luu" element={<CommunitySavedPage />} />
           <Route path="thong-bao-cua-toi" element={<CommunityNotificationsPage />} />
+          <Route path="tim-kiem" element={<CommunitySearchPage />} />
         </Route>
       </Route>
 
