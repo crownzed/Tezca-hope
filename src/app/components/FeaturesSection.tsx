@@ -1,13 +1,10 @@
-import { Link } from 'react-router';
 import { MessageCircle, TrendingUp, Calendar, Heart, ArrowRight, Users } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ROUTES } from '../routes';
 import { LandingReveal } from './landing/LandingReveal';
 import { cardHover, landingEase, staggerContainer, staggerItem, viewportOnce } from '../lib/landingMotion';
 
 const features = [
   {
-    to: ROUTES.app.chat,
     col: 'md:col-span-7',
     icon: MessageCircle,
     title: 'AI Chatbot Tâm giao',
@@ -16,7 +13,6 @@ const features = [
     preview: 'chat' as const,
   },
   {
-    to: ROUTES.app.plans,
     col: 'md:col-span-5',
     icon: TrendingUp,
     title: 'Nutrition Tracker',
@@ -25,7 +21,6 @@ const features = [
     preview: 'nutrition' as const,
   },
   {
-    to: ROUTES.product.experts,
     col: 'md:col-span-5',
     icon: Calendar,
     title: 'Premium Care',
@@ -34,7 +29,6 @@ const features = [
     preview: 'care' as const,
   },
   {
-    to: ROUTES.app.mood,
     col: 'md:col-span-7',
     icon: Heart,
     title: 'Hành trình Sức khỏe Tinh thần',
@@ -43,7 +37,6 @@ const features = [
     preview: 'mood' as const,
   },
   {
-    to: ROUTES.app.community,
     col: 'md:col-span-12',
     icon: Users,
     title: 'Cộng đồng sức khỏe',
@@ -236,9 +229,8 @@ export function FeaturesSection() {
                   whileHover={reduce ? 'rest' : 'hover'}
                   className="h-full"
                 >
-                  <Link
-                    to={f.to}
-                    className="p-8 md:p-10 rounded-3xl relative overflow-hidden block no-underline h-full"
+                  <div
+                    className="p-8 md:p-10 rounded-3xl relative overflow-hidden block h-full"
                     style={
                       isGradient
                         ? {
@@ -296,7 +288,7 @@ export function FeaturesSection() {
                         </motion.span>
                       </span>
                     </div>
-                  </Link>
+                  </div>
                 </motion.div>
               </motion.div>
             );
