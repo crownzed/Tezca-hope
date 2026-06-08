@@ -11,6 +11,7 @@ import {
   type FoodLogItem,
 } from './dashboardStorage';
 import { syncTrainingProgressToServer } from './syncTrainingProgress';
+import { firebaseSyncDisciplineData, firebaseLoadDisciplineData } from './firebaseStorage';
 import type { TrainingPlanResponse, TrainingPlanStatus } from './trainingPlan';
 import {
   normalizeDailyProgressFromApi,
@@ -35,8 +36,13 @@ function storageKey(base: string, scopeId: string | null): string {
   return scopeId ? `${base}_${scopeId}` : `${base}_guest`;
 }
 
+function getStorageForScope(scopeId: string | null): Storage {
+  return scopeId ? localStorage : sessionStorage;
+}
+
 function hasStored(base: string, scopeId: string | null): boolean {
-  return localStorage.getItem(storageKey(base, scopeId)) != null;
+  const storage = getStorageForScope(scopeId);
+  return storage.getItem(storageKey(base, scopeId)) != null;
 }
 
 /**
@@ -132,6 +138,49 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
     setExpertTrainingNote('');
     setSyncState('idle');
   }, [scopeId]);
+
+  // Load dữ liệu từ Firebase khi user đăng nhập
+  useEffect(() => {
+    if (!scopeId) return;
+    let cancelled = false;
+    firebaseLoadDisciplineData(scopeId).then((fbData) => {
+      if (cancelled) return;
+      if (fbData.exercises && Array.isArray(fbData.exercises) && fbData.exercises.length > 0) {
+        setBaseExercises(fbData.exercises as DashboardExercise[]);
+        saveDashboardExercises(scopeId, fbData.exercises as DashboardExercise[]);
+      }
+      if (fbData.dailyProgress && typeof fbData.dailyProgress === 'object') {
+        const dp = fbData.dailyProgress as DailyProgressMap;
+        setDailyProgress((prev) => {
+          const merged = { ...prev, ...dp };
+          saveDailyProgressLocal(scopeId, merged);
+          return merged;
+        });
+      }
+      if (fbData.foodLog && Array.isArray(fbData.foodLog) && fbData.foodLog.length > 0) {
+        setFoodLog(fbData.foodLog as FoodLogItem[]);
+        saveFoodLog(scopeId, fbData.foodLog as FoodLogItem[]);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [scopeId]);
+
+  // Sync lên Firebase khi dữ liệu thay đổi (debounced)
+  const firebaseSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!scopeId) return;
+    if (firebaseSyncTimer.current) clearTimeout(firebaseSyncTimer.current);
+    firebaseSyncTimer.current = setTimeout(() => {
+      void firebaseSyncDisciplineData(scopeId, {
+        exercises: baseExercises,
+        dailyProgress,
+        foodLog,
+      });
+    }, 2000);
+    return () => {
+      if (firebaseSyncTimer.current) clearTimeout(firebaseSyncTimer.current);
+    };
+  }, [scopeId, baseExercises, dailyProgress, foodLog]);
 
   useEffect(() => {
     if (!canSync || !token) return;
