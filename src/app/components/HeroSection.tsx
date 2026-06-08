@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { MessageCircle } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { ROUTES } from '../routes';
+import { tezcaTheme } from '../lib/tezcaTheme';
 import { LandingAmbient } from './landing/LandingAmbient';
 import { landingEase, landingSpring, staggerContainer, staggerItem } from '../lib/landingMotion';
 
@@ -17,7 +18,7 @@ export function HeroSection() {
   const reduce = useReducedMotion();
 
   return (
-    <section id="hero" className="relative px-6 py-24 md:py-32 scroll-mt-24 overflow-hidden">
+    <section id="hero" className="relative px-4 sm:px-6 lg:px-8 py-16 lg:py-24 scroll-mt-24 overflow-hidden">
       <LandingAmbient />
       <div className="max-w-7xl mx-auto relative z-10">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -29,8 +30,8 @@ export function HeroSection() {
           >
             <motion.h1
               variants={staggerItem}
-              className="text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight"
-              style={{ color: '#1A202C' }}
+              className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight"
+              style={{ color: tezcaTheme.heading }}
             >
               Sức khỏe của bạn.
               <br />
@@ -41,8 +42,8 @@ export function HeroSection() {
 
             <motion.p
               variants={staggerItem}
-              className="text-xl md:text-2xl leading-relaxed"
-              style={{ color: 'rgba(26, 32, 44, 0.75)' }}
+              className="text-lg md:text-xl leading-relaxed"
+              style={{ color: tezcaTheme.textSecondary }}
             >
               Trợ lý AI thấu cảm kết hợp chuyên gia y tế. Theo dõi dinh dưỡng, sức khỏe tinh thần và nhận tư vấn 24/7.
             </motion.p>
@@ -51,8 +52,8 @@ export function HeroSection() {
               <motion.div whileHover={reduce ? undefined : { scale: 1.04 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
                 <Link
                   to={ROUTES.app.chat}
-                  className="px-8 py-4 rounded-full text-lg font-semibold flex items-center justify-center gap-3 shadow-lg shadow-teal-500/20"
-                  style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
+                  className="px-6 py-3 rounded-full text-lg font-semibold flex items-center justify-center gap-3 shadow-lg shadow-teal-500/20 transition-all"
+                  style={{ backgroundColor: tezcaTheme.primary, color: '#FFFFFF' }}
                 >
                   <MessageCircle size={24} />
                   Trò chuyện ẩn danh ngay
@@ -62,11 +63,11 @@ export function HeroSection() {
               <motion.div whileHover={reduce ? undefined : { scale: 1.02 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
                 <Link
                   to={ROUTES.auth.customerLogin}
-                  className="px-8 py-4 rounded-full text-lg font-medium inline-flex items-center justify-center"
+                  className="px-6 py-3 rounded-full text-lg font-semibold inline-flex items-center justify-center transition-all"
                   style={{
-                    backgroundColor: 'transparent',
-                    color: '#1A202C',
-                    border: '2px solid rgba(26, 32, 44, 0.1)',
+                    backgroundColor: tezcaTheme.surface,
+                    color: tezcaTheme.textSecondary,
+                    border: `1px solid ${tezcaTheme.border}`,
                   }}
                 >
                   Đăng nhập
@@ -79,7 +80,7 @@ export function HeroSection() {
                 <motion.div
                   key={value}
                   className="text-3xl font-bold"
-                  style={{ color: '#1A202C' }}
+                  style={{ color: tezcaTheme.heading }}
                   initial={reduce ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 + i * 0.08, duration: 0.45, ease: landingEase }}
