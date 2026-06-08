@@ -519,6 +519,31 @@ export function runMigrations(db) {
         `);
       },
     },
+    {
+      version: 21,
+      name: 'community_bookmarks_and_edited',
+      up: () => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS community_post_bookmarks (
+            post_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (post_id, user_id),
+            FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_community_bookmarks_user
+            ON community_post_bookmarks(user_id, created_at DESC);
+        `);
+        // Cột đánh dấu đã chỉnh sửa (NULL = chưa sửa)
+        if (!tableHasColumn(db, 'community_posts', 'edited_at')) {
+          db.exec(`ALTER TABLE community_posts ADD COLUMN edited_at INTEGER`);
+        }
+        if (!tableHasColumn(db, 'community_comments', 'edited_at')) {
+          db.exec(`ALTER TABLE community_comments ADD COLUMN edited_at INTEGER`);
+        }
+      },
+    },
   ];
 
   for (const m of migrations) {

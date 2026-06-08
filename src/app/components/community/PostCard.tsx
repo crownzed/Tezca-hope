@@ -1,4 +1,5 @@
-import { Heart, MessageCircle, Flag, Send, Share2, MoreHorizontal, UserPlus, UserCheck } from 'lucide-react';
+import { Heart, MessageCircle, Flag, Send, Share2, MoreHorizontal, UserPlus, UserCheck, Bookmark, Pencil, Trash2, X, Check } from 'lucide-react';
+import { useState } from 'react';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 import { postTopicLabel, roleBadgeLabel, type CommunityPostTopic } from '../../lib/communityTopics';
 
@@ -12,18 +13,22 @@ export type ForumPost = {
   imageUrl?: string;
   likesCount: number;
   likedByMe: boolean;
+  bookmarkedByMe?: boolean;
   commentCount: number;
   threadReplyCount?: number;
   parentPostId?: string | null;
   createdAt: number;
+  editedAt?: number | null;
 };
 
 export type ForumComment = {
   id: string;
+  userId?: string;
   authorName: string;
   authorRole: string;
   content: string;
   createdAt: number;
+  editedAt?: number | null;
 };
 
 function formatTime(ts: number) {
@@ -57,6 +62,11 @@ type PostCardProps = {
   onToggleLike: (postId: string) => void;
   onToggleComments: (postId: string) => void;
   onReport: (postId: string) => void;
+  onToggleBookmark?: (postId: string) => void;
+  onEditPost?: (postId: string, content: string) => Promise<void> | void;
+  onDeletePost?: (postId: string) => void;
+  onEditComment?: (commentId: string, content: string) => Promise<void> | void;
+  onDeleteComment?: (commentId: string) => void;
   onCommentDraftChange: (postId: string, value: string) => void;
   onThreadReplyDraftChange: (postId: string, value: string) => void;
   onSubmitComment: (postId: string) => void;
@@ -80,11 +90,44 @@ export function PostCard({
   onToggleLike,
   onToggleComments,
   onReport,
+  onToggleBookmark,
+  onEditPost,
+  onDeletePost,
+  onEditComment,
+  onDeleteComment,
   onCommentDraftChange,
   onThreadReplyDraftChange,
   onSubmitComment,
   onSubmitThreadReply,
 }: PostCardProps) {
+  const isOwner = Boolean(post.userId && post.userId === currentUserId);
+  const canModerate = isOwner; // admin check xử lý ở tầng trên qua API
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(post.content);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [commentEditDraft, setCommentEditDraft] = useState('');
+
+  const saveEdit = async () => {
+    const text = editDraft.trim();
+    if (!text || !onEditPost) return;
+    setEditBusy(true);
+    try {
+      await onEditPost(post.id, text);
+      setEditing(false);
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const saveCommentEdit = async (commentId: string) => {
+    const text = commentEditDraft.trim();
+    if (!text || !onEditComment) return;
+    await onEditComment(commentId, text);
+    setEditingCommentId(null);
+  };
+
   const sharePost = async () => {
     const url = `${window.location.origin}/cong-dong/dien-dan?post=${encodeURIComponent(post.id)}`;
     try {
@@ -112,7 +155,7 @@ export function PostCard({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative">
             {post.userId && post.userId !== currentUserId && onToggleFollowAuthor && (
               <button
                 type="button"
@@ -129,15 +172,82 @@ export function PostCard({
             )}
             <button
               type="button"
-              onClick={() => onReport(post.id)}
+              onClick={() => setMenuOpen((v) => !v)}
               className="inline-flex items-center justify-center border-0 bg-transparent cursor-pointer p-1 opacity-50 hover:opacity-100"
-              aria-label="Báo cáo bài viết"
+              aria-label="Tùy chọn bài viết"
             >
               <MoreHorizontal size={18} />
             </button>
+            {menuOpen && (
+              <div
+                className="absolute right-0 top-8 z-10 rounded-xl border shadow-lg py-1 min-w-[150px]"
+                style={{ backgroundColor: tezcaTheme.surface, borderColor: tezcaTheme.border }}
+                onMouseLeave={() => setMenuOpen(false)}
+              >
+                {canModerate && onEditPost && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditing(true); setEditDraft(post.content); setMenuOpen(false); }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm border-0 bg-transparent cursor-pointer hover:opacity-70"
+                  >
+                    <Pencil size={14} /> Sửa bài
+                  </button>
+                )}
+                {canModerate && onDeletePost && (
+                  <button
+                    type="button"
+                    onClick={() => { setMenuOpen(false); onDeletePost(post.id); }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm border-0 bg-transparent cursor-pointer text-red-600 hover:opacity-70"
+                  >
+                    <Trash2 size={14} /> Xóa bài
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); onReport(post.id); }}
+                  className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm border-0 bg-transparent cursor-pointer hover:opacity-70"
+                >
+                  <Flag size={14} /> Báo cáo
+                </button>
+              </div>
+            )}
           </div>
         </div>
-        <p className="m-0 text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+        {editing ? (
+          <div className="space-y-2">
+            <textarea
+              value={editDraft}
+              onChange={(e) => setEditDraft(e.target.value)}
+              rows={4}
+              className="w-full rounded-xl border px-3 py-2 text-sm resize-y"
+              style={{ borderColor: tezcaTheme.border }}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="inline-flex items-center gap-1 text-sm border rounded-xl px-3 py-1.5 cursor-pointer bg-transparent"
+                style={{ borderColor: tezcaTheme.border }}
+              >
+                <X size={14} /> Hủy
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={editBusy || !editDraft.trim()}
+                className="inline-flex items-center gap-1 text-sm rounded-xl px-3 py-1.5 cursor-pointer border-0 disabled:opacity-50"
+                style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
+              >
+                <Check size={14} /> {editBusy ? 'Đang lưu…' : 'Lưu'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="m-0 text-sm leading-relaxed whitespace-pre-wrap">
+            {post.content}
+            {post.editedAt ? <span className="opacity-40 text-xs"> (đã chỉnh sửa)</span> : null}
+          </p>
+        )}
       </div>
 
       {post.imageUrl?.trim() && (
@@ -175,14 +285,18 @@ export function PostCard({
           <Share2 size={18} />
           <span>Chia sẻ</span>
         </button>
-        <button
-          type="button"
-          onClick={() => onReport(post.id)}
-          className="inline-flex items-center gap-1.5 text-sm border-0 bg-transparent cursor-pointer p-0 opacity-50 ml-auto"
-        >
-          <Flag size={14} />
-          <span className="hidden sm:inline">Báo cáo</span>
-        </button>
+        {onToggleBookmark && (
+          <button
+            type="button"
+            onClick={() => onToggleBookmark(post.id)}
+            className="inline-flex items-center gap-1.5 text-sm border-0 bg-transparent cursor-pointer p-0 hover:opacity-100"
+            style={{ color: post.bookmarkedByMe ? tezcaTheme.accentDark : tezcaTheme.textMuted }}
+            aria-label={post.bookmarkedByMe ? 'Đã lưu' : 'Lưu bài'}
+          >
+            <Bookmark size={18} fill={post.bookmarkedByMe ? 'currentColor' : 'none'} />
+            <span className="hidden sm:inline">{post.bookmarkedByMe ? 'Đã lưu' : 'Lưu'}</span>
+          </button>
+        )}
       </div>
       {expanded && (
         <div className="border-t px-4 pb-4 pt-3 space-y-3" style={{ borderColor: tezcaTheme.border }}>
@@ -217,19 +331,79 @@ export function PostCard({
               <Send size={18} />
             </button>
           </div>
-          {comments.map((c) => (
-            <div
-              key={c.id}
-              className="rounded-xl px-3 py-2"
-              style={{ backgroundColor: tezcaTheme.subtleBg }}
-            >
-              <p className="m-0 text-xs font-medium">
-                {c.authorName}{' '}
-                <span className="opacity-50">· {roleBadgeLabel(c.authorRole)}</span>
-              </p>
-              <p className="m-0 text-sm mt-1">{c.content}</p>
-            </div>
-          ))}
+          {comments.map((c) => {
+            const ownComment = Boolean(c.userId && c.userId === currentUserId);
+            const isEditingThis = editingCommentId === c.id;
+            return (
+              <div
+                key={c.id}
+                className="rounded-xl px-3 py-2"
+                style={{ backgroundColor: tezcaTheme.subtleBg }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="m-0 text-xs font-medium">
+                    {c.authorName}{' '}
+                    <span className="opacity-50">· {roleBadgeLabel(c.authorRole)}</span>
+                  </p>
+                  {ownComment && !isEditingThis && (onEditComment || onDeleteComment) && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {onEditComment && (
+                        <button
+                          type="button"
+                          onClick={() => { setEditingCommentId(c.id); setCommentEditDraft(c.content); }}
+                          className="border-0 bg-transparent cursor-pointer p-0.5 opacity-50 hover:opacity-100"
+                          aria-label="Sửa bình luận"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                      {onDeleteComment && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteComment(c.id)}
+                          className="border-0 bg-transparent cursor-pointer p-0.5 opacity-50 hover:opacity-100 text-red-600"
+                          aria-label="Xóa bình luận"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {isEditingThis ? (
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      value={commentEditDraft}
+                      onChange={(e) => setCommentEditDraft(e.target.value)}
+                      className="flex-1 rounded-lg border px-2 py-1 text-sm"
+                      style={{ borderColor: tezcaTheme.border }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveCommentEdit(c.id)}
+                      className="border-0 bg-transparent cursor-pointer p-1"
+                      aria-label="Lưu"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCommentId(null)}
+                      className="border-0 bg-transparent cursor-pointer p-1"
+                      aria-label="Hủy"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="m-0 text-sm mt-1">
+                    {c.content}
+                    {c.editedAt ? <span className="opacity-40 text-xs"> (đã sửa)</span> : null}
+                  </p>
+                )}
+              </div>
+            );
+          })}
           <div className="flex gap-2">
             <input
               value={commentDraft}

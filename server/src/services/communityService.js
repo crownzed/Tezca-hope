@@ -3,9 +3,14 @@ import {
   getCommunityPostById,
   createCommunityPost,
   deleteCommunityPost,
+  updateCommunityPost,
   listCommunityComments,
   createCommunityComment,
+  updateCommunityComment,
+  deleteOwnCommunityComment,
   toggleCommunityPostLike,
+  toggleCommunityPostBookmark,
+  listCommunityBookmarks,
   createCommunityReport,
   listCommunityFeed,
   followCommunityUser,
@@ -79,6 +84,14 @@ export function removeOwnPost(postId, userId, isAdmin) {
   return deleteCommunityPost(postId, userId, isAdmin);
 }
 
+export function editPost({ postId, userId, content, imageUrl, isAdmin }) {
+  const result = updateCommunityPost({ postId, userId, content, imageUrl, isAdmin });
+  if (result.post) {
+    broadcastCommunityEvent(forumChannel(), { type: 'community_post_updated', post: result.post });
+  }
+  return result;
+}
+
 export function listComments(postId, opts) {
   return listCommunityComments(postId, opts);
 }
@@ -93,6 +106,22 @@ export function addComment(input) {
     });
   }
   return comment;
+}
+
+export function editComment({ commentId, userId, content, isAdmin }) {
+  return updateCommunityComment({ commentId, userId, content, isAdmin });
+}
+
+export function removeComment({ commentId, userId, isAdmin }) {
+  return deleteOwnCommunityComment(commentId, userId, isAdmin);
+}
+
+export function toggleBookmark(postId, userId) {
+  return toggleCommunityPostBookmark(postId, userId);
+}
+
+export function listBookmarks(userId, opts) {
+  return listCommunityBookmarks(userId, opts);
 }
 
 export function likePost(postId, userId) {

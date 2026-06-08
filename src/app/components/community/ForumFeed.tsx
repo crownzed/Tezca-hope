@@ -40,6 +40,11 @@ type ForumFeedProps = {
   onToggleLike: (postId: string) => void;
   onToggleComments: (postId: string) => void;
   onReport: (postId: string) => void;
+  onToggleBookmark?: (postId: string) => void;
+  onEditPost?: (postId: string, content: string) => Promise<void> | void;
+  onDeletePost?: (postId: string) => void;
+  onEditComment?: (commentId: string, content: string) => Promise<void> | void;
+  onDeleteComment?: (commentId: string) => void;
   onCommentDraftChange: (postId: string, value: string) => void;
   onThreadReplyDraftChange: (postId: string, value: string) => void;
   onSubmitComment: (postId: string) => void;
@@ -69,6 +74,11 @@ export function ForumFeed({
   onToggleLike,
   onToggleComments,
   onReport,
+  onToggleBookmark,
+  onEditPost,
+  onDeletePost,
+  onEditComment,
+  onDeleteComment,
   threadReplies,
   threadReplyDraft,
   followedTopics,
@@ -171,6 +181,11 @@ export function ForumFeed({
             onToggleLike={onToggleLike}
             onToggleComments={onToggleComments}
             onReport={onReport}
+            onToggleBookmark={onToggleBookmark}
+            onEditPost={onEditPost}
+            onDeletePost={onDeletePost}
+            onEditComment={onEditComment}
+            onDeleteComment={onDeleteComment}
             onCommentDraftChange={onCommentDraftChange}
             onThreadReplyDraftChange={onThreadReplyDraftChange}
             onSubmitComment={onSubmitComment}

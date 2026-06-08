@@ -220,6 +220,97 @@ export function CommunityPage({ mode }: CommunityPageProps) {
     }
   };
 
+  const toggleBookmark = async (postId: string) => {
+    if (!token) return;
+    try {
+      const r = await apiFetch<{ bookmarked: boolean }>(
+        `/api/community/posts/${encodeURIComponent(postId)}/bookmark`,
+        { method: 'POST', token },
+      );
+      setPosts((list) =>
+        list.map((p) => (p.id === postId ? { ...p, bookmarkedByMe: r.bookmarked } : p)),
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const editPost = async (postId: string, content: string) => {
+    if (!token) return;
+    try {
+      const r = await apiFetch<{ post: ForumPost }>(
+        `/api/community/posts/${encodeURIComponent(postId)}`,
+        { method: 'PATCH', token, body: JSON.stringify({ content }) },
+      );
+      setPosts((list) => list.map((p) => (p.id === postId ? { ...p, ...r.post } : p)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không sửa được bài');
+    }
+  };
+
+  const deletePost = async (postId: string) => {
+    if (!token || !window.confirm('Xóa bài viết này?')) return;
+    try {
+      await apiFetch(`/api/community/posts/${encodeURIComponent(postId)}`, {
+        method: 'DELETE',
+        token,
+      });
+      setPosts((list) => list.filter((p) => p.id !== postId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không xóa được bài');
+    }
+  };
+
+  const editComment = async (commentId: string, content: string) => {
+    if (!token) return;
+    try {
+      const r = await apiFetch<{ comment: ForumComment }>(
+        `/api/community/comments/${encodeURIComponent(commentId)}`,
+        { method: 'PATCH', token, body: JSON.stringify({ content }) },
+      );
+      setComments((c) => {
+        const next: Record<string, ForumComment[]> = {};
+        for (const [pid, list] of Object.entries(c)) {
+          next[pid] = list.map((cm) => (cm.id === commentId ? { ...cm, ...r.comment } : cm));
+        }
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không sửa được bình luận');
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!token || !window.confirm('Xóa bình luận này?')) return;
+    try {
+      await apiFetch(`/api/community/comments/${encodeURIComponent(commentId)}`, {
+        method: 'DELETE',
+        token,
+      });
+      let affectedPost: string | null = null;
+      setComments((c) => {
+        const next: Record<string, ForumComment[]> = {};
+        for (const [pid, list] of Object.entries(c)) {
+          const filtered = list.filter((cm) => cm.id !== commentId);
+          if (filtered.length !== list.length) affectedPost = pid;
+          next[pid] = filtered;
+        }
+        return next;
+      });
+      if (affectedPost) {
+        setPosts((list) =>
+          list.map((p) =>
+            p.id === affectedPost
+              ? { ...p, commentCount: Math.max((p.commentCount || 1) - 1, 0) }
+              : p,
+          ),
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không xóa được bình luận');
+    }
+  };
+
   const loadComments = async (postId: string) => {
     if (!token) return;
     const r = await apiFetch<{ comments: ForumComment[] }>(
@@ -516,6 +607,11 @@ export function CommunityPage({ mode }: CommunityPageProps) {
               onToggleLike={toggleLike}
               onToggleComments={toggleComments}
               onReport={reportPost}
+              onToggleBookmark={toggleBookmark}
+              onEditPost={editPost}
+              onDeletePost={deletePost}
+              onEditComment={editComment}
+              onDeleteComment={deleteComment}
               onCommentDraftChange={(postId, value) =>
                 setCommentDraft((d) => ({ ...d, [postId]: value }))
               }

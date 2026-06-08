@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
-import { Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Users } from 'lucide-react';
+import { Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Users } from 'lucide-react';
 import { ROUTES } from '../routes';
 import { AccountProfileButton } from '../components/AccountProfileRail';
 import { CommunityLeftNav } from '../components/community/CommunityLeftNav';
@@ -11,6 +11,7 @@ const sectionNav = [
   { to: ROUTES.community.rooms, label: 'Phòng chat', icon: Users, end: true },
   { to: ROUTES.community.announcements, label: '#thong-bao', icon: Megaphone, end: true },
   { to: ROUTES.community.dm, label: 'Tin nhắn', icon: MessageCircle, end: true },
+  { to: ROUTES.community.bookmarks, label: 'Đã lưu', icon: Bookmark, end: true },
 ] as const;
 
 function roleAppLink(role: string) {
