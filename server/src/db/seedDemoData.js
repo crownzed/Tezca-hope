@@ -71,6 +71,12 @@ export const DEMO_EXPERTS = [
   { email: 'cg-demo-02@tezca.vn', name: 'BS. Thu Hà' },
   { email: 'cg-demo-03@tezca.vn', name: 'BS. Quang Huy' },
   { email: 'cg-demo-04@tezca.vn', name: 'BS. Lan Phương' },
+  { email: 'cg-demo-05@tezca.vn', name: 'BS. Hoàng Nam' },
+  { email: 'cg-demo-06@tezca.vn', name: 'BS. Thanh Trúc' },
+  { email: 'cg-demo-07@tezca.vn', name: 'BS. Đức Anh' },
+  { email: 'cg-demo-08@tezca.vn', name: 'BS. Ngọc Mai' },
+  { email: 'cg-demo-09@tezca.vn', name: 'BS. Tuấn Kiệt' },
+  { email: 'cg-demo-10@tezca.vn', name: 'BS. Phương Linh' },
 ];
 
 const WORK_TAG = '[demo-work]';
