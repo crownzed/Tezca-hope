@@ -182,6 +182,30 @@ export function useDisciplineDataScope({ userId, token }: UseDisciplineDataScope
     };
   }, [scopeId, baseExercises, dailyProgress, foodLog]);
 
+  // Flush sync ngay khi user thoát/refresh trang (tránh mất data)
+  useEffect(() => {
+    if (!scopeId) return;
+    const flush = () => {
+      if (firebaseSyncTimer.current) {
+        clearTimeout(firebaseSyncTimer.current);
+        firebaseSyncTimer.current = null;
+        // sendBeacon không hỗ trợ Firebase SDK, nên dùng sync call
+        void firebaseSyncDisciplineData(scopeId, {
+          exercises: baseExercises,
+          dailyProgress,
+          foodLog,
+        });
+      }
+    };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+    };
+  }, [scopeId, baseExercises, dailyProgress, foodLog]);
+
   useEffect(() => {
     if (!canSync || !token) return;
     let cancelled = false;

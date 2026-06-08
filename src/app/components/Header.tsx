@@ -60,13 +60,6 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
           {!isLoggedIn && (
             <>
               <Link
-                to={ROUTES.expert.login}
-                className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-medium border transition-colors hover:opacity-90"
-                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-              >
-                Chuyên gia
-              </Link>
-              <Link
                 to={ROUTES.auth.hub}
                 className="hidden sm:inline-flex px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-90"
                 style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
@@ -83,15 +76,6 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
               title={customerUser?.email}
             >
               {customerUser?.name ?? 'Ứng dụng'}
-            </Link>
-          )}
-          {!showCustomerApp && (
-            <Link
-              to={ROUTES.app.dashboard}
-              className="hidden sm:inline-flex px-4 py-2.5 rounded-full text-sm font-medium border transition-colors"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-            >
-              Trung tâm Kỷ luật
             </Link>
           )}
           {showExpertPortal && (
@@ -136,14 +120,6 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
             {!isLoggedIn && (
               <>
                 <Link
-                  to={ROUTES.expert.login}
-                  className="mt-2 py-3 text-center rounded-full text-sm font-semibold border"
-                  style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-                  onClick={() => setOpen(false)}
-                >
-                  Chuyên gia
-                </Link>
-                <Link
                   to={ROUTES.auth.hub}
                   className="mt-1 py-3 text-center rounded-full text-sm font-semibold"
                   style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
@@ -153,14 +129,16 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
                 </Link>
               </>
             )}
-            <Link
-              to={ROUTES.app.dashboard}
-              className="mt-1 py-3 text-center rounded-full text-sm font-semibold border"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-              onClick={() => setOpen(false)}
-            >
-              Trung tâm Kỷ luật
-            </Link>
+            {showCustomerApp && (
+              <Link
+                to={ROUTES.app.dashboard}
+                className="mt-1 py-3 text-center rounded-full text-sm font-semibold border"
+                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
+                onClick={() => setOpen(false)}
+              >
+                Trung tâm Kỷ luật
+              </Link>
+            )}
             {showExpertPortal && (
               <Link
                 to={ROUTES.expert.doctorDesk}
@@ -182,17 +160,16 @@ export function Header({ variant = 'minimal' }: HeaderProps) {
         >
           {!isLoggedIn && (
             <>
-              <Link to={ROUTES.expert.login} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
-                Chuyên gia
-              </Link>
               <Link to={ROUTES.auth.hub} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.accentDark }}>
                 Đăng nhập
               </Link>
             </>
           )}
-          <Link to={ROUTES.app.dashboard} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
-            Ứng dụng
-          </Link>
+          {showCustomerApp && (
+            <Link to={ROUTES.app.dashboard} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
+              Ứng dụng
+            </Link>
+          )}
           {showExpertPortal && (
             <Link to={ROUTES.expert.doctorDesk} onClick={() => setOpen(false)} className="py-2 font-medium" style={{ color: tezcaTheme.text }}>
               Dashboard chuyên gia

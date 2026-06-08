@@ -61,7 +61,7 @@ export function HeroSection() {
 
               <motion.div whileHover={reduce ? undefined : { scale: 1.02 }} whileTap={reduce ? undefined : { scale: 0.98 }}>
                 <Link
-                  to={ROUTES.app.dashboard}
+                  to={ROUTES.auth.customerLogin}
                   className="px-8 py-4 rounded-full text-lg font-medium inline-flex items-center justify-center"
                   style={{
                     backgroundColor: 'transparent',
@@ -69,7 +69,7 @@ export function HeroSection() {
                     border: '2px solid rgba(26, 32, 44, 0.1)',
                   }}
                 >
-                  Vào ứng dụng
+                  Đăng nhập
                 </Link>
               </motion.div>
             </motion.div>
