@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { ArrowRight, MessagesSquare, Users } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ROUTES, appCommunityPath } from '../routes';
+import { ROUTES } from '../routes';
 import { ROOM_TOPICS } from '../lib/communityTopics';
 import { LandingReveal } from './landing/LandingReveal';
 import { cardHover, staggerContainer, staggerItem, viewportOnce } from '../lib/landingMotion';
@@ -45,7 +45,7 @@ export function CommunitySection() {
         >
           <motion.div variants={staggerItem}>
             <motion.div variants={cardHover} initial="rest" whileHover={reduce ? 'rest' : 'hover'} className="h-full">
-              <Link to={appCommunityPath('forum')} className={cardLinkClass} aria-label="Vào diễn đàn cộng đồng">
+              <Link to={ROUTES.app.dashboard} className={cardLinkClass} aria-label="Vào diễn đàn cộng đồng">
                 <div
                   className="h-full p-8 md:p-10 cursor-pointer"
                   style={{
@@ -89,7 +89,7 @@ export function CommunitySection() {
 
           <motion.div variants={staggerItem}>
             <motion.div variants={cardHover} initial="rest" whileHover={reduce ? 'rest' : 'hover'} className="h-full">
-              <Link to={appCommunityPath('rooms')} className={cardLinkClass} aria-label="Vào phòng chat cộng đồng">
+              <Link to={ROUTES.app.dashboard} className={cardLinkClass} aria-label="Vào phòng chat cộng đồng">
                 <div
                   className="h-full p-8 md:p-10 relative overflow-hidden cursor-pointer"
                   style={{
@@ -137,22 +137,14 @@ export function CommunitySection() {
           </motion.div>
         </motion.div>
 
-        <LandingReveal className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <LandingReveal className="flex items-center justify-center">
           <Link
-            to={ROUTES.community.forum}
+            to={ROUTES.app.dashboard}
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-sm font-semibold no-underline transition-opacity hover:opacity-90"
-            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
+            style={{ background: tezcaTheme.accentGradient, color: '#FFFFFF' }}
           >
             Vào cộng đồng
             <ArrowRight size={18} />
-          </Link>
-          <Link
-            to={ROUTES.auth.customerLogin}
-            state={{ from: ROUTES.community.forum }}
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-sm font-semibold no-underline border transition-opacity hover:opacity-90"
-            style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-          >
-            Đăng nhập để tham gia
           </Link>
         </LandingReveal>
       </div>

@@ -1,5 +1,7 @@
+import { Link } from 'react-router';
 import { MessageCircle, TrendingUp, Calendar, Heart, ArrowRight, Users } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
+import { ROUTES } from '../routes';
 import { LandingReveal } from './landing/LandingReveal';
 import { cardHover, landingEase, staggerContainer, staggerItem, viewportOnce } from '../lib/landingMotion';
 
@@ -229,8 +231,9 @@ export function FeaturesSection() {
                   whileHover={reduce ? 'rest' : 'hover'}
                   className="h-full"
                 >
-                  <div
-                    className="p-8 md:p-10 rounded-3xl relative overflow-hidden block h-full"
+                  <Link
+                    to={ROUTES.app.dashboard}
+                    className="p-8 md:p-10 rounded-3xl relative overflow-hidden block no-underline h-full"
                     style={
                       isGradient
                         ? {
@@ -288,7 +291,7 @@ export function FeaturesSection() {
                         </motion.span>
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 </motion.div>
               </motion.div>
             );
