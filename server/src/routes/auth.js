@@ -19,7 +19,7 @@ import {
 export const authRouter = Router();
 
 /** POST /api/auth/register — tạo tài khoản khách hàng (role: user) */
-export function registerHandler(req, res, next) {
+export async function registerHandler(req, res, next) {
   try {
     const { email, password, name } = req.body || {};
     const normalized = normalizeEmail(email);
@@ -45,7 +45,7 @@ export function registerHandler(req, res, next) {
     const user = {
       id: crypto.randomUUID(),
       email: normalized,
-      passwordHash: bcrypt.hashSync(String(password), 10),
+      passwordHash: await bcrypt.hash(String(password), 10),
       role: 'user',
       name: name ? String(name).trim().slice(0, 120) : normalized.split('@')[0],
     };
@@ -80,7 +80,7 @@ function roleMismatchMessage(requiredRole) {
 }
 
 function loginHandler(requiredRole) {
-  return (req, res) => {
+  return async (req, res) => {
     const { email, password } = req.body || {};
     const normalized = normalizeEmail(email);
     if (!normalized || !password) {
@@ -88,7 +88,7 @@ function loginHandler(requiredRole) {
       return;
     }
     const user = findUserByEmail(normalized);
-    if (!user || !bcrypt.compareSync(String(password), user.passwordHash)) {
+    if (!user || !(await bcrypt.compare(String(password), user.passwordHash))) {
       res.status(401).json({ error: 'Sai email hoặc mật khẩu' });
       return;
     }
@@ -160,7 +160,7 @@ export async function forgotPasswordHandler(req, res, next) {
 }
 
 /** POST /api/auth/reset-password — body: { token, password } */
-export function resetPasswordHandler(req, res, next) {
+export async function resetPasswordHandler(req, res, next) {
   try {
     const { token, password } = req.body || {};
     if (!token) {
@@ -179,7 +179,7 @@ export function resetPasswordHandler(req, res, next) {
       });
       return;
     }
-    updateUserPasswordHash(userId, bcrypt.hashSync(String(password), 10));
+    updateUserPasswordHash(userId, await bcrypt.hash(String(password), 10));
     res.json({ message: 'Đặt lại mật khẩu thành công. Hãy đăng nhập bằng mật khẩu mới.' });
   } catch (err) {
     next(err);
