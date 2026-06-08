@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Database from 'better-sqlite3';
+import BetterSqlite3 from 'better-sqlite3';
+import LibsqlDatabase from 'libsql';
 import bcrypt from 'bcryptjs';
 import { runMigrations } from './migrate.js';
 import { seedDatabase } from './seed.js';
@@ -40,150 +41,84 @@ export const DEMO_ADMIN_ID = 'tezca-demo-admin-0001';
 export const DEMO_PASSWORD = 'Tezca@2025';
 export const DEMO_ADMIN_EMAIL = 'admin@tezca.vn';
 
-/** @type {Database.Database | null} */
+/** @type {import('better-sqlite3').Database | import('libsql').Database | null} */
 let dbInstance = null;
-
-/** @type {object | null} — Turso client instance */
-let tursoInstance = null;
 
 /** Flag: đã init chưa */
 let initialized = false;
 
 /**
- * Lấy DB instance (better-sqlite3 — sync).
- * @returns {Database.Database}
+ * Lấy DB instance (better-sqlite3 hoặc libsql — sync API).
+ * @returns {import('better-sqlite3').Database}
  */
 export function getDb() {
-  if (USE_TURSO && tursoInstance) {
-    return tursoInstance;
-  }
   if (dbInstance) return dbInstance;
 
-  if (process.env.VERCEL && !USE_TURSO) {
-    console.warn(
-      '[db] ⚠️ Đang chạy trên Vercel với SQLite local (/tmp). ' +
-      'Data SẼ MẤT mỗi cold start! ' +
-      'Đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN để giữ data.'
-    );
+  if (USE_TURSO) {
+    // libsql: sync API tương thích better-sqlite3, data sync lên Turso
+    const syncDir = process.env.VERCEL ? '/tmp/tezca-data' : dataDir;
+    fs.mkdirSync(syncDir, { recursive: true });
+    const localPath = path.join(syncDir, 'tezca.sqlite');
+    dbInstance = new LibsqlDatabase(localPath, {
+      syncUrl: TURSO_URL,
+      authToken: TURSO_TOKEN,
+    });
+    dbInstance.pragma('journal_mode = WAL');
+    dbInstance.pragma('foreign_keys = ON');
+    dbInstance.pragma('busy_timeout = 5000');
+    dbInstance.pragma('synchronous = NORMAL');
+    // Sync từ remote về local
+    dbInstance.sync();
+    console.log('[db] ✅ libsql connected (sync mode):', TURSO_URL);
+  } else {
+    if (process.env.VERCEL) {
+      console.warn(
+        '[db] ⚠️ Đang chạy trên Vercel với SQLite local (/tmp). ' +
+        'Data SẼ MẤT mỗi cold start! ' +
+        'Đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN để giữ data.'
+      );
+    }
+    fs.mkdirSync(dataDir, { recursive: true });
+    dbInstance = new BetterSqlite3(path.join(dataDir, 'tezca.sqlite'));
+    dbInstance.pragma('journal_mode = WAL');
+    dbInstance.pragma('foreign_keys = ON');
+    dbInstance.pragma('busy_timeout = 5000');
+    dbInstance.pragma('synchronous = NORMAL');
   }
 
-  fs.mkdirSync(dataDir, { recursive: true });
-  dbInstance = new Database(path.join(dataDir, 'tezca.sqlite'));
-  dbInstance.pragma('journal_mode = WAL');
-  dbInstance.pragma('foreign_keys = ON');
-  dbInstance.pragma('busy_timeout = 5000');
-  dbInstance.pragma('synchronous = NORMAL');
   runMigrations(dbInstance);
   const { c } = dbInstance.prepare('SELECT COUNT(*) AS c FROM users').get();
   if (c === 0) seedDatabase(dbInstance);
+
+  // Sync lại sau khi seed/migrate
+  if (USE_TURSO && dbInstance.sync) {
+    dbInstance.sync();
+  }
+
   return dbInstance;
 }
 
 /**
  * Init database — gọi 1 lần khi server start.
- * Hỗ trợ cả Turso (async) và better-sqlite3 (sync).
+ * Giờ chỉ cần gọi getDb() vì libsql xử lý sync.
  */
 export async function initDb() {
   if (initialized) return;
   initialized = true;
-
-  if (USE_TURSO) {
-    try {
-      const { createClient } = await import('@libsql/client');
-      tursoInstance = createClient({
-        url: TURSO_URL,
-        authToken: TURSO_TOKEN,
-      });
-
-      // Test connection
-      await tursoInstance.execute('SELECT 1');
-      console.log('[db] ✅ Turso connected:', TURSO_URL);
-
-      // Run migrations qua Turso
-      await runMigrationsAsync(tursoInstance);
-      console.log('[db] ✅ Migrations hoàn tất (Turso)');
-
-      // Seed nếu cần
-      const countResult = await tursoInstance.execute('SELECT COUNT(*) AS c FROM users');
-      if (countResult.rows[0]?.c === 0) {
-        console.log('[db] Seeding database...');
-        await seedDatabaseAsync(tursoInstance);
-      }
-    } catch (err) {
-      console.error('[db] ❌ Turso init failed:', err.message);
-      console.warn('[db] Fallback về better-sqlite3 local.');
-      tursoInstance = null;
-      getDb();
-    }
-  } else {
-    getDb();
-  }
-}
-
-/**
- * Chạy migrations cho Turso (async).
- * Đọc migrations từ migrate.js và execute tuần tự.
- */
-async function runMigrationsAsync(client) {
-  const { getMigrationStatements } = await import('./migrate.js');
-  // Tạo bảng migration tracking
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      id INTEGER PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      applied_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  const statements = getMigrationStatements();
-  for (const { name, sql } of statements) {
-    const existing = await client.execute({
-      sql: 'SELECT id FROM _migrations WHERE name = ?',
-      args: [name],
-    });
-    if (existing.rows.length > 0) continue;
-
-    // Execute migration
-    await client.executeMultiple(sql);
-    await client.execute({
-      sql: 'INSERT INTO _migrations (name) VALUES (?)',
-      args: [name],
-    });
-    console.log(`[db] Migration applied: ${name}`);
-  }
-}
-
-/**
- * Seed database cho Turso (async).
- */
-async function seedDatabaseAsync(client) {
-  const { getSeedStatements } = await import('./seed.js');
-  const statements = getSeedStatements();
-  for (const { sql, args } of statements) {
-    await client.execute({ sql, args: args || [] });
-  }
+  getDb();
 }
 
 /** Kiểm tra đang dùng Turso hay không */
 export function isUsingTurso() {
-  return USE_TURSO && tursoInstance !== null;
+  return USE_TURSO;
 }
 
 /** @param {(db: any) => any} fn */
 export function runInTransaction(fn) {
-  if (USE_TURSO && tursoInstance) {
-    // Turso transaction — async
-    return tursoInstance.transaction(async (tx) => {
-      return fn(tx);
-    });
-  }
   return getDb().transaction(fn)();
 }
 
 export function ensureAdminFromEnv() {
-  // Turso: admin seed qua initDb async
-  if (USE_TURSO) return;
-
   const db = getDb();
   const email = process.env.TEZCA_ADMIN_EMAIL?.trim() || DEMO_ADMIN_EMAIL;
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -191,17 +126,17 @@ export function ensureAdminFromEnv() {
 
   const pw = process.env.TEZCA_ADMIN_PASSWORD?.trim() || DEMO_PASSWORD;
   db.prepare(
-    `INSERT INTO users (id, email, passwordHash, role, name)
-     VALUES (?, ?, ?, 'admin', 'Admin')`
-  ).run(DEMO_ADMIN_ID, email, bcrypt.hashSync(pw, 10));
+    `INSERT INTO users (id, email, password_hash, role, name, created_at)
+     VALUES (?, ?, ?, 'admin', 'Admin', ?)`
+  ).run(DEMO_ADMIN_ID, email, bcrypt.hashSync(pw, 10), Date.now());
 }
 
 export function closeDb() {
-  if (tursoInstance) {
-    tursoInstance.close();
-    tursoInstance = null;
-  }
   if (dbInstance) {
+    // libsql: sync lên remote trước khi đóng
+    if (USE_TURSO && dbInstance.sync) {
+      try { dbInstance.sync(); } catch {}
+    }
     dbInstance.close();
     dbInstance = null;
   }
