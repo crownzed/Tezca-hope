@@ -29,6 +29,27 @@ function refreshKeyFrom(tokenKey: string): string {
   return tokenKey.replace(/_token$/, '_refresh_token');
 }
 
+/** Tất cả role session token keys — dùng để tách luồng phiên khi đăng nhập */
+const ALL_ROLE_TOKEN_KEYS = [
+  'tezca_customer_token',
+  'tezca_expert_token',
+  'tezca_admin_token',
+] as const;
+
+/**
+ * Khi đăng nhập 1 role → xoá sạch phiên các role khác (token + user + refresh).
+ * Tránh tình trạng đăng nhập chồng nhiều phiên (khách hàng / expert / admin cùng lúc),
+ * gây nhầm scope dữ liệu (vd: trung tâm kỷ luật load nhầm data phiên cũ).
+ */
+function clearOtherRoleSessions(currentTokenKey: string): void {
+  for (const tokenKey of ALL_ROLE_TOKEN_KEYS) {
+    if (tokenKey === currentTokenKey) continue;
+    localStorage.removeItem(tokenKey);
+    localStorage.removeItem(tokenKey.replace(/_token$/, '_user'));
+    localStorage.removeItem(tokenKey.replace(/_token$/, '_refresh_token'));
+  }
+}
+
 /** Decode JWT payload không verify (chỉ đọc exp) */
 function decodeJwtPayload(token: string): { exp?: number } | null {
   try {
@@ -168,11 +189,13 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
   const applyAuthResponse = useCallback(
     (authToken: string, authUser: AuthUser, authRefreshToken?: string) => {
       if (authUser.role !== expectedRole) throw new Error(wrongRoleLoginMessage);
+      // Tách luồng: xoá phiên các role khác trước khi set phiên hiện tại
+      clearOtherRoleSessions(tokenStorageKey);
       tokenRef.current = authToken;
       persist(authToken, authUser, authRefreshToken || null);
       setSessionReady(true);
     },
-    [expectedRole, wrongRoleLoginMessage, persist],
+    [expectedRole, wrongRoleLoginMessage, persist, tokenStorageKey],
   );
 
   const login = useCallback(
