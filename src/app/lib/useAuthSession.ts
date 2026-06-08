@@ -71,7 +71,12 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
   const refreshTokenKey = refreshKeyFrom(tokenStorageKey);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(tokenStorageKey));
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser(userStorageKey));
-  const [sessionReady, setSessionReady] = useState(() => !localStorage.getItem(tokenStorageKey));
+  const [sessionReady, setSessionReady] = useState(() => {
+    const hasToken = !!localStorage.getItem(tokenStorageKey);
+    const hasUser = !!localStorage.getItem(userStorageKey);
+    // Có token + user cache → sẵn sàng ngay (optimistic), verify chạy nền
+    return !hasToken || hasUser;
+  });
   const tokenRef = useRef<string | null>(token);
   tokenRef.current = token;
   const refreshingRef = useRef(false);
@@ -133,7 +138,9 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
       setSessionReady(true);
       return;
     }
-    setSessionReady(false);
+    // Có user cache → KHÔNG block UI, verify chạy nền (stale-while-revalidate)
+    const hasCachedUser = !!readStoredUser(userStorageKey);
+    if (!hasCachedUser) setSessionReady(false);
     const requestedToken = token;
     apiFetch<{ user: AuthUser }>(mePath, { token })
       .then((r) => {
