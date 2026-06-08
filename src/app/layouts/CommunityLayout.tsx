@@ -92,18 +92,25 @@ export function CommunityLayout() {
             {sectionNav.map((item) => {
               const Icon = item.icon;
               return (
-                <NavLink key={item.to} to={item.to} end={item.end} className="flex-1 sm:flex-none">
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className="flex-1 sm:flex-none"
+                  aria-label={item.label}
+                  title={item.label}
+                >
                   {({ isActive }) => (
                     <span
-                      className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+                      className="flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
                       style={
                         isActive
                           ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
                           : { color: tezcaTheme.textMuted }
                       }
                     >
-                      <Icon size={16} aria-hidden />
-                      {item.label}
+                      <Icon size={18} aria-hidden />
+                      <span className="hidden sm:inline">{item.label}</span>
                     </span>
                   )}
                 </NavLink>
