@@ -570,6 +570,19 @@ export function runMigrations(db) {
         `);
       },
     },
+    {
+      version: 23,
+      name: 'community_dm_read_state',
+      up: () => {
+        // Mốc thời gian mỗi phía đã đọc đến (NULL = chưa đọc gì)
+        if (!tableHasColumn(db, 'community_dm_threads', 'last_read_a')) {
+          db.exec(`ALTER TABLE community_dm_threads ADD COLUMN last_read_a INTEGER`);
+        }
+        if (!tableHasColumn(db, 'community_dm_threads', 'last_read_b')) {
+          db.exec(`ALTER TABLE community_dm_threads ADD COLUMN last_read_b INTEGER`);
+        }
+      },
+    },
   ];
 
   for (const m of migrations) {

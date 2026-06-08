@@ -424,5 +424,7 @@ export {
   listCommunityDmMessages,
   insertCommunityDmMessage,
   searchCommunityMembers,
+  markCommunityDmThreadRead,
+  countUnreadCommunityDm,
   listRoomMentionCandidates,
 } from './db/repositories/communityExtendedRepository.js';

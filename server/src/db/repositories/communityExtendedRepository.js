@@ -89,6 +89,15 @@ function mapDmThreadRow(row, viewerId) {
        WHERE thread_id = ? AND status = 'published' ORDER BY created_at DESC LIMIT 1`,
     )
     .get(row.id);
+  // Mốc đã đọc của người xem (theo vị trí a/b)
+  const myLastRead = row.user_a === viewerId ? row.last_read_a : row.last_read_b;
+  // Đếm tin chưa đọc: do người khác gửi & sau mốc đã đọc
+  const unreadRow = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS c FROM community_dm_messages
+       WHERE thread_id = ? AND status = 'published' AND sender_id != ? AND created_at > ?`,
+    )
+    .get(row.id, viewerId, myLastRead || 0);
   return {
     id: row.id,
     otherUserId,
@@ -97,6 +106,8 @@ function mapDmThreadRow(row, viewerId) {
     lastMessage: last?.content || '',
     lastMessageAt: last?.created_at || row.updated_at,
     lastSenderId: last?.sender_id || null,
+    unreadCount: unreadRow ? Number(unreadRow.c) : 0,
+    lastReadAt: myLastRead || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -183,6 +194,42 @@ export function insertCommunityDmMessage({ id, threadId, senderId, content }) {
     content: row.content,
     createdAt: row.created_at,
   };
+}
+
+// Đánh dấu đã đọc toàn bộ thread cho người xem
+export function markCommunityDmThreadRead(threadId, viewerId) {
+  const row = getDb()
+    .prepare(`SELECT id, user_a, user_b FROM community_dm_threads WHERE id = ?`)
+    .get(threadId);
+  if (!row) return null;
+  if (row.user_a !== viewerId && row.user_b !== viewerId) return null;
+  const now = Date.now();
+  const col = row.user_a === viewerId ? 'last_read_a' : 'last_read_b';
+  getDb()
+    .prepare(`UPDATE community_dm_threads SET ${col} = ? WHERE id = ?`)
+    .run(now, threadId);
+  return { ok: true, readAt: now };
+}
+
+// Tổng số tin nhắn DM chưa đọc toàn cục của người dùng
+export function countUnreadCommunityDm(viewerId) {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_a, user_b, last_read_a, last_read_b FROM community_dm_threads
+       WHERE user_a = ? OR user_b = ?`,
+    )
+    .all(viewerId, viewerId);
+  let total = 0;
+  const stmt = getDb().prepare(
+    `SELECT COUNT(*) AS c FROM community_dm_messages
+     WHERE thread_id = ? AND status = 'published' AND sender_id != ? AND created_at > ?`,
+  );
+  for (const r of rows) {
+    const myLastRead = r.user_a === viewerId ? r.last_read_a : r.last_read_b;
+    const c = stmt.get(r.id, viewerId, myLastRead || 0);
+    total += c ? Number(c.c) : 0;
+  }
+  return total;
 }
 
 export function searchCommunityMembers({ query, excludeUserId, limit = 15 }) {

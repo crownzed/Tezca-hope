@@ -16,6 +16,8 @@ export type DmThread = {
   lastMessage: string;
   lastMessageAt: number;
   lastSenderId: string | null;
+  unreadCount?: number;
+  lastReadAt?: number | null;
 };
 
 type DirectMessagesPanelProps = {
@@ -82,7 +84,17 @@ export function DirectMessagesPanel({
       return;
     }
     loadMessages(activeThreadId);
-  }, [activeThreadId, loadMessages]);
+    // Đánh dấu đã đọc khi mở thread + xoá badge unread local
+    if (token) {
+      apiFetch(`/api/community/dm/threads/${encodeURIComponent(activeThreadId)}/read`, {
+        method: 'POST',
+        token,
+      }).catch(() => {});
+      setThreads((list) =>
+        list.map((t) => (t.id === activeThreadId ? { ...t, unreadCount: 0 } : t)),
+      );
+    }
+  }, [activeThreadId, loadMessages, token]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,10 +111,30 @@ export function DirectMessagesPanel({
                 lastMessage: message.content,
                 lastMessageAt: message.createdAt,
                 lastSenderId: message.senderId,
+                // Nếu không phải thread đang mở và do người khác gửi → tăng unread
+                unreadCount:
+                  message.threadId === activeThreadId || message.senderId === currentUserId
+                    ? 0
+                    : (t.unreadCount || 0) + 1,
               }
             : t,
         ),
       );
+      // Nếu đang mở đúng thread → tự đánh dấu đã đọc
+      if (message.threadId === activeThreadId && message.senderId !== currentUserId && token) {
+        apiFetch(`/api/community/dm/threads/${encodeURIComponent(activeThreadId)}/read`, {
+          method: 'POST',
+          token,
+        }).catch(() => {});
+      }
+    },
+    onRead: (readerId, readAt) => {
+      // Đối phương đã đọc tin của mình
+      if (readerId !== currentUserId && activeThread) {
+        setThreads((list) =>
+          list.map((t) => (t.id === activeThread.id ? { ...t, lastReadAt: readAt } : t)),
+        );
+      }
     },
   });
 
@@ -251,6 +283,14 @@ export function DirectMessagesPanel({
                   <p className="m-0 text-xs opacity-75 line-clamp-1 mt-0.5">
                     {t.lastMessage || 'Bắt đầu trò chuyện'}
                   </p>
+                  {(t.unreadCount || 0) > 0 && activeThreadId !== t.id && (
+                    <span
+                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white mt-1"
+                      style={{ backgroundColor: '#ef4444' }}
+                    >
+                      {t.unreadCount! > 99 ? '99+' : t.unreadCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -289,6 +329,13 @@ export function DirectMessagesPanel({
                       </div>
                     );
                   })}
+                  {/* Read receipt: hiện dưới tin cuối nếu đối phương đã đọc */}
+                  {messages.length > 0 &&
+                    messages[messages.length - 1].senderId === currentUserId &&
+                    activeThread.lastReadAt != null &&
+                    activeThread.lastReadAt >= messages[messages.length - 1].createdAt && (
+                      <p className="m-0 text-[10px] opacity-50 text-right pr-1">Đã xem</p>
+                    )}
                   <div ref={endRef} />
                 </div>
                 {typingText && (

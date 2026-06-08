@@ -8,6 +8,8 @@ import {
   insertCommunityDmMessage,
   searchCommunityMembers,
   listRoomMentionCandidates,
+  markCommunityDmThreadRead,
+  countUnreadCommunityDm,
 } from '../db.js';
 import {
   broadcastCommunityEvent,
@@ -63,6 +65,24 @@ export function sendDmMessage(input) {
 
 export function searchMembers(opts) {
   return searchCommunityMembers(opts);
+}
+
+export function markDmThreadRead(threadId, userId) {
+  const result = markCommunityDmThreadRead(threadId, userId);
+  if (result) {
+    // Báo cho đối phương biết tin đã được đọc (read receipt)
+    broadcastCommunityEvent(dmChannel(threadId), {
+      type: 'community_dm_read',
+      threadId,
+      readerId: userId,
+      readAt: result.readAt,
+    });
+  }
+  return result;
+}
+
+export function countUnreadDm(userId) {
+  return countUnreadCommunityDm(userId);
 }
 
 export function mentionCandidates(topic, opts) {

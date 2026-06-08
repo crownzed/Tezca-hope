@@ -13,6 +13,7 @@ export type DmMessage = {
 
 type Handlers = {
   onMessage?: (message: DmMessage) => void;
+  onRead?: (readerId: string, readAt: number) => void;
 };
 
 const TYPING_TTL_MS = 3500;
@@ -68,6 +69,9 @@ export function useCommunityDmChannel(
       }
       if (data.type === 'community_dm_message' && data.message) {
         handlersRef.current.onMessage?.(data.message);
+      }
+      if (data.type === 'community_dm_read' && data.readerId) {
+        handlersRef.current.onRead?.(data.readerId, data.readAt || Date.now());
       }
       if (data.type === 'community_typing' && data.userId && data.userName) {
         setTypingText(`${data.userName} đang nhập…`);

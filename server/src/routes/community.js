@@ -540,3 +540,19 @@ communityRouter.post('/dm/threads/:threadId/messages', requireMember, communityD
   }
   res.json({ message });
 });
+
+// Đánh dấu đã đọc 1 cuộc trò chuyện (read receipt)
+communityRouter.post('/dm/threads/:threadId/read', requireMember, (req, res) => {
+  const threadId = String(req.params.threadId);
+  const result = communityExtendedService.markDmThreadRead(threadId, req.user.sub);
+  if (!result) {
+    res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện' });
+    return;
+  }
+  res.json({ ok: true, readAt: result.readAt, unread: communityExtendedService.countUnreadDm(req.user.sub) });
+});
+
+// Tổng số tin nhắn DM chưa đọc (cho badge)
+communityRouter.get('/dm/unread-count', requireMember, (req, res) => {
+  res.json({ unread: communityExtendedService.countUnreadDm(req.user.sub) });
+});
