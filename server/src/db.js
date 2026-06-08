@@ -403,6 +403,15 @@ export {
   listFollowedCommunityTopics,
   listCommunityThreadReplies,
   createCommunityThreadReply,
+  updateCommunityPost,
+  updateCommunityComment,
+  deleteOwnCommunityComment,
+  toggleCommunityPostBookmark,
+  listCommunityBookmarks,
+  createCommunityNotification,
+  listCommunityNotifications,
+  countUnreadCommunityNotifications,
+  markCommunityNotificationsRead,
 } from './db/repositories/communityRepository.js';
 
 export {

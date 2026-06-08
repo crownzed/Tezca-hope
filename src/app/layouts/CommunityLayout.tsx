@@ -1,6 +1,9 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router';
-import { Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Users } from 'lucide-react';
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Users } from 'lucide-react';
 import { ROUTES } from '../routes';
+import { apiFetch } from '../lib/api';
+import { useCommunityNotificationRealtime } from '../hooks/useCommunityRealtime';
 import { AccountProfileButton } from '../components/AccountProfileRail';
 import { CommunityLeftNav } from '../components/community/CommunityLeftNav';
 import { useAnyCommunitySession } from '../lib/useCommunitySession';
@@ -27,8 +30,24 @@ function roleAppLabel(role: string) {
 }
 
 export function CommunityLayout() {
-  const { user, role, isAuthenticated, isVerifying, logout } = useAnyCommunitySession();
+  const { user, role, isAuthenticated, isVerifying, logout, token } = useAnyCommunitySession();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [unread, setUnread] = useState(0);
+
+  // Tải số thông báo chưa đọc khi đăng nhập / đổi route
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setUnread(0);
+      return;
+    }
+    apiFetch<{ unread: number }>('/api/community/notifications/unread-count', { token })
+      .then((r) => setUnread(r.unread || 0))
+      .catch(() => {});
+  }, [isAuthenticated, token, location.pathname]);
+
+  // Realtime cập nhật badge
+  useCommunityNotificationRealtime(token, user?.id, isAuthenticated, setUnread);
 
   const profileProps = {
     role: (role === 'expert' ? 'expert' : role === 'admin' ? 'admin' : 'customer') as 'customer' | 'expert' | 'admin',
@@ -92,6 +111,24 @@ export function CommunityLayout() {
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
+            {isAuthenticated && (
+              <NavLink
+                to={ROUTES.community.notifications}
+                className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border no-underline"
+                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
+                aria-label="Thông báo"
+              >
+                <Bell size={16} aria-hidden />
+                {unread > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+                    style={{ backgroundColor: '#ef4444' }}
+                  >
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
+              </NavLink>
+            )}
             <Link
               to={ROUTES.home}
               className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium opacity-70 hover:opacity-100 no-underline"

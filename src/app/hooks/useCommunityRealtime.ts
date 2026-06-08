@@ -106,6 +106,37 @@ export function useCommunityRoomRealtime(
   }, [enabled, token, channel]);
 }
 
+// Thông báo realtime: lắng nghe channel riêng theo user để cập nhật badge
+export function useCommunityNotificationRealtime(
+  token: string | null,
+  userId: string | undefined,
+  enabled: boolean,
+  onUnread: (count: number) => void,
+) {
+  const cbRef = useRef(onUnread);
+  cbRef.current = onUnread;
+
+  useEffect(() => {
+    if (!enabled || !token || !userId || !canUseWebSocket()) return;
+    const ws = new WebSocket(wsUrl(token));
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'community_join', channel: `notifications:${userId}` }));
+    };
+    ws.onmessage = (ev) => {
+      let data: { type?: string; unread?: number };
+      try {
+        data = JSON.parse(ev.data as string);
+      } catch {
+        return;
+      }
+      if (data.type === 'community_notification' && typeof data.unread === 'number') {
+        cbRef.current(data.unread);
+      }
+    };
+    return () => ws.close();
+  }, [enabled, token, userId]);
+}
+
 export function useCommunityRoomPoll(
   loadRoom: () => void,
   enabled: boolean,

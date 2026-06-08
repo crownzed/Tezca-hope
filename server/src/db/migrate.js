@@ -544,6 +544,32 @@ export function runMigrations(db) {
         }
       },
     },
+    {
+      version: 22,
+      name: 'community_notifications',
+      up: () => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS community_notifications (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            actor_id TEXT,
+            type TEXT NOT NULL,
+            post_id TEXT,
+            comment_id TEXT,
+            thread_id TEXT,
+            preview TEXT,
+            read_at INTEGER,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_community_notifications_user
+            ON community_notifications(user_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_community_notifications_unread
+            ON community_notifications(user_id, read_at);
+        `);
+      },
+    },
   ];
 
   for (const m of migrations) {

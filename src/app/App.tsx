@@ -45,6 +45,7 @@ const CommunityRoomsPage = lazy(() => import('./pages/community/CommunityRoomsPa
 const CommunityAnnouncementsPage = lazy(() => import('./pages/community/CommunityAnnouncementsPage').then(m => ({ default: m.CommunityAnnouncementsPage })));
 const CommunityDmPage = lazy(() => import('./pages/community/CommunityDmPage').then(m => ({ default: m.CommunityDmPage })));
 const CommunitySavedPage = lazy(() => import('./pages/community/CommunitySavedPage').then(m => ({ default: m.CommunitySavedPage })));
+const CommunityNotificationsPage = lazy(() => import('./pages/community/CommunityNotificationsPage').then(m => ({ default: m.CommunityNotificationsPage })));
 const ExpertCustomerListPage = lazy(() => import('./pages/expert/ExpertCustomerListPage').then(m => ({ default: m.ExpertCustomerListPage })));
 const ExpertCustomerWorkspacePage = lazy(() => import('./pages/expert/ExpertCustomerWorkspacePage').then(m => ({ default: m.ExpertCustomerWorkspacePage })));
 const DoctorDashboardPage = lazy(() => import('./pages/expert/DoctorDashboardPage').then(m => ({ default: m.DoctorDashboardPage })));
@@ -131,6 +132,7 @@ function AppRoutes() {
           <Route path="thong-bao" element={<CommunityAnnouncementsPage />} />
           <Route path="tin-nhan" element={<CommunityDmPage />} />
           <Route path="da-luu" element={<CommunitySavedPage />} />
+          <Route path="thong-bao-cua-toi" element={<CommunityNotificationsPage />} />
         </Route>
       </Route>
 

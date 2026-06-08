@@ -536,3 +536,89 @@ export function listCommunityFeed({
   const rows = getDb().prepare(sql).all(...params);
   return rows.map((r) => mapCommunityPostRow(r, viewerId));
 }
+
+// ===== Thông báo cộng đồng =====
+
+function mapNotificationRow(row) {
+  return {
+    id: row.id,
+    type: row.type,
+    actorId: row.actor_id || null,
+    actorName: row.actor_name || null,
+    postId: row.post_id || null,
+    commentId: row.comment_id || null,
+    threadId: row.thread_id || null,
+    preview: row.preview || null,
+    read: Boolean(row.read_at),
+    createdAt: row.created_at,
+  };
+}
+
+// Tạo thông báo; bỏ qua nếu actor tự tương tác chính mình
+export function createCommunityNotification({
+  id,
+  userId,
+  actorId = null,
+  type,
+  postId = null,
+  commentId = null,
+  threadId = null,
+  preview = null,
+}) {
+  if (!userId || !type) return null;
+  if (actorId && actorId === userId) return null; // không tự thông báo cho mình
+  getDb()
+    .prepare(
+      `INSERT INTO community_notifications
+        (id, user_id, actor_id, type, post_id, comment_id, thread_id, preview, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, userId, actorId, type, postId, commentId, threadId, preview, Date.now());
+  return { id };
+}
+
+export function listCommunityNotifications(userId, { beforeTs, limit = 30 } = {}) {
+  let sql = `
+    SELECT n.*, u.name AS actor_name
+    FROM community_notifications n
+    LEFT JOIN users u ON u.id = n.actor_id
+    WHERE n.user_id = ?`;
+  const params = [userId];
+  if (beforeTs) {
+    sql += ` AND n.created_at < ?`;
+    params.push(beforeTs);
+  }
+  sql += ` ORDER BY n.created_at DESC LIMIT ?`;
+  params.push(Math.min(Math.max(limit, 1), 50));
+  const rows = getDb().prepare(sql).all(...params);
+  return rows.map(mapNotificationRow);
+}
+
+export function countUnreadCommunityNotifications(userId) {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS c FROM community_notifications WHERE user_id = ? AND read_at IS NULL`,
+    )
+    .get(userId);
+  return row ? Number(row.c) : 0;
+}
+
+export function markCommunityNotificationsRead(userId, ids = null) {
+  const now = Date.now();
+  if (Array.isArray(ids) && ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    getDb()
+      .prepare(
+        `UPDATE community_notifications SET read_at = ?
+         WHERE user_id = ? AND read_at IS NULL AND id IN (${placeholders})`,
+      )
+      .run(now, userId, ...ids);
+  } else {
+    getDb()
+      .prepare(
+        `UPDATE community_notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL`,
+      )
+      .run(now, userId);
+  }
+  return { ok: true };
+}

@@ -314,6 +314,29 @@ communityRouter.delete('/comments/:commentId', requireMember, (req, res) => {
   res.json({ ok: true });
 });
 
+// ===== Thông báo cộng đồng =====
+communityRouter.get('/notifications', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const items = communityService.listNotifications(req.user.sub, { beforeTs, limit });
+  const unread = communityService.countUnreadNotifications(req.user.sub);
+  const nextCursor =
+    items.length === Math.min(Math.max(limit, 1), 50)
+      ? items[items.length - 1].createdAt
+      : undefined;
+  res.json({ items, unread, nextCursor });
+});
+
+communityRouter.get('/notifications/unread-count', requireMember, (req, res) => {
+  res.json({ unread: communityService.countUnreadNotifications(req.user.sub) });
+});
+
+communityRouter.post('/notifications/read', requireMember, (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+  communityService.markNotificationsRead(req.user.sub, ids);
+  res.json({ unread: communityService.countUnreadNotifications(req.user.sub) });
+});
+
 communityRouter.post('/posts/:postId/like', requireMember, communityLikeLimiter, (req, res) => {
   const result = communityService.likePost(String(req.params.postId), req.user.sub);
   if (!result) {

@@ -21,8 +21,48 @@ import {
   listFollowedCommunityTopics,
   listCommunityThreadReplies,
   createCommunityThreadReply,
+  createCommunityNotification,
+  listCommunityNotifications,
+  countUnreadCommunityNotifications,
+  markCommunityNotificationsRead,
 } from '../db.js';
+import { randomUUID } from 'node:crypto';
 import { broadcastCommunityEvent, forumChannel } from '../communityDelivery.js';
+
+// Gửi thông báo + bắn realtime để cập nhật badge
+function notify({ userId, actorId, type, postId = null, commentId = null, threadId = null, preview = null }) {
+  if (!userId || userId === actorId) return;
+  try {
+    createCommunityNotification({
+      id: randomUUID(),
+      userId,
+      actorId,
+      type,
+      postId,
+      commentId,
+      threadId,
+      preview,
+    });
+    broadcastCommunityEvent(`notifications:${userId}`, {
+      type: 'community_notification',
+      unread: countUnreadCommunityNotifications(userId),
+    });
+  } catch {
+    /* không chặn luồng chính nếu thông báo lỗi */
+  }
+}
+
+export function listNotifications(userId, opts) {
+  return listCommunityNotifications(userId, opts);
+}
+
+export function countUnreadNotifications(userId) {
+  return countUnreadCommunityNotifications(userId);
+}
+
+export function markNotificationsRead(userId, ids) {
+  return markCommunityNotificationsRead(userId, ids);
+}
 
 export function listPosts(opts) {
   return listCommunityPosts(opts);
@@ -33,7 +73,9 @@ export function listFeed(opts) {
 }
 
 export function followUser(followerId, followingId) {
-  return followCommunityUser(followerId, followingId);
+  const result = followCommunityUser(followerId, followingId);
+  notify({ userId: followingId, actorId: followerId, type: 'follow' });
+  return result;
 }
 
 export function unfollowUser(followerId, followingId) {
@@ -64,6 +106,19 @@ export function addThreadReply(input) {
   const post = createCommunityThreadReply(input);
   if (post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post', post });
+    // Thông báo cho chủ bài gốc
+    if (input.parentPostId) {
+      const parent = getCommunityPostById(input.parentPostId, input.userId);
+      if (parent && parent.userId) {
+        notify({
+          userId: parent.userId,
+          actorId: input.userId,
+          type: 'reply',
+          postId: input.parentPostId,
+          preview: String(input.content || '').slice(0, 140),
+        });
+      }
+    }
   }
   return post;
 }
@@ -104,6 +159,18 @@ export function addComment(input) {
       postId: input.postId,
       comment,
     });
+    // Thông báo cho chủ bài viết
+    const post = getCommunityPostById(input.postId, input.userId);
+    if (post && post.userId) {
+      notify({
+        userId: post.userId,
+        actorId: input.userId,
+        type: 'comment',
+        postId: input.postId,
+        commentId: comment.id,
+        preview: String(input.content || '').slice(0, 140),
+      });
+    }
   }
   return comment;
 }
@@ -125,7 +192,15 @@ export function listBookmarks(userId, opts) {
 }
 
 export function likePost(postId, userId) {
-  return toggleCommunityPostLike(postId, userId);
+  const result = toggleCommunityPostLike(postId, userId);
+  // Chỉ thông báo khi vừa like (không phải bỏ like)
+  if (result && result.liked) {
+    const post = getCommunityPostById(postId, userId);
+    if (post && post.userId) {
+      notify({ userId: post.userId, actorId: userId, type: 'like', postId });
+    }
+  }
+  return result;
 }
 
 export function reportContent(input) {

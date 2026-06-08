@@ -172,6 +172,15 @@ export function attachWebSocketServer(wss) {
           ws.send(JSON.stringify({ type: 'community_joined', channel }));
           return;
         }
+        if (channel.startsWith('notifications:')) {
+          // Chỉ cho phép join channel thông báo của chính mình
+          const targetUserId = channel.slice('notifications:'.length);
+          if (targetUserId !== userId) return;
+          setCommunityWsUser(ws, userId, role);
+          joinCommunityChannel(channel, ws);
+          ws.send(JSON.stringify({ type: 'community_joined', channel }));
+          return;
+        }
         return;
       }
 
