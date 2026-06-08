@@ -1,4 +1,6 @@
+import { Link } from 'react-router';
 import { motion, useReducedMotion } from 'motion/react';
+import { MessageCircle, ArrowRight } from 'lucide-react';
 import { HeroSection } from '../components/HeroSection';
 import { SocialProofBar } from '../components/SocialProofBar';
 import { FeaturesSection } from '../components/FeaturesSection';
@@ -9,6 +11,7 @@ import { NewsletterForm } from '../components/NewsletterForm';
 import { LandingAmbient } from '../components/landing/LandingAmbient';
 import { LandingReveal } from '../components/landing/LandingReveal';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { ROUTES } from '../routes';
 
 export function LandingPage() {
   const reduce = useReducedMotion();
@@ -18,6 +21,43 @@ export function LandingPage() {
       <HeroSection />
       <SocialProofBar />
       <FeaturesSection />
+
+      {/* CTA giữa trang */}
+      <section className="px-6 py-16 md:py-20">
+        <motion.div
+          className="max-w-3xl mx-auto text-center space-y-6"
+          initial={reduce ? false : { opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-10% 0px' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <h2 className="text-2xl md:text-3xl font-bold" style={{ color: '#1A202C' }}>
+            Bắt đầu miễn phí — không cần đăng ký
+          </h2>
+          <p className="text-lg" style={{ color: 'rgba(26, 32, 44, 0.7)' }}>
+            Trò chuyện ẩn danh với AI ngay bây giờ, hoặc tạo tài khoản để lưu lịch sử và nhận kế hoạch cá nhân hóa.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+            <Link
+              to={ROUTES.app.chat}
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-full text-lg font-semibold shadow-lg shadow-teal-500/20 transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
+            >
+              <MessageCircle size={22} />
+              Chat với AI ngay
+            </Link>
+            <Link
+              to={ROUTES.auth.customerLogin}
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-full text-lg font-medium transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              style={{ color: '#1A202C', border: '2px solid rgba(26, 32, 44, 0.12)' }}
+            >
+              Tạo tài khoản miễn phí
+              <ArrowRight size={20} />
+            </Link>
+          </div>
+        </motion.div>
+      </section>
+
       <CommunitySection />
       <TrustDisclaimerSection />
       <section id="tu-van" className="relative px-6 py-20 md:py-28 scroll-mt-24 overflow-hidden">

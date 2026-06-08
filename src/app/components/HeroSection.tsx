@@ -41,8 +41,8 @@ export function HeroSection() {
 
             <motion.p
               variants={staggerItem}
-              className="text-xl md:text-2xl leading-relaxed opacity-60"
-              style={{ color: '#1A202C' }}
+              className="text-xl md:text-2xl leading-relaxed"
+              style={{ color: 'rgba(26, 32, 44, 0.75)' }}
             >
               Trợ lý AI thấu cảm kết hợp chuyên gia y tế. Theo dõi dinh dưỡng, sức khỏe tinh thần và nhận tư vấn 24/7.
             </motion.p>

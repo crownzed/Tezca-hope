@@ -1,46 +1,15 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router';
+import { Routes, Route, Navigate, useLocation, Outlet } from 'react-router';
+import { lazy, Suspense } from 'react';
 import { MarketingLayout } from './layouts/MarketingLayout';
 import { LandingPage } from './pages/LandingPage';
 import { MarketingNotFoundPage } from './pages/MarketingNotFoundPage';
 import { ROUTES } from './routes';
-import { ProductFeaturesPage } from './pages/marketing/ProductFeaturesPage';
-import { ProductSecurityPage } from './pages/marketing/ProductSecurityPage';
-import { ProductExpertsPage } from './pages/marketing/ProductExpertsPage';
-import { ProductPricingPage } from './pages/marketing/ProductPricingPage';
-import { LegalHubPage } from './pages/legal/LegalHubPage';
-import { PrivacyPolicyPage } from './pages/legal/PrivacyPolicyPage';
-import { TermsOfServicePage } from './pages/legal/TermsOfServicePage';
-import { CommunityGuidelinesPage } from './pages/legal/CommunityGuidelinesPage';
-import { CookiePolicyPage } from './pages/legal/CookiePolicyPage';
-import { GdprNoticePage } from './pages/legal/GdprNoticePage';
 import { UserAppLayout } from './layouts/UserAppLayout';
 import { CustomerAppGate } from './layouts/CustomerAppGate';
-import { AppHome } from './pages/app/AppHome';
-import { BmiPage } from './pages/app/BmiPage';
-import { MoodJournalPage } from './pages/app/MoodJournalPage';
-import { AiChatPage } from './pages/app/AiChatPage';
-import { PlansPage } from './pages/app/PlansPage';
-import { RewardsPage } from './pages/app/RewardsPage';
-import { CustomerExpertChatPage } from './pages/app/CustomerExpertChatPage';
-import { ChooseExpertPage } from './pages/app/ChooseExpertPage';
 import { CommunityLayout } from './layouts/CommunityLayout';
-import { CommunityForumPage } from './pages/community/CommunityForumPage';
-import { CommunityRoomsPage } from './pages/community/CommunityRoomsPage';
-import { CommunityAnnouncementsPage } from './pages/community/CommunityAnnouncementsPage';
-import { CommunityDmPage } from './pages/community/CommunityDmPage';
 import { ExpertLayout } from './layouts/ExpertLayout';
-import { LoginHubPage, CustomerLoginPage, ExpertLoginPage } from './pages/DualLoginPage';
-import { AdminLoginPage } from './pages/admin/AdminLoginPage';
-import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordResetPages';
-import { ExpertCustomerListPage } from './pages/expert/ExpertCustomerListPage';
-import { ExpertCustomerWorkspacePage } from './pages/expert/ExpertCustomerWorkspacePage';
-import { DoctorDashboardPage } from './pages/expert/DoctorDashboardPage';
-import { ExpertSettingsPage } from './pages/expert/ExpertSettingsPage';
-import { ExpertWeeklyReportPage } from './pages/expert/ExpertWeeklyReportPage';
 import { AdminLayout } from './layouts/AdminLayout';
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { AdminExpertManagementPage } from './pages/admin/AdminExpertManagementPage';
-import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
+import { LoginHubPage, CustomerLoginPage, ExpertLoginPage } from './pages/DualLoginPage';
 import {
   LegacyAppRedirect,
   LegacyExpertDoctorDeskCustomerRedirect,
@@ -50,6 +19,51 @@ import {
   PrefixAliasRedirect,
 } from './components/LegacyPathRedirect';
 import { useRouteDocument } from './hooks/useRouteDocument';
+
+// Lazy-loaded pages (code-split)
+const ProductFeaturesPage = lazy(() => import('./pages/marketing/ProductFeaturesPage').then(m => ({ default: m.ProductFeaturesPage })));
+const ProductSecurityPage = lazy(() => import('./pages/marketing/ProductSecurityPage').then(m => ({ default: m.ProductSecurityPage })));
+const ProductExpertsPage = lazy(() => import('./pages/marketing/ProductExpertsPage').then(m => ({ default: m.ProductExpertsPage })));
+const ProductPricingPage = lazy(() => import('./pages/marketing/ProductPricingPage').then(m => ({ default: m.ProductPricingPage })));
+const LegalHubPage = lazy(() => import('./pages/legal/LegalHubPage').then(m => ({ default: m.LegalHubPage })));
+const PrivacyPolicyPage = lazy(() => import('./pages/legal/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
+const TermsOfServicePage = lazy(() => import('./pages/legal/TermsOfServicePage').then(m => ({ default: m.TermsOfServicePage })));
+const CommunityGuidelinesPage = lazy(() => import('./pages/legal/CommunityGuidelinesPage').then(m => ({ default: m.CommunityGuidelinesPage })));
+const CookiePolicyPage = lazy(() => import('./pages/legal/CookiePolicyPage').then(m => ({ default: m.CookiePolicyPage })));
+const GdprNoticePage = lazy(() => import('./pages/legal/GdprNoticePage').then(m => ({ default: m.GdprNoticePage })));
+const AppHome = lazy(() => import('./pages/app/AppHome').then(m => ({ default: m.AppHome })));
+const BmiPage = lazy(() => import('./pages/app/BmiPage').then(m => ({ default: m.BmiPage })));
+const MoodJournalPage = lazy(() => import('./pages/app/MoodJournalPage').then(m => ({ default: m.MoodJournalPage })));
+const AiChatPage = lazy(() => import('./pages/app/AiChatPage').then(m => ({ default: m.AiChatPage })));
+const PlansPage = lazy(() => import('./pages/app/PlansPage').then(m => ({ default: m.PlansPage })));
+const RewardsPage = lazy(() => import('./pages/app/RewardsPage').then(m => ({ default: m.RewardsPage })));
+const CustomerExpertChatPage = lazy(() => import('./pages/app/CustomerExpertChatPage').then(m => ({ default: m.CustomerExpertChatPage })));
+const ChooseExpertPage = lazy(() => import('./pages/app/ChooseExpertPage').then(m => ({ default: m.ChooseExpertPage })));
+const CommunityForumPage = lazy(() => import('./pages/community/CommunityForumPage').then(m => ({ default: m.CommunityForumPage })));
+const CommunityRoomsPage = lazy(() => import('./pages/community/CommunityRoomsPage').then(m => ({ default: m.CommunityRoomsPage })));
+const CommunityAnnouncementsPage = lazy(() => import('./pages/community/CommunityAnnouncementsPage').then(m => ({ default: m.CommunityAnnouncementsPage })));
+const CommunityDmPage = lazy(() => import('./pages/community/CommunityDmPage').then(m => ({ default: m.CommunityDmPage })));
+const ExpertCustomerListPage = lazy(() => import('./pages/expert/ExpertCustomerListPage').then(m => ({ default: m.ExpertCustomerListPage })));
+const ExpertCustomerWorkspacePage = lazy(() => import('./pages/expert/ExpertCustomerWorkspacePage').then(m => ({ default: m.ExpertCustomerWorkspacePage })));
+const DoctorDashboardPage = lazy(() => import('./pages/expert/DoctorDashboardPage').then(m => ({ default: m.DoctorDashboardPage })));
+const ExpertSettingsPage = lazy(() => import('./pages/expert/ExpertSettingsPage').then(m => ({ default: m.ExpertSettingsPage })));
+const ExpertWeeklyReportPage = lazy(() => import('./pages/expert/ExpertWeeklyReportPage').then(m => ({ default: m.ExpertWeeklyReportPage })));
+const AdminLoginPage = lazy(() => import('./pages/admin/AdminLoginPage').then(m => ({ default: m.AdminLoginPage })));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const AdminExpertManagementPage = lazy(() => import('./pages/admin/AdminExpertManagementPage').then(m => ({ default: m.AdminExpertManagementPage })));
+const AdminCustomersPage = lazy(() => import('./pages/admin/AdminCustomersPage').then(m => ({ default: m.AdminCustomersPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/PasswordResetPages').then(m => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/PasswordResetPages').then(m => ({ default: m.ResetPasswordPage })));
+const CustomerDashboardPage = lazy(() => import('./pages/app/CustomerDashboardPage').then(m => ({ default: m.CustomerDashboardPage })));
+
+// Loading fallback
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 border-3 border-teal-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function CommunityIndexRedirect() {
   const { search } = useLocation();
@@ -66,6 +80,7 @@ function AppRoutes() {
   useRouteDocument();
 
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/ung-dung/*" element={<PrefixAliasRedirect fromPrefix="/ung-dung" toPrefix="/app" />} />
 
@@ -203,6 +218,7 @@ function AppRoutes() {
 
       <Route path="*" element={<MarketingNotFoundPage />} />
     </Routes>
+    </Suspense>
   );
 }
 
