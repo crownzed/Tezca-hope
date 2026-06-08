@@ -6,6 +6,7 @@ import { MarketingNotFoundPage } from './pages/MarketingNotFoundPage';
 import { ROUTES } from './routes';
 import { UserAppLayout } from './layouts/UserAppLayout';
 import { CustomerAppGate } from './layouts/CustomerAppGate';
+import { OnboardingGate } from './layouts/OnboardingGate';
 import { CommunityLayout } from './layouts/CommunityLayout';
 import { ExpertLayout } from './layouts/ExpertLayout';
 import { AdminLayout } from './layouts/AdminLayout';
@@ -134,6 +135,7 @@ function AppRoutes() {
       {/* —— Ứng dụng khách hàng (phân cấp) —— */}
       <Route path="/app" element={<UserAppLayout />}>
         <Route element={<CustomerAppGate />}>
+          <Route element={<OnboardingGate />}>
           <Route index element={<Navigate to={ROUTES.app.dashboard} replace />} />
           <Route path="trung-tam-ky-luat" element={<AppHome />} />
 
@@ -174,6 +176,7 @@ function AppRoutes() {
           <Route path="rewards" element={<LegacyAppRedirect />} />
 
           <Route path="*" element={<Navigate to={ROUTES.app.dashboard} replace />} />
+          </Route>
         </Route>
       </Route>
 

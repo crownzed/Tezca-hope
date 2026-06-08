@@ -344,6 +344,26 @@ export function AiChatPage() {
               </div>
             )}
 
+            {/* Smart CTA — gợi ý đăng nhập sau 3 tin nhắn (guest) */}
+            {!canPersist && messages.length >= 3 && messages.length % 4 === 3 && (
+              <div
+                className="mx-auto max-w-sm p-4 rounded-2xl text-center space-y-2"
+                style={{ backgroundColor: 'rgba(45, 212, 191, 0.08)', border: '1px solid rgba(45, 212, 191, 0.2)' }}
+              >
+                <p className="text-sm font-medium m-0" style={{ color: '#1A202C' }}>
+                  💡 Đăng nhập để lưu lịch sử chat và nhận kế hoạch cá nhân hóa
+                </p>
+                <Link
+                  to={ROUTES.auth.customerLogin}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold no-underline px-4 py-2 rounded-full transition-transform hover:scale-[1.03]"
+                  style={{ backgroundColor: '#2DD4BF', color: '#1A202C' }}
+                >
+                  <LogIn size={14} />
+                  Đăng nhập miễn phí
+                </Link>
+              </div>
+            )}
+
             {historyLoading && messages.length === 0 && (
               <p className="text-sm text-center py-10 opacity-50 m-0" style={{ color: '#1A202C' }}>
                 Đang tải lịch sử hội thoại…
