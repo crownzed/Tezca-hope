@@ -153,6 +153,57 @@ communityRouter.delete('/posts/:postId', requireMember, (req, res) => {
   res.json({ ok: true });
 });
 
+communityRouter.patch('/posts/:postId', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const content = String(req.body?.content || '').trim();
+  const imgResult = validateImageUrl(req.body?.imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  if (!content || content.length > 4000) {
+    res.status(400).json({ error: 'Nội dung bài viết không hợp lệ (tối đa 4000 ký tự)' });
+    return;
+  }
+  const result = communityService.editPost({
+    postId,
+    userId: req.user.sub,
+    content,
+    imageUrl: imgResult.sanitized,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể sửa bài viết này' });
+    return;
+  }
+  res.json({ post: result.post });
+});
+
+communityRouter.post('/posts/:postId/bookmark', requireMember, (req, res) => {
+  const result = communityService.toggleBookmark(String(req.params.postId), req.user.sub);
+  if (!result) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json(result);
+});
+
+communityRouter.get('/bookmarks', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const pageLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 30;
+  const posts = communityService.listBookmarks(req.user.sub, {
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    limit: pageLimit,
+  });
+  const nextCursor = posts.length >= pageLimit ? String(posts[posts.length - 1].createdAt) : undefined;
+  res.json({ posts, nextCursor });
+});
+
 communityRouter.get('/posts/:postId/comments', requireMember, (req, res) => {
   const postId = String(req.params.postId);
   const post = communityService.getPost(postId, req.user.sub);
@@ -219,6 +270,48 @@ communityRouter.post('/posts/:postId/comments', requireMember, communityCommentL
     return;
   }
   res.status(201).json({ comment });
+});
+
+communityRouter.patch('/comments/:commentId', requireMember, (req, res) => {
+  const commentId = String(req.params.commentId);
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 1000) {
+    res.status(400).json({ error: 'Nội dung bình luận không hợp lệ' });
+    return;
+  }
+  const result = communityService.editComment({
+    commentId,
+    userId: req.user.sub,
+    content,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bình luận' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể sửa bình luận này' });
+    return;
+  }
+  res.json({ comment: result.comment });
+});
+
+communityRouter.delete('/comments/:commentId', requireMember, (req, res) => {
+  const commentId = String(req.params.commentId);
+  const result = communityService.removeComment({
+    commentId,
+    userId: req.user.sub,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bình luận' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể xóa bình luận này' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 communityRouter.post('/posts/:postId/like', requireMember, communityLikeLimiter, (req, res) => {

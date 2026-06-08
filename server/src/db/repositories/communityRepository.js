@@ -9,6 +9,13 @@ function mapCommunityPostRow(row, viewerId) {
           .get(row.id, viewerId),
       )
     : false;
+  const bookmarked = viewerId
+    ? Boolean(
+        getDb()
+          .prepare(`SELECT 1 FROM community_post_bookmarks WHERE post_id = ? AND user_id = ?`)
+          .get(row.id, viewerId),
+      )
+    : false;
   return {
     id: row.id,
     userId: row.user_id,
@@ -19,9 +26,11 @@ function mapCommunityPostRow(row, viewerId) {
     imageUrl: row.image_url || '',
     likesCount: row.likes_count,
     likedByMe: liked,
+    bookmarkedByMe: bookmarked,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    editedAt: row.edited_at || null,
     commentCount: row.comment_count ?? 0,
     threadReplyCount: row.thread_reply_count ?? 0,
     parentPostId: row.parent_post_id || null,
@@ -134,6 +143,20 @@ export function deleteCommunityPost(postId, userId, isAdmin = false) {
   if (!isAdmin && row.user_id !== userId) return false;
   getDb().prepare(`DELETE FROM community_posts WHERE id = ?`).run(postId);
   return true;
+}
+
+/** Sửa nội dung bài viết của chính mình (hoặc admin). Trả post sau khi sửa hoặc null. */
+export function updateCommunityPost({ postId, userId, content, imageUrl, isAdmin = false }) {
+  const row = getDb()
+    .prepare(`SELECT user_id FROM community_posts WHERE id = ? AND status = 'published'`)
+    .get(postId);
+  if (!row) return { error: 'not_found' };
+  if (!isAdmin && row.user_id !== userId) return { error: 'forbidden' };
+  const now = Date.now();
+  getDb()
+    .prepare(`UPDATE community_posts SET content = ?, image_url = ?, edited_at = ?, updated_at = ? WHERE id = ?`)
+    .run(content, imageUrl, now, now, postId);
+  return { post: getCommunityPostById(postId, userId) };
 }
 
 export function listCommunityComments(postId, { includeHidden = false } = {}) {
@@ -320,9 +343,90 @@ export function deleteCommunityComment(commentId) {
 
 export function getCommunityCommentById(commentId) {
   const row = getDb()
-    .prepare(`SELECT id, post_id AS postId FROM community_comments WHERE id = ?`)
+    .prepare(`SELECT id, post_id AS postId, user_id AS userId FROM community_comments WHERE id = ?`)
     .get(commentId);
   return row || null;
+}
+
+/** Sửa bình luận của chính mình (hoặc admin). Trả comment sau khi sửa hoặc mã lỗi. */
+export function updateCommunityComment({ commentId, userId, content, isAdmin = false }) {
+  const row = getDb()
+    .prepare(`SELECT user_id FROM community_comments WHERE id = ? AND status = 'published'`)
+    .get(commentId);
+  if (!row) return { error: 'not_found' };
+  if (!isAdmin && row.user_id !== userId) return { error: 'forbidden' };
+  const now = Date.now();
+  getDb()
+    .prepare(`UPDATE community_comments SET content = ?, edited_at = ? WHERE id = ?`)
+    .run(content, now, commentId);
+  const updated = getDb()
+    .prepare(
+      `SELECT c.*, u.name AS author_name, u.role AS author_role
+       FROM community_comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`,
+    )
+    .get(commentId);
+  return {
+    comment: {
+      id: updated.id,
+      postId: updated.post_id,
+      userId: updated.user_id,
+      authorName: updated.author_name,
+      authorRole: updated.author_role,
+      content: updated.content,
+      status: updated.status,
+      createdAt: updated.created_at,
+      editedAt: updated.edited_at || null,
+    },
+  };
+}
+
+/** Xoá bình luận của chính mình (hoặc admin). */
+export function deleteOwnCommunityComment(commentId, userId, isAdmin = false) {
+  const row = getDb().prepare(`SELECT user_id FROM community_comments WHERE id = ?`).get(commentId);
+  if (!row) return { error: 'not_found' };
+  if (!isAdmin && row.user_id !== userId) return { error: 'forbidden' };
+  getDb().prepare(`DELETE FROM community_comments WHERE id = ?`).run(commentId);
+  return { ok: true };
+}
+
+/** Bật/tắt bookmark bài viết. Trả { bookmarked } hoặc null nếu không tìm thấy post. */
+export function toggleCommunityPostBookmark(postId, userId) {
+  const post = getDb().prepare(`SELECT id FROM community_posts WHERE id = ?`).get(postId);
+  if (!post) return null;
+  const existing = getDb()
+    .prepare(`SELECT 1 FROM community_post_bookmarks WHERE post_id = ? AND user_id = ?`)
+    .get(postId, userId);
+  if (existing) {
+    getDb()
+      .prepare(`DELETE FROM community_post_bookmarks WHERE post_id = ? AND user_id = ?`)
+      .run(postId, userId);
+    return { bookmarked: false };
+  }
+  getDb()
+    .prepare(`INSERT OR IGNORE INTO community_post_bookmarks (post_id, user_id, created_at) VALUES (?, ?, ?)`)
+    .run(postId, userId, Date.now());
+  return { bookmarked: true };
+}
+
+/** Danh sách bài đã lưu của user (mới nhất trước). */
+export function listCommunityBookmarks(userId, { beforeTs, limit = 30 } = {}) {
+  const params = [userId];
+  let sql = `
+    SELECT p.*, u.name AS author_name, u.role AS author_role,
+      ${POST_STATS_SQL}
+    FROM community_post_bookmarks b
+    JOIN community_posts p ON p.id = b.post_id
+    JOIN users u ON u.id = p.user_id
+    WHERE b.user_id = ? AND p.status = 'published'
+  `;
+  if (beforeTs) {
+    sql += ` AND b.created_at < ?`;
+    params.push(beforeTs);
+  }
+  sql += ` ORDER BY b.created_at DESC LIMIT ?`;
+  params.push(Math.min(Math.max(limit, 1), 50));
+  const rows = getDb().prepare(sql).all(...params);
+  return rows.map((r) => mapCommunityPostRow(r, userId));
 }
 
 export function followCommunityUser(followerId, followingId) {

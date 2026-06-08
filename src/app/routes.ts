@@ -106,6 +106,7 @@ export const ROUTES = {
     rooms: '/cong-dong/phong-chat',
     announcements: '/cong-dong/thong-bao',
     dm: '/cong-dong/tin-nhan',
+    bookmarks: '/cong-dong/da-luu',
   },
 } as const;
 
