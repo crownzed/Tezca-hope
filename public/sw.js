@@ -3,7 +3,7 @@
  * File này được serve từ /sw.js (public folder).
  */
 
-const CACHE_NAME = 'tezca-v1';
+const CACHE_NAME = 'tezca-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -27,24 +27,45 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first, fallback to cache
+// Fetch: HTML luôn network-first (tránh kẹt bản cũ); asset có hash thì cache-first
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Không cache API calls
+  // Không cache API / websocket
   if (request.url.includes('/api/') || request.url.includes('/ws')) return;
+  if (request.method !== 'GET') return;
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Cache successful GET responses
-        if (request.method === 'GET' && response.status === 200) {
+  const isNavigation =
+    request.mode === 'navigate' ||
+    (request.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigation) {
+    // HTML: luôn lấy bản mới nhất; offline mới fallback cache
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
+          caches.open(CACHE_NAME).then((cache) => cache.put('/', clone));
+          return response;
+        })
+        .catch(() => caches.match(request).then((r) => r || caches.match('/'))),
+    );
+    return;
+  }
+
+  // Asset tĩnh (JS/CSS/ảnh có hash) — cache-first cho nhanh, bất biến nên an toàn
+  event.respondWith(
+    caches.match(request).then(
+      (cached) =>
+        cached ||
+        fetch(request).then((response) => {
+          if (response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        }),
+    ),
   );
 });
 
