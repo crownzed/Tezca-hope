@@ -1,7 +1,7 @@
 import { loadEnv } from './loadEnv.js';
 import express from 'express';
 import cors from 'cors';
-import { initDb, ensureAdminFromEnv } from './db.js';
+import { initDb, ensureAdminFromEnv, maybeSync } from './db.js';
 import { assertProductionSecrets } from './secrets.js';
 import { securityHeaders, corsOriginCallback, errorHandler } from './security.js';
 import { vercelApiPathPrefix, inferAuthOpFromPath } from './vercelPath.js';
@@ -63,6 +63,14 @@ export async function createApp() {
   app.use(vercelApiPathPrefix());
   app.use((req, _res, next) => {
     inferAuthOpFromPath(req);
+    next();
+  });
+
+  // Trên serverless, replica cục bộ chỉ sync lúc cold start. Pull thay đổi mới
+  // từ remote trước mỗi GET (có throttle) để đọc dữ liệu vừa được instance khác
+  // ghi — vd: bài cộng đồng vừa đăng. No-op khi chạy SQLite local.
+  app.use((req, _res, next) => {
+    if (req.method === 'GET') maybeSync();
     next();
   });
 

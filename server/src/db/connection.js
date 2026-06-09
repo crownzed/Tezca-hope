@@ -62,6 +62,8 @@ export function getDb() {
     dbInstance = new LibsqlDatabase(localPath, {
       syncUrl: TURSO_URL,
       authToken: TURSO_TOKEN,
+      // Tự pull thay đổi từ remote về replica mỗi 60s (cho instance warm).
+      syncInterval: 60,
     });
     dbInstance.pragma('journal_mode = WAL');
     dbInstance.pragma('foreign_keys = ON');
@@ -111,6 +113,34 @@ export async function initDb() {
 /** Kiểm tra đang dùng Turso hay không */
 export function isUsingTurso() {
   return USE_TURSO;
+}
+
+let lastSyncAt = 0;
+const SYNC_THROTTLE_MS = 2000;
+
+/**
+ * Pull thay đổi mới nhất từ remote Turso về replica cục bộ.
+ *
+ * Lý do cần thiết: trên serverless (Vercel) mỗi instance giữ một bản replica
+ * riêng, chỉ được sync() một lần lúc cold start. Writes luôn đẩy thẳng lên
+ * remote primary, nhưng instance KHÁC sẽ không thấy dữ liệu mới (vd: bài
+ * cộng đồng vừa đăng) cho tới khi nó sync lại — gây cảm giác "không lưu được".
+ * Gọi hàm này trước các read để đọc dữ liệu mới, có throttle để tránh sync
+ * quá dày (mỗi request một round-trip mạng).
+ *
+ * No-op khi dùng better-sqlite3 local (đã là nguồn sự thật duy nhất).
+ * @param {{ force?: boolean }} [opts]
+ */
+export function maybeSync({ force = false } = {}) {
+  if (!USE_TURSO || !dbInstance || typeof dbInstance.sync !== 'function') return;
+  const now = Date.now();
+  if (!force && now - lastSyncAt < SYNC_THROTTLE_MS) return;
+  lastSyncAt = now;
+  try {
+    dbInstance.sync();
+  } catch (err) {
+    console.warn('[db] sync failed:', err instanceof Error ? err.message : err);
+  }
 }
 
 /** @param {(db: any) => any} fn */

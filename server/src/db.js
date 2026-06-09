@@ -4,7 +4,7 @@
 import bcrypt from 'bcryptjs';
 import { normalizeEmail } from './validate.js';
 import { DbError, mapSqliteError } from './dbErrors.js';
-import { getDb, initDb, runInTransaction, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID } from './db/connection.js';
+import { getDb, initDb, runInTransaction, maybeSync, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID } from './db/connection.js';
 import { getDatabaseInfo, runDatabaseDiagnostics } from './db/health.js';
 import { grantUserRole } from './db/customerDomain.js';
 export {
@@ -50,7 +50,7 @@ export {
   revokeUserRole,
 } from './db/customerDomain.js';
 
-export { getDb, initDb, runInTransaction, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID, getDatabaseInfo, runDatabaseDiagnostics };
+export { getDb, initDb, runInTransaction, maybeSync, DB_FILE, DEMO_EXPERT_ID, DEMO_PATIENT_ID, getDatabaseInfo, runDatabaseDiagnostics };
 
 export function findUserByEmail(email) {
   const normalized = normalizeEmail(email);
