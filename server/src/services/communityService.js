@@ -25,6 +25,7 @@ import {
   listCommunityNotifications,
   countUnreadCommunityNotifications,
   markCommunityNotificationsRead,
+  searchCommunityPosts,
 } from '../db.js';
 import { randomUUID } from 'node:crypto';
 import { broadcastCommunityEvent, forumChannel } from '../communityDelivery.js';

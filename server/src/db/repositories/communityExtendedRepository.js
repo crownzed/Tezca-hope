@@ -60,7 +60,10 @@ export function getOrCreateCommunityDmThread(userId1, userId2) {
   if (userId1 === userId2) return null;
   const [userA, userB] = dmPair(userId1, userId2);
   const existing = getDb()
-    .prepare(`SELECT id, user_a, user_b, created_at, updated_at FROM community_dm_threads WHERE user_a = ? AND user_b = ?`)
+    .prepare(
+      `SELECT id, user_a, user_b, created_at, updated_at, last_read_a, last_read_b
+       FROM community_dm_threads WHERE user_a = ? AND user_b = ?`,
+    )
     .get(userA, userB);
   if (existing) return mapDmThreadRow(existing, userId1);
 
@@ -72,7 +75,10 @@ export function getOrCreateCommunityDmThread(userId1, userId2) {
     )
     .run(id, userA, userB, now, now);
   const row = getDb()
-    .prepare(`SELECT id, user_a, user_b, created_at, updated_at FROM community_dm_threads WHERE id = ?`)
+    .prepare(
+      `SELECT id, user_a, user_b, created_at, updated_at, last_read_a, last_read_b
+       FROM community_dm_threads WHERE id = ?`,
+    )
     .get(id);
   return mapDmThreadRow(row, userId1);
 }
@@ -116,7 +122,8 @@ function mapDmThreadRow(row, viewerId) {
 export function listCommunityDmThreads(viewerId) {
   const rows = getDb()
     .prepare(
-      `SELECT id, user_a, user_b, created_at, updated_at FROM community_dm_threads
+      `SELECT id, user_a, user_b, created_at, updated_at, last_read_a, last_read_b
+       FROM community_dm_threads
        WHERE user_a = ? OR user_b = ?
        ORDER BY updated_at DESC LIMIT 80`,
     )
@@ -126,7 +133,10 @@ export function listCommunityDmThreads(viewerId) {
 
 export function getCommunityDmThreadForUser(threadId, viewerId) {
   const row = getDb()
-    .prepare(`SELECT id, user_a, user_b, created_at, updated_at FROM community_dm_threads WHERE id = ?`)
+    .prepare(
+      `SELECT id, user_a, user_b, created_at, updated_at, last_read_a, last_read_b
+       FROM community_dm_threads WHERE id = ?`,
+    )
     .get(threadId);
   if (!row) return null;
   if (row.user_a !== viewerId && row.user_b !== viewerId) return null;

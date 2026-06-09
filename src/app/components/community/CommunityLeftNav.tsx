@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router';
-import { Bookmark, Home, Megaphone, MessageCircle, MessagesSquare, ScrollText, Users } from 'lucide-react';
+import { Bell, Bookmark, Home, Megaphone, MessageCircle, MessagesSquare, ScrollText, Search, Users } from 'lucide-react';
 import { ROUTES } from '../../routes';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
@@ -8,10 +8,17 @@ const navItems = [
   { to: ROUTES.community.rooms, label: 'Phòng chat', icon: MessagesSquare, end: true },
   { to: ROUTES.community.announcements, label: '#thong-bao', icon: Megaphone, end: true },
   { to: ROUTES.community.dm, label: 'Tin nhắn riêng', icon: MessageCircle, end: true },
+  { to: ROUTES.community.search, label: 'Tìm kiếm', icon: Search, end: true },
+  { to: ROUTES.community.bookmarks, label: 'Đã lưu', icon: Bookmark, end: true },
+  { to: ROUTES.community.notifications, label: 'Thông báo', icon: Bell, end: true },
   { to: ROUTES.legal.community, label: 'Quy tắc cộng đồng', icon: ScrollText, end: true },
 ] as const;
 
-export function CommunityLeftNav() {
+type CommunityLeftNavProps = {
+  unread?: number;
+};
+
+export function CommunityLeftNav({ unread = 0 }: CommunityLeftNavProps) {
   return (
     <aside
       className="hidden lg:flex flex-col w-56 shrink-0 sticky top-28 self-start rounded-2xl border p-4"
@@ -25,6 +32,7 @@ export function CommunityLeftNav() {
         <ul className="list-none m-0 p-0 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const isNotificationItem = item.to === ROUTES.community.notifications;
             return (
               <li key={item.to}>
                 <NavLink to={item.to} end={item.end} className="block no-underline">
@@ -38,7 +46,15 @@ export function CommunityLeftNav() {
                       }
                     >
                       <Icon size={18} aria-hidden />
-                      {item.label}
+                      <span className="flex-1 min-w-0">{item.label}</span>
+                      {isNotificationItem && unread > 0 && (
+                        <span
+                          className="inline-flex min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold items-center justify-center text-white"
+                          style={{ backgroundColor: '#ef4444' }}
+                        >
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
                     </span>
                   )}
                 </NavLink>

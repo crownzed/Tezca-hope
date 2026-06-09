@@ -128,8 +128,9 @@ export function CommunityPage({ mode }: CommunityPageProps) {
   }, [token, topicFilter, feedMode, nextCursor, loadingMore]);
 
   useEffect(() => {
+    if (tab !== 'forum') return;
     loadPosts();
-  }, [loadPosts]);
+  }, [loadPosts, tab]);
 
   useEffect(() => {
     if (!token || tab !== 'forum') return;
@@ -644,6 +645,7 @@ export function CommunityPage({ mode }: CommunityPageProps) {
         <div>
           <GroupChatBox
             currentUserName={user?.name || 'Bạn'}
+            currentUserRole={user?.role || 'user'}
             roomTopic={roomTopic}
             messages={roomMessages}
             draft={roomDraft}

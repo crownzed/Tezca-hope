@@ -1,8 +1,8 @@
-import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { DirectMessagesPanel } from '../../components/community/DirectMessagesPanel';
 
 export function CommunityDmPage() {
-  const { token, user } = useCustomerAuth();
+  const { token, user } = useAnyCommunitySession();
   if (!user?.id) return null;
   return (
     <DirectMessagesPanel

@@ -141,6 +141,7 @@ function CustomerLoginPanel() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
 
   if (user) {
@@ -183,12 +184,21 @@ function CustomerLoginPanel() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setBusy(true);
     try {
-      if (mode === 'login') await login(email, password);
-      else await register(email, password, name || undefined);
-      const from = (location.state as { from?: string } | null)?.from;
-      navigate(resolveCustomerPostLoginPath(from), { replace: true });
+      if (mode === 'login') {
+        await login(email, password);
+        const from = (location.state as { from?: string } | null)?.from;
+        navigate(resolveCustomerPostLoginPath(from), { replace: true });
+        return;
+      }
+
+      await register(email, password, name || undefined);
+      setMode('login');
+      setPassword('');
+      setName('');
+      setSuccess('Tạo tài khoản thành công. Đăng nhập để bắt đầu luồng hướng dẫn.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã có lỗi');
     } finally {
@@ -203,6 +213,7 @@ function CustomerLoginPanel() {
           Đã đặt lại mật khẩu. Hãy đăng nhập bằng mật khẩu mới.
         </FormAlert>
       )}
+      {success && <FormAlert variant="success" className="mb-4">{success}</FormAlert>}
       <form onSubmit={submit} className="space-y-4">
         {mode === 'register' && (
           <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
@@ -262,7 +273,11 @@ function CustomerLoginPanel() {
         type="button"
         className="mt-4 text-sm w-full text-center opacity-70 hover:opacity-100 bg-transparent border-0 cursor-pointer"
         style={{ color: '#1A202C' }}
-        onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+        onClick={() => {
+          setError('');
+          setSuccess('');
+          setMode(mode === 'login' ? 'register' : 'login');
+        }}
       >
         {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
       </button>

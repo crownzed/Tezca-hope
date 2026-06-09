@@ -26,6 +26,7 @@ function formatTime(ts: number) {
 
 type GroupChatBoxProps = {
   currentUserName: string;
+  currentUserRole: string;
   roomTopic: CommunityRoomTopic;
   messages: RoomChatMessage[];
   draft: string;
@@ -40,6 +41,7 @@ type GroupChatBoxProps = {
 
 export function GroupChatBox({
   currentUserName,
+  currentUserRole,
   roomTopic,
   messages,
   draft,
@@ -85,10 +87,10 @@ export function GroupChatBox({
     });
     const hasCurrent = members.some((item) => item.name === currentUserName);
     if (!hasCurrent) {
-      members.unshift({ name: currentUserName, role: 'user', lastAt: Date.now(), online: true });
+      members.unshift({ name: currentUserName, role: currentUserRole, lastAt: Date.now(), online: true });
     }
     return members;
-  }, [currentUserName, messages, onlineMembers]);
+  }, [currentUserName, currentUserRole, messages, onlineMembers]);
 
   useEffect(() => {
     roomEndRef.current?.scrollIntoView({ behavior: 'smooth' });

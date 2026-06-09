@@ -8,6 +8,7 @@ import { UserAppLayout } from './layouts/UserAppLayout';
 import { CustomerAppGate } from './layouts/CustomerAppGate';
 import { OnboardingGate } from './layouts/OnboardingGate';
 import { CommunityLayout } from './layouts/CommunityLayout';
+import { CommunityGate } from './layouts/CommunityGate';
 import { ExpertLayout } from './layouts/ExpertLayout';
 import { AdminLayout } from './layouts/AdminLayout';
 import { LoginHubPage, CustomerLoginPage, ExpertLoginPage } from './pages/DualLoginPage';
@@ -126,7 +127,7 @@ function AppRoutes() {
 
       {/* —— Cộng đồng (khu chức năng riêng) —— */}
       <Route path="/cong-dong" element={<CommunityLayout />}>
-        <Route element={<CustomerAppGate />}>
+        <Route element={<CommunityGate />}>
           <Route index element={<CommunityIndexRedirect />} />
           <Route path="dien-dan" element={<CommunityForumPage />} />
           <Route path="phong-chat" element={<CommunityRoomsPage />} />

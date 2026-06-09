@@ -23,7 +23,9 @@ export function CommunitySearchPage() {
   // Trạng thái bình luận cho kết quả
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, ForumComment[]>>({});
+  const [threadReplies, setThreadReplies] = useState<Record<string, ForumPost[]>>({});
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+  const [threadReplyDraft, setThreadReplyDraft] = useState<Record<string, string>>({});
 
   const runSearch = useCallback(
     async (e?: React.FormEvent) => {
@@ -109,6 +111,15 @@ export function CommunitySearchPage() {
     setComments((c) => ({ ...c, [postId]: r.comments }));
   };
 
+  const loadThreadReplies = async (postId: string) => {
+    if (!token) return;
+    const r = await apiFetch<{ replies: ForumPost[] }>(
+      `/api/community/posts/${encodeURIComponent(postId)}/replies`,
+      { token },
+    );
+    setThreadReplies((tr) => ({ ...tr, [postId]: r.replies }));
+  };
+
   const toggleComments = (postId: string) => {
     if (expandedPost === postId) {
       setExpandedPost(null);
@@ -116,6 +127,7 @@ export function CommunitySearchPage() {
     }
     setExpandedPost(postId);
     if (!comments[postId]) loadComments(postId);
+    if (!threadReplies[postId]) loadThreadReplies(postId);
   };
 
   const submitComment = async (postId: string) => {
@@ -129,6 +141,35 @@ export function CommunitySearchPage() {
     });
     setCommentDraft((d) => ({ ...d, [postId]: '' }));
     await loadComments(postId);
+  };
+
+  const submitThreadReply = async (postId: string) => {
+    if (!token) return;
+    const text = (threadReplyDraft[postId] || '').trim();
+    if (!text) return;
+    const r = await apiFetch<{ post: ForumPost }>(
+      `/api/community/posts/${encodeURIComponent(postId)}/reply`,
+      {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ content: text }),
+      },
+    );
+    setThreadReplyDraft((d) => ({ ...d, [postId]: '' }));
+    setThreadReplies((tr) => ({
+      ...tr,
+      [postId]: [...(tr[postId] || []), r.post],
+    }));
+  };
+
+  const reportPost = async (postId: string) => {
+    if (!token || !window.confirm('Báo cáo bài viết này?')) return;
+    await apiFetch(`/api/community/posts/${encodeURIComponent(postId)}/report`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ reason: 'Nội dung không phù hợp' }),
+    });
+    alert('Đã gửi báo cáo.');
   };
 
   return (
@@ -207,19 +248,21 @@ export function CommunitySearchPage() {
                 currentUserId={user?.id}
                 expanded={expandedPost === post.id}
                 comments={comments[post.id] || []}
-                threadReplies={[]}
+                threadReplies={threadReplies[post.id] || []}
                 commentDraft={commentDraft[post.id] || ''}
-                threadReplyDraft=""
+                threadReplyDraft={threadReplyDraft[post.id] || ''}
                 onToggleLike={toggleLike}
                 onToggleComments={toggleComments}
-                onReport={() => {}}
+                onReport={reportPost}
                 onToggleBookmark={toggleBookmark}
                 onCommentDraftChange={(postId, value) =>
                   setCommentDraft((d) => ({ ...d, [postId]: value }))
                 }
-                onThreadReplyDraftChange={() => {}}
+                onThreadReplyDraftChange={(postId, value) =>
+                  setThreadReplyDraft((d) => ({ ...d, [postId]: value }))
+                }
                 onSubmitComment={submitComment}
-                onSubmitThreadReply={() => {}}
+                onSubmitThreadReply={submitThreadReply}
               />
             ))}
           </ul>

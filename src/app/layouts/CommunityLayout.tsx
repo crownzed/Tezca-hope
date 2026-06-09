@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
-import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Search, Users } from 'lucide-react';
+import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Search, Users, type LucideIcon } from 'lucide-react';
 import { ROUTES } from '../routes';
 import { apiFetch } from '../lib/api';
 import { useCommunityNotificationRealtime } from '../hooks/useCommunityRealtime';
@@ -9,13 +9,22 @@ import { CommunityLeftNav } from '../components/community/CommunityLeftNav';
 import { useAnyCommunitySession } from '../lib/useCommunitySession';
 import { tezcaCardStyle, tezcaTheme } from '../lib/tezcaTheme';
 
-const sectionNav = [
+type SectionNavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end: boolean;
+  badge?: boolean;
+};
+
+const sectionNav: SectionNavItem[] = [
   { to: ROUTES.community.forum, label: 'Diễn đàn', icon: MessagesSquare, end: true },
   { to: ROUTES.community.rooms, label: 'Phòng chat', icon: Users, end: true },
   { to: ROUTES.community.announcements, label: '#thong-bao', icon: Megaphone, end: true },
   { to: ROUTES.community.dm, label: 'Tin nhắn', icon: MessageCircle, end: true },
   { to: ROUTES.community.search, label: 'Tìm kiếm', icon: Search, end: true },
   { to: ROUTES.community.bookmarks, label: 'Đã lưu', icon: Bookmark, end: true },
+  { to: ROUTES.community.notifications, label: 'Thông báo', icon: Bell, end: true, badge: true },
 ] as const;
 
 function roleAppLink(role: string) {
@@ -85,7 +94,7 @@ export function CommunityLayout() {
           </div>
 
           <nav
-            className="flex gap-1 p-1 rounded-xl order-3 sm:order-none w-full sm:w-auto"
+            className="lg:hidden flex gap-1 p-1 rounded-xl order-3 sm:order-none w-full sm:w-auto overflow-x-auto"
             style={tezcaCardStyle}
             aria-label="Khu vực cộng đồng"
           >
@@ -102,7 +111,7 @@ export function CommunityLayout() {
                 >
                   {({ isActive }) => (
                     <span
-                      className="flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+                      className="relative flex items-center justify-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
                       style={
                         isActive
                           ? { background: tezcaTheme.accentGradient, color: tezcaTheme.text }
@@ -111,6 +120,14 @@ export function CommunityLayout() {
                     >
                       <Icon size={18} aria-hidden />
                       <span className="hidden sm:inline">{item.label}</span>
+                      {item.badge && unread > 0 && (
+                        <span
+                          className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+                          style={{ backgroundColor: '#ef4444' }}
+                        >
+                          {unread > 99 ? '99+' : unread}
+                        </span>
+                      )}
                     </span>
                   )}
                 </NavLink>
@@ -119,24 +136,6 @@ export function CommunityLayout() {
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
-            {isAuthenticated && (
-              <NavLink
-                to={ROUTES.community.notifications}
-                className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border no-underline"
-                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
-                aria-label="Thông báo"
-              >
-                <Bell size={16} aria-hidden />
-                {unread > 0 && (
-                  <span
-                    className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
-                    style={{ backgroundColor: '#ef4444' }}
-                  >
-                    {unread > 99 ? '99+' : unread}
-                  </span>
-                )}
-              </NavLink>
-            )}
             <Link
               to={ROUTES.home}
               className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium opacity-70 hover:opacity-100 no-underline"
@@ -157,7 +156,7 @@ export function CommunityLayout() {
               </Link>
             ) : (
               <Link
-                to={ROUTES.auth.customerLogin}
+                to={ROUTES.auth.hub}
                 className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-full border no-underline"
                 style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
               >
@@ -172,7 +171,7 @@ export function CommunityLayout() {
 
       <main className="flex-1 w-full px-4 sm:px-6 py-6 md:py-8">
         <div className="max-w-7xl mx-auto flex gap-6 items-start">
-          <CommunityLeftNav />
+          <CommunityLeftNav unread={unread} />
           <div className="flex-1 min-w-0">
             <Outlet />
           </div>

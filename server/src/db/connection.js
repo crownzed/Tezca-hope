@@ -1,13 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import BetterSqlite3 from 'better-sqlite3';
-import LibsqlDatabase from 'libsql';
 import bcrypt from 'bcryptjs';
+import { loadEnv } from '../loadEnv.js';
 import { runMigrations } from './migrate.js';
 import { seedDatabase } from './seed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 /**
  * Database connection — hỗ trợ 2 backend:
@@ -23,15 +26,39 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * Luôn set TURSO env khi deploy Vercel production.
  */
 
-const TURSO_URL = process.env.TURSO_DATABASE_URL?.trim();
-const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN?.trim();
-const USE_TURSO = Boolean(TURSO_URL && TURSO_TOKEN);
+let envLoaded = false;
 
-const dataDir =
-  process.env.DATA_DIR ||
-  (process.env.VERCEL ? '/tmp/tezca-data' : path.join(__dirname, '..', '..', 'data'));
+function ensureEnvLoaded() {
+  if (envLoaded) return;
+  loadEnv();
+  envLoaded = true;
+}
 
-export const DB_FILE = USE_TURSO ? TURSO_URL : path.join(dataDir, 'tezca.sqlite');
+function resolveDbConfig() {
+  ensureEnvLoaded();
+  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
+  const tursoToken = process.env.TURSO_AUTH_TOKEN?.trim();
+  const useTurso = Boolean(tursoUrl && tursoToken);
+  const dataDir =
+    process.env.DATA_DIR ||
+    (process.env.VERCEL ? '/tmp/tezca-data' : path.join(__dirname, '..', '..', 'data'));
+  const dbFile = useTurso ? tursoUrl : path.join(dataDir, 'tezca.sqlite');
+  DB_FILE = dbFile;
+  return { tursoUrl, tursoToken, useTurso, dataDir, dbFile };
+}
+
+function loadLibsqlDatabase() {
+  try {
+    const mod = require('libsql');
+    return mod.default || mod.Database || mod;
+  } catch (err) {
+    throw new Error(
+      '[db] TURSO_DATABASE_URL/TURSO_AUTH_TOKEN đã được set nhưng package libsql chưa được cài. Chạy: cd server && npm install',
+    );
+  }
+}
+
+export let DB_FILE = path.join(__dirname, '..', '..', 'data', 'tezca.sqlite');
 
 export const DEMO_EXPERT_ID = 'tezca-demo-expert-0001';
 export const DEMO_CUSTOMER_ID = 'tezca-demo-patient-0001';
@@ -54,14 +81,17 @@ let initialized = false;
 export function getDb() {
   if (dbInstance) return dbInstance;
 
-  if (USE_TURSO) {
+  const { tursoUrl, tursoToken, useTurso, dataDir } = resolveDbConfig();
+
+  if (useTurso) {
     // libsql: sync API tương thích better-sqlite3, data sync lên Turso
+    const LibsqlDatabase = loadLibsqlDatabase();
     const syncDir = process.env.VERCEL ? '/tmp/tezca-data' : dataDir;
     fs.mkdirSync(syncDir, { recursive: true });
     const localPath = path.join(syncDir, 'tezca.sqlite');
     dbInstance = new LibsqlDatabase(localPath, {
-      syncUrl: TURSO_URL,
-      authToken: TURSO_TOKEN,
+      syncUrl: tursoUrl,
+      authToken: tursoToken,
       // Tự pull thay đổi từ remote về replica mỗi 60s (cho instance warm).
       syncInterval: 60,
     });
@@ -71,7 +101,7 @@ export function getDb() {
     dbInstance.pragma('synchronous = NORMAL');
     // Sync từ remote về local
     dbInstance.sync();
-    console.log('[db] ✅ libsql connected (sync mode):', TURSO_URL);
+    console.log('[db] ✅ libsql connected (sync mode):', tursoUrl);
   } else {
     if (process.env.VERCEL) {
       console.warn(
@@ -93,7 +123,7 @@ export function getDb() {
   if (c === 0) seedDatabase(dbInstance);
 
   // Sync lại sau khi seed/migrate
-  if (USE_TURSO && dbInstance.sync) {
+  if (useTurso && dbInstance.sync) {
     dbInstance.sync();
   }
 
@@ -112,7 +142,7 @@ export async function initDb() {
 
 /** Kiểm tra đang dùng Turso hay không */
 export function isUsingTurso() {
-  return USE_TURSO;
+  return resolveDbConfig().useTurso;
 }
 
 let lastSyncAt = 0;
@@ -132,7 +162,7 @@ const SYNC_THROTTLE_MS = 2000;
  * @param {{ force?: boolean }} [opts]
  */
 export function maybeSync({ force = false } = {}) {
-  if (!USE_TURSO || !dbInstance || typeof dbInstance.sync !== 'function') return;
+  if (!isUsingTurso() || !dbInstance || typeof dbInstance.sync !== 'function') return;
   const now = Date.now();
   if (!force && now - lastSyncAt < SYNC_THROTTLE_MS) return;
   lastSyncAt = now;
@@ -150,21 +180,28 @@ export function runInTransaction(fn) {
 
 export function ensureAdminFromEnv() {
   const db = getDb();
-  const email = process.env.TEZCA_ADMIN_EMAIL?.trim() || DEMO_ADMIN_EMAIL;
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (existing) return;
+  const email = (process.env.TEZCA_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const pw = (process.env.TEZCA_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '').trim();
+  if (!email || !pw) return;
 
-  const pw = process.env.TEZCA_ADMIN_PASSWORD?.trim() || DEMO_PASSWORD;
+  const existing = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+  const id = existing?.id || crypto.randomUUID();
+  if (!existing) {
+    const name = String(process.env.TEZCA_ADMIN_NAME || 'Admin').trim().slice(0, 120);
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, role, name, created_at)
+       VALUES (?, ?, ?, 'admin', ?, ?)`,
+    ).run(id, email, bcrypt.hashSync(pw, 10), name, Date.now());
+  }
   db.prepare(
-    `INSERT INTO users (id, email, password_hash, role, name, created_at)
-     VALUES (?, ?, ?, 'admin', 'Admin', ?)`
-  ).run(DEMO_ADMIN_ID, email, bcrypt.hashSync(pw, 10), Date.now());
+    `INSERT OR IGNORE INTO user_role_grants (user_id, role, created_at) VALUES (?, 'admin', ?)`,
+  ).run(id, Date.now());
 }
 
 export function closeDb() {
   if (dbInstance) {
     // libsql: sync lên remote trước khi đóng
-    if (USE_TURSO && dbInstance.sync) {
+    if (isUsingTurso() && dbInstance.sync) {
       try { dbInstance.sync(); } catch {}
     }
     dbInstance.close();

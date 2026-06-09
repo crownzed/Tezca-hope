@@ -88,12 +88,20 @@ export function insertUser(user) {
 
 export function canExpertAccessPatient(expertId, patientId) {
   const row = getDb()
+    .prepare(
+      `SELECT 1 AS ok FROM expert_customer_assignments
+       WHERE expert_id = ? AND customer_id = ? AND status = 'accepted'`,
+    )
+    .get(expertId, patientId);
+  if (row) return true;
+  const legacy = getDb()
     .prepare(`SELECT 1 AS ok FROM assignments WHERE expert_id = ? AND patient_id = ?`)
     .get(expertId, patientId);
-  return !!row;
+  return !!legacy;
 }
 
-export function pushAudit({ actorId, role, action, patientId, meta }) {
+export function pushAudit({ actorId, role, action, patientId, customerId, meta }) {
+  const subjectId = customerId || patientId || null;
   getDb()
     .prepare(
       `INSERT INTO audit_log (id, ts, actor_id, role, action, patient_id, meta) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -104,16 +112,27 @@ export function pushAudit({ actorId, role, action, patientId, meta }) {
       actorId,
       role,
       action,
-      patientId || null,
+      subjectId,
       meta != null ? JSON.stringify(meta) : null,
     );
 }
 
 export function getPatientIdsForExpert(expertId) {
-  return getDb()
+  const ids = new Set();
+  for (const r of getDb()
+    .prepare(
+      `SELECT customer_id AS id FROM expert_customer_assignments
+       WHERE expert_id = ? AND status = 'accepted'`,
+    )
+    .all(expertId)) {
+    ids.add(r.id);
+  }
+  for (const r of getDb()
     .prepare(`SELECT patient_id AS id FROM assignments WHERE expert_id = ?`)
-    .all(expertId)
-    .map((r) => r.id);
+    .all(expertId)) {
+    ids.add(r.id);
+  }
+  return [...ids];
 }
 
 export function assignExpertToPatient(expertId, patientId) {
@@ -121,28 +140,47 @@ export function assignExpertToPatient(expertId, patientId) {
   if (!p || p.role !== 'user') return { ok: false, error: 'invalid_patient' };
   const e = findUserById(expertId);
   if (!e || e.role !== 'expert') return { ok: false, error: 'invalid_expert' };
-  getDb()
-    .prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
-    .run(expertId, patientId);
+  runInTransaction(() => {
+    const db = getDb();
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO expert_customer_assignments
+         (id, expert_id, customer_id, status, requested_by, created_at, updated_at)
+       VALUES (?, ?, ?, 'accepted', 'expert', ?, ?)
+       ON CONFLICT(expert_id, customer_id) DO UPDATE SET
+         status = 'accepted', updated_at = excluded.updated_at`,
+    ).run(crypto.randomUUID(), expertId, patientId, now, now);
+    db.prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
+      .run(expertId, patientId);
+  });
   return { ok: true };
 }
 
 export function removeExpertPatientAssignment(expertId, patientId) {
-  getDb()
-    .prepare(`DELETE FROM assignments WHERE expert_id = ? AND patient_id = ?`)
-    .run(expertId, patientId);
+  runInTransaction(() => {
+    const db = getDb();
+    db.prepare(`DELETE FROM expert_customer_assignments WHERE expert_id = ? AND customer_id = ?`)
+      .run(expertId, patientId);
+    db.prepare(`DELETE FROM assignments WHERE expert_id = ? AND patient_id = ?`)
+      .run(expertId, patientId);
+  });
 }
 
 export function getExpertsForPatient(patientId) {
   return getDb()
     .prepare(
       `SELECT u.id AS id, u.email AS email, u.name AS name
+       FROM expert_customer_assignments a
+       JOIN users u ON u.id = a.expert_id
+       WHERE a.customer_id = ? AND a.status = 'accepted'
+       UNION
+       SELECT u.id, u.email, u.name
        FROM assignments a
        JOIN users u ON u.id = a.expert_id
        WHERE a.patient_id = ?
        ORDER BY u.name`,
     )
-    .all(patientId);
+    .all(patientId, patientId);
 }
 
 export function listBmiForUser(userId) {
@@ -167,19 +205,26 @@ export function upsertBmiEntry(row) {
 export function listMoodsForUser(userId) {
   return getDb()
     .prepare(
-      `SELECT id, user_id AS userId, date, mood_label AS moodLabel, mood_score AS moodScore, note
+      `SELECT id, user_id AS userId, date, mood_label AS moodLabel,
+              mood_score AS moodScore, note,
+              COALESCE(free_text, note, '') AS freeText,
+              COALESCE(mood_emoji, '') AS moodEmoji
        FROM mood_entries WHERE user_id = ? ORDER BY date DESC`,
     )
     .all(userId);
 }
 
 export function upsertMoodEntry(row) {
+  const freeText = String(row.freeText ?? row.note ?? '').slice(0, 2000);
+  const moodEmoji = String(row.moodEmoji ?? '').slice(0, 16);
   runInTransaction(() => {
     const db = getDb();
     db.prepare(`DELETE FROM mood_entries WHERE user_id = ? AND date = ?`).run(row.userId, row.date);
     db.prepare(
-      `INSERT INTO mood_entries (id, user_id, date, mood_label, mood_score, note) VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(row.id, row.userId, row.date, row.moodLabel, row.moodScore, row.note);
+      `INSERT INTO mood_entries
+         (id, user_id, date, mood_label, mood_score, note, free_text, mood_emoji)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(row.id, row.userId, row.date, row.moodLabel, row.moodScore, freeText, freeText, moodEmoji);
   });
 }
 
@@ -203,7 +248,10 @@ export function listBmiForUserInRange(userId, fromDate, toDate) {
 export function listMoodsForUserInRange(userId, fromDate, toDate) {
   return getDb()
     .prepare(
-      `SELECT id, user_id AS userId, date, mood_label AS moodLabel, mood_score AS moodScore, note
+      `SELECT id, user_id AS userId, date, mood_label AS moodLabel,
+              mood_score AS moodScore, note,
+              COALESCE(free_text, note, '') AS freeText,
+              COALESCE(mood_emoji, '') AS moodEmoji
        FROM mood_entries WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date DESC`,
     )
     .all(userId, fromDate, toDate);

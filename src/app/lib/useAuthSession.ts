@@ -212,7 +212,7 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
   const registerFn = useCallback(
     async (email: string, password: string, name?: string) => {
       if (!registerPath) throw new Error('Đăng ký không khả dụng cho phiên này');
-      const r = await apiFetch<{ token: string; refreshToken?: string; user: AuthUser }>(registerPath, {
+      await apiFetch(registerPath, {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim(),
@@ -220,9 +220,8 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
           name: name?.trim() || undefined,
         }),
       });
-      applyAuthResponse(r.token, r.user, r.refreshToken);
     },
-    [registerPath, applyAuthResponse],
+    [registerPath],
   );
 
   const logout = useCallback(() => {

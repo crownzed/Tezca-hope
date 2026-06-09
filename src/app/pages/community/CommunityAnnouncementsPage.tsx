@@ -1,8 +1,8 @@
-import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { AnnouncementChannel } from '../../components/community/AnnouncementChannel';
 
 export function CommunityAnnouncementsPage() {
-  const { token, user } = useCustomerAuth();
+  const { token, user } = useAnyCommunitySession();
   return (
     <AnnouncementChannel
       token={token}
