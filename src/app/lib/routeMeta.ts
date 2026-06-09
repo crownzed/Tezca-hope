@@ -83,6 +83,9 @@ export function getRouteMeta(pathname: string): RouteMeta | null {
   if (p === ROUTES.app.root || p === ROUTES.app.dashboard) {
     return meta('Trung tâm Kỷ luật', [appRoot], 'Kỷ luật');
   }
+  if (p === ROUTES.app.profile) {
+    return meta('Hồ sơ khách hàng', [appRoot, { label: 'Hồ sơ' }], 'Hồ sơ');
+  }
   if (p === ROUTES.app.health.bmi || p === ROUTES.app.health.profile) {
     return meta('Theo dõi sức khỏe', [appRoot, { label: 'Sức khỏe', to: ROUTES.app.health.root }, { label: 'BMI & hồ sơ' }], 'Sức khỏe');
   }

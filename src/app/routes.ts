@@ -31,6 +31,7 @@ export const ROUTES = {
   app: {
     root: '/app',
     login: '/dang-nhap/khach-hang',
+    profile: '/app/ho-so',
     dashboard: '/app/trung-tam-ky-luat',
     health: {
       root: '/app/suc-khoe',

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { LogIn, LogOut, Shield, SlidersHorizontal, UserCircle, KeyRound } from 'lucide-react';
+import { KeyRound, LogIn, LogOut, Shield, SlidersHorizontal, UserCircle } from 'lucide-react';
 import { ROUTES } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
 
@@ -48,10 +48,10 @@ export function AccountProfileButton({
   menuAlign = 'end',
 }: AccountProfileButtonProps) {
   const [open, setOpen] = useState(false);
-  const profileTo = role === 'expert' ? ROUTES.expert.settings : ROUTES.auth.forgotPassword;
+  const profileTo = role === 'expert' ? ROUTES.expert.settings : ROUTES.app.profile;
   const loginTo = role === 'expert' ? ROUTES.expert.login : ROUTES.app.login;
-  const settingsLabel = role === 'expert' ? 'Cài đặt chuyên gia' : 'Đổi mật khẩu';
-  const ProfileIcon = role === 'expert' ? SlidersHorizontal : KeyRound;
+  const settingsLabel = role === 'expert' ? 'Cài đặt chuyên gia' : 'Hồ sơ sức khỏe';
+  const ProfileIcon = role === 'expert' ? SlidersHorizontal : UserCircle;
   const label = user ? 'Hồ sơ' : 'Đăng nhập';
   const menuPosition = menuPlacement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2';
   const menuAlignment = menuAlign === 'start' ? 'left-0' : 'right-0';
@@ -120,6 +120,15 @@ export function AccountProfileButton({
           </div>
 
           <ProfileMenuLink to={profileTo} icon={ProfileIcon} label={settingsLabel} onClick={() => setOpen(false)} />
+          {role === 'customer' && (
+            <ProfileMenuLink
+              to={ROUTES.auth.forgotPassword}
+              icon={KeyRound}
+              label="Đổi mật khẩu"
+              onClick={() => setOpen(false)}
+              muted
+            />
+          )}
           <ProfileMenuLink to={ROUTES.legal.privacy} icon={Shield} label="Chính sách bảo mật" onClick={() => setOpen(false)} muted />
           <ProfileMenuLink
             to={role === 'expert' ? ROUTES.app.login : ROUTES.auth.expertLogin}

@@ -92,8 +92,9 @@ const DASHBOARD_STYLES = `
 
 export function CustomerDashboardPage() {
   const { user, token, isAuthenticated, isAnonymous, isVerifying } = useCustomerSession();
+  const userId = user?.id ?? null;
 
-  const discipline = useDisciplineDataScope({ userId: user?.id ?? null, token });
+  const discipline = useDisciplineDataScope({ userId, token });
   const {
     canSync,
     baseExercises,
@@ -123,7 +124,7 @@ export function CustomerDashboardPage() {
     () => applyDayProgress(baseExercises, dailyProgress[activeIso]),
     [baseExercises, dailyProgress, activeIso],
   );
-  const bmiList = useMemo(() => loadBmiEntries().sort((a, b) => b.date.localeCompare(a.date)), []);
+  const bmiList = useMemo(() => loadBmiEntries(userId).sort((a, b) => b.date.localeCompare(a.date)), [userId]);
   const latestBmi = bmiList[0];
   const weightDelta = weightDeltaText(bmiList);
 
@@ -137,7 +138,7 @@ export function CustomerDashboardPage() {
     [latestBmi],
   );
   const nutrition = useMemo(() => sumNutrition(todayFoodLog), [todayFoodLog]);
-  const gam = deriveGamificationState();
+  const gam = deriveGamificationState(userId);
   const streak = gam.stats.moodStreak;
 
   const completedCount = exercises.filter((ex) => ex.completed).length;
@@ -258,8 +259,8 @@ export function CustomerDashboardPage() {
           </div>
         )}
 
-        <header className="w-full max-w-6xl mb-6 md:mb-8 flex flex-wrap justify-between items-end gap-4">
-          <div>
+        <header className="w-full max-w-6xl mb-6 md:mb-8">
+          <div className="rounded-2xl border p-4 md:p-5" style={tezcaCardStyle}>
             <p className="text-xs font-bold uppercase tracking-widest m-0 mb-1" style={{ color: tezcaTheme.accentDark }}>
               {isAuthenticated && firstName ? `Xin chào, ${firstName}` : 'Tezca'}
             </p>
@@ -268,24 +269,6 @@ export function CustomerDashboardPage() {
             </h1>
             <p className="mt-1 font-medium m-0 capitalize opacity-70">{formatHeaderDate()}</p>
           </div>
-          <nav className="flex flex-wrap gap-2 text-xs">
-            {[
-              { to: ROUTES.app.bmi, label: 'BMI' },
-              { to: ROUTES.app.mood, label: 'Cảm xúc' },
-              { to: ROUTES.app.chat, label: 'Tezca AI' },
-              { to: ROUTES.app.plans, label: 'Kế hoạch' },
-              { to: ROUTES.app.rewards, label: 'Phần thưởng' },
-            ].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="px-3 py-1.5 rounded-lg border no-underline transition-colors hover:opacity-100 opacity-80"
-                style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text, backgroundColor: tezcaTheme.surface }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
         </header>
 
         <main className="w-full max-w-6xl flex-1 grid grid-cols-1 lg:grid-cols-[1fr_1.5fr] gap-6 md:gap-8 pb-8">
@@ -660,10 +643,6 @@ export function CustomerDashboardPage() {
                 boxShadow: '0 24px 80px -24px rgba(45, 212, 191, 0.25)',
               }}
             >
-              <div
-                className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-40"
-                style={{ backgroundColor: tezcaTheme.accentLight }}
-              />
               <div className="flex justify-center mb-6 relative">
                 <div
                   className="w-20 h-20 rounded-full flex items-center justify-center border-2"

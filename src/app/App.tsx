@@ -34,6 +34,7 @@ const CommunityGuidelinesPage = lazy(() => import('./pages/legal/CommunityGuidel
 const CookiePolicyPage = lazy(() => import('./pages/legal/CookiePolicyPage').then(m => ({ default: m.CookiePolicyPage })));
 const GdprNoticePage = lazy(() => import('./pages/legal/GdprNoticePage').then(m => ({ default: m.GdprNoticePage })));
 const AppHome = lazy(() => import('./pages/app/AppHome').then(m => ({ default: m.AppHome })));
+const CustomerProfilePage = lazy(() => import('./pages/app/CustomerProfilePage').then(m => ({ default: m.CustomerProfilePage })));
 const BmiPage = lazy(() => import('./pages/app/BmiPage').then(m => ({ default: m.BmiPage })));
 const MoodJournalPage = lazy(() => import('./pages/app/MoodJournalPage').then(m => ({ default: m.MoodJournalPage })));
 const AiChatPage = lazy(() => import('./pages/app/AiChatPage').then(m => ({ default: m.AiChatPage })));
@@ -144,6 +145,7 @@ function AppRoutes() {
         <Route element={<CustomerAppGate />}>
           <Route element={<OnboardingGate />}>
           <Route index element={<Navigate to={ROUTES.app.dashboard} replace />} />
+          <Route path="ho-so" element={<CustomerProfilePage />} />
           <Route path="trung-tam-ky-luat" element={<AppHome />} />
 
           <Route path="suc-khoe">
@@ -176,6 +178,7 @@ function AppRoutes() {
 
           {/* Legacy — path phẳng */}
           <Route path="bmi" element={<LegacyAppRedirect />} />
+          <Route path="profile" element={<Navigate to={ROUTES.app.profile} replace />} />
           <Route path="mood" element={<LegacyAppRedirect />} />
           <Route path="chat" element={<LegacyAppRedirect />} />
           <Route path="expert-chat" element={<LegacyAppRedirect />} />

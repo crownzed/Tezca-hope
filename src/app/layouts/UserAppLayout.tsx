@@ -113,14 +113,14 @@ export function UserAppLayout() {
         >
           Ứng dụng khách hàng
         </p>
+        <div className="mb-5">
+          <AccountProfileButton {...profileProps} menuPlacement="bottom" menuAlign="start" />
+        </div>
         <nav className="flex flex-col gap-1">
           {nav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
         </nav>
-        <div className="mt-auto pt-6">
-          <AccountProfileButton {...profileProps} menuPlacement="top" menuAlign="start" />
-        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-h-0 min-w-0 pb-[4.5rem] xl:pb-0">
