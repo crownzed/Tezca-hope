@@ -67,10 +67,13 @@ export async function createApp() {
   });
 
   // Trên serverless, replica cục bộ chỉ sync lúc cold start. Pull thay đổi mới
-  // từ remote trước mỗi GET (có throttle) để đọc dữ liệu vừa được instance khác
-  // ghi — vd: bài cộng đồng vừa đăng. No-op khi chạy SQLite local.
+  // từ remote (có throttle) trước khi xử lý request để đọc dữ liệu vừa được
+  // instance KHÁC ghi — vd: bài cộng đồng vừa đăng, hoặc tài khoản vừa tạo khi
+  // đăng nhập. Bỏ qua preflight và health check để không làm chậm cold start.
+  // No-op khi chạy SQLite local (đã là nguồn sự thật duy nhất).
   app.use((req, _res, next) => {
-    if (req.method === 'GET') maybeSync();
+    const url = req.originalUrl || req.url || '';
+    if (req.method !== 'OPTIONS' && !url.includes('/health')) maybeSync();
     next();
   });
 
