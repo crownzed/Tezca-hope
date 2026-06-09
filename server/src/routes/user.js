@@ -147,6 +147,15 @@ userRouter.get('/me/experts/requests', requireUser, (req, res) => {
   res.json({ requests });
 });
 
+function ensureAcceptedExpertForLiveChat(req, res) {
+  const experts = getExpertsForCustomer(req.user.sub);
+  if (experts.length > 0) return true;
+  res.status(403).json({
+    error: 'Bạn chưa có chuyên gia đồng hành được duyệt. Hãy chọn chuyên gia trước khi chat.',
+  });
+  return false;
+}
+
 userRouter.get('/me/health-profile', requireUser, (req, res) => {
   const profile = getCustomerHealthProfile(req.user.sub);
   res.json({ profile: profile || null });
@@ -173,6 +182,7 @@ userRouter.put('/me/bot-messages', requireUser, (req, res) => {
 });
 
 userRouter.get('/me/live-messages', requireUser, (req, res) => {
+  if (!ensureAcceptedExpertForLiveChat(req, res)) return;
   const since = req.query.since;
   const list =
     since != null && since !== ''
@@ -182,6 +192,7 @@ userRouter.get('/me/live-messages', requireUser, (req, res) => {
 });
 
 userRouter.post('/me/live-messages', requireUser, (req, res) => {
+  if (!ensureAcceptedExpertForLiveChat(req, res)) return;
   const text = String((req.body || {}).text || '').trim();
   if (!text) {
     res.status(400).json({ error: 'Tin nhắn trống' });
