@@ -33,8 +33,15 @@ vercel --prod
 ```
 
 ### 5. Verify
-App sẽ log: `[db] ✅ Turso connected: libsql://...`
-Login với `patient@tezca.vn` / `Tezca@2025` sẽ hoạt động.
+App sẽ log: `[db] ✅ libsql connected (sync mode): libsql://...`
+
+Kiểm tra production:
+```bash
+curl https://poseidonz227.id.vn/api/health/db
+```
+Kết quả mong đợi: `"turso": true`, `"persistent": true`, `"ephemeral": false`.
+
+Nếu thấy `"file": "/tmp/tezca-data/tezca.sqlite"` và `"warnings"` → Turso chưa được cấu hình, dữ liệu cộng đồng sẽ mất sau cold start.
 
 ## Demo accounts (sau khi seed)
 | Email | Password | Role |

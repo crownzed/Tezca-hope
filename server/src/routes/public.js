@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDatabaseInfo, runDatabaseDiagnostics, subscribeNewsletter } from '../db.js';
+import { isUsingTurso } from '../db/connection.js';
 import { isAiConfigured, aiProvider } from '../ai.js';
 import { isProduction } from '../secrets.js';
 import { newsletterLimiter } from '../rateLimit.js';
@@ -23,12 +24,27 @@ publicApiRouter.get('/health/db', (_req, res) => {
   try {
     const diagnostics = runDatabaseDiagnostics();
     const info = getDatabaseInfo();
+    const turso = isUsingTurso();
+    const onVercel = Boolean(process.env.VERCEL);
+    const ephemeral =
+      onVercel && !turso && String(info.file || '').includes('/tmp');
+    const warnings = [];
+    if (ephemeral) {
+      warnings.push(
+        'DB đang ở /tmp — dữ liệu MẤT mỗi cold start. Đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN trên Vercel.',
+      );
+    }
     res.status(diagnostics.ok ? 200 : 503).json({
       ok: diagnostics.ok,
-      engine: 'sqlite',
+      engine: turso ? 'libsql-turso' : 'sqlite',
+      persistent: turso || !ephemeral,
+      turso,
+      ephemeral,
+      warnings,
       errors: diagnostics.errors,
       users: info.rowCounts?.users ?? 0,
       trainingPlans: info.rowCounts?.patient_training_plans ?? 0,
+      communityPosts: info.rowCounts?.community_posts ?? 0,
       journalMode: info.journalMode,
       synchronous: info.synchronous,
       foreignKeysOn: info.foreignKeysOn,
