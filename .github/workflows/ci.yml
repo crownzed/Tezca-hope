@@ -66,6 +66,9 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # QUAN TRỌNG: Cần cấp quyền write để bot có thể comment vào PR
+    permissions:
+      pull-requests: write
     environment:
       name: preview
       url: ${{ steps.deploy.outputs.url }}
@@ -80,6 +83,13 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm i -g vercel
+
+      # Kéo cấu hình môi trường của Vercel (Khuyên dùng để tránh lỗi thiếu file .vercel)
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deploy to Vercel (Preview)
         id: deploy
@@ -99,7 +109,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Preview deployed: ${process.env.PREVIEW_URL}`
+              body: `🚀 **Preview deployed successfully!**\n\n🔗 URL: ${process.env.PREVIEW_URL}`
             })
         env:
           PREVIEW_URL: ${{ steps.deploy.outputs.url }}
@@ -124,6 +134,12 @@ jobs:
 
       - name: Install Vercel CLI
         run: npm i -g vercel
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deploy to Vercel (Production)
         id: deploy
