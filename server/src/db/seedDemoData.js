@@ -437,7 +437,13 @@ export function seedAllDemo(options = {}) {
 }
 
 export function shouldRunBulkDemoSeed() {
+  // Bật/tắt tường minh luôn được ưu tiên.
   if (process.env.TEZCA_SEED_DEMO === '0') return false;
   if (process.env.TEZCA_SEED_DEMO === '1') return true;
+  // Mặc định: KHÔNG seed trong production. Seed demo nặng (100 KH + 30 ngày
+  // dữ liệu + công việc CG) không kịp xong trong giới hạn 30s của Vercel
+  // function → ghi dở dang, lặp vô hạn mỗi cold start, và giữ write-lock khiến
+  // các write khác (vd đăng ký) bị timeout 504. Chỉ tự seed ngoài production.
+  if (process.env.NODE_ENV === 'production') return false;
   return Boolean(process.env.VERCEL);
 }
