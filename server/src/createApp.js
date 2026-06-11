@@ -71,9 +71,28 @@ export async function createApp() {
   // instance KHÁC ghi — vd: bài cộng đồng vừa đăng, hoặc tài khoản vừa tạo khi
   // đăng nhập. Bỏ qua preflight và health check để không làm chậm cold start.
   // No-op khi chạy SQLite local (đã là nguồn sự thật duy nhất).
-  app.use((req, _res, next) => {
+  const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+  app.use((req, res, next) => {
     const url = req.originalUrl || req.url || '';
-    if (req.method !== 'OPTIONS' && !url.includes('/health')) maybeSync();
+    const isHealth = url.includes('/health');
+    if (req.method !== 'OPTIONS' && !isHealth) maybeSync();
+
+    // Sau khi một request GHI trả về thành công (2xx), force-sync để đẩy
+    // write lên Turso primary NGAY. Trên serverless, instance có thể bị đóng
+    // băng/kết thúc ngay sau response; nếu không đẩy chủ động, write chỉ nằm ở
+    // replica cục bộ và biến mất (vd: bài cộng đồng vừa đăng "mất khi refresh").
+    // No-op khi chạy SQLite local. Lỗi sync không được làm hỏng response.
+    if (MUTATING_METHODS.has(req.method) && !isHealth) {
+      res.on('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            maybeSync({ force: true });
+          } catch (err) {
+            console.warn('[db] post-write sync failed:', err instanceof Error ? err.message : err);
+          }
+        }
+      });
+    }
     next();
   });
 
