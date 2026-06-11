@@ -49,6 +49,12 @@ export function AnnouncementChannel({ token, userRole, userName }: AnnouncementC
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!token || canUseWebSocket()) return;
+    const id = window.setInterval(load, 5000);
+    return () => window.clearInterval(id);
+  }, [token, load]);
+
   useCommunityAnnouncementChannel(token, Boolean(token), {
     onMessage: (message) => {
       setMessages((prev) => mergeUniqueById(prev, [message]));

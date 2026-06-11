@@ -114,8 +114,10 @@ function assignCustomerHandler(req, res) {
         ? 'Phiên chuyên gia không hợp lệ. Hãy đăng xuất và đăng nhập lại.'
         : r.error === 'invalid_customer'
           ? 'Tài khoản khách hàng không hợp lệ.'
-          : 'Không thể gán';
-    res.status(400).json({ error: msg });
+          : r.error === 'customer_has_expert'
+            ? 'Khách hàng đã có chuyên gia đồng hành.'
+            : 'Không thể gán';
+    res.status(r.error === 'customer_has_expert' ? 409 : 400).json({ error: msg });
     return;
   }
   pushAudit({ actorId: expertId, role: 'expert', action: 'assign_customer', customerId: u.id, meta: { email } });
@@ -129,6 +131,10 @@ function decideCustomerRequestHandler(action) {
     const customerId = customerIdFromReq(req);
     const result = decideExpertAssignment(req.user.sub, customerId, action);
     if (!result.ok) {
+      if (result.error === 'customer_has_expert') {
+        res.status(409).json({ error: 'Khách hàng đã có chuyên gia đồng hành.' });
+        return;
+      }
       res.status(404).json({ error: 'Không tìm thấy yêu cầu gán cần xử lý' });
       return;
     }

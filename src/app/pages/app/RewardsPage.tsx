@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { deriveGamificationState, type GamificationState } from '../../lib/gamification';
 import { ROUTES } from '../../routes';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 
 const BADGE_ICONS: Record<string, LucideIcon> = {
   first_bmi: Footprints,
@@ -40,13 +41,30 @@ const TIPS = [
   'Chat AI và kế hoạch chỉ là công cụ; động lực bền đến từ những “thắng nhỏ” mỗi tuần.',
 ];
 
+function snapshotKey(userId: string | null): string {
+  return userId ? `${SNAPSHOT_KEY}_${userId}` : SNAPSHOT_KEY;
+}
+
+function snapshotStorage(userId: string | null): Storage {
+  return userId ? localStorage : sessionStorage;
+}
+
 export function RewardsPage() {
+  const { user } = useCustomerAuth();
+  const userId = user?.id ?? null;
   const [tick, setTick] = useState(0);
-  const state = useMemo(() => deriveGamificationState(), [tick]);
+  const state = useMemo(() => deriveGamificationState(userId), [tick, userId]);
 
   useEffect(() => {
-    const prev: string[] = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '[]');
-    const nextIds = deriveGamificationState().unlockedBadgeIds;
+    const storage = snapshotStorage(userId);
+    const key = snapshotKey(userId);
+    let prev: string[] = [];
+    try {
+      prev = JSON.parse(storage.getItem(key) || '[]') as string[];
+    } catch {
+      prev = [];
+    }
+    const nextIds = deriveGamificationState(userId).unlockedBadgeIds;
     const brandNew = nextIds.filter((id) => !prev.includes(id));
     if (brandNew.length > 0) {
       confetti({
@@ -56,8 +74,12 @@ export function RewardsPage() {
         colors: ['#2DD4BF', '#14B8A6', '#5EEAD4', '#FBBF24', '#FFFFFF'],
       });
     }
-    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(nextIds));
-  }, []);
+    try {
+      storage.setItem(key, JSON.stringify(nextIds));
+    } catch {
+      /* ignore */
+    }
+  }, [userId]);
 
   useEffect(() => {
     const onStorage = () => setTick((t) => t + 1);

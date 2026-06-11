@@ -74,6 +74,17 @@ export function DirectMessagesPanel({
     [token],
   );
 
+  const markThreadRead = useCallback((threadId: string) => {
+    if (!token) return;
+    apiFetch(`/api/community/dm/threads/${encodeURIComponent(threadId)}/read`, {
+      method: 'POST',
+      token,
+    }).catch(() => {});
+    setThreads((list) =>
+      list.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)),
+    );
+  }, [token]);
+
   useEffect(() => {
     loadThreads();
   }, [loadThreads]);
@@ -95,6 +106,19 @@ export function DirectMessagesPanel({
       );
     }
   }, [activeThreadId, loadMessages, token]);
+
+  useEffect(() => {
+    if (!token || canUseWebSocket()) return;
+    const poll = () => {
+      loadThreads();
+      if (activeThreadId) {
+        loadMessages(activeThreadId);
+        markThreadRead(activeThreadId);
+      }
+    };
+    const id = window.setInterval(poll, 5000);
+    return () => window.clearInterval(id);
+  }, [activeThreadId, loadMessages, loadThreads, markThreadRead, token]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });

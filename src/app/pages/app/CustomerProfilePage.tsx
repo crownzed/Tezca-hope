@@ -1,5 +1,5 @@
-import { Link, Navigate } from 'react-router';
-import { Activity, KeyRound, LogOut, Mail, Shield, UserCircle } from 'lucide-react';
+import { Navigate } from 'react-router';
+import { Activity, LogOut, UserCircle } from 'lucide-react';
 import { HealthProfileForm } from '../../components/HealthProfileForm';
 import { SessionLoading } from '../../components/tezca/SessionLoading';
 import { useCustomerSession } from '../../lib/customerSessionGate';
@@ -63,25 +63,15 @@ export function CustomerProfilePage() {
               {user?.email || 'Đang tải phiên tài khoản'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <Link
-              to={ROUTES.auth.forgotPassword}
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold no-underline"
-              style={{ color: tezcaTheme.text, borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.subtleBg }}
-            >
-              <KeyRound size={16} aria-hidden />
-              Đổi mật khẩu
-            </Link>
-            <button
-              type="button"
-              onClick={logout}
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer"
-              style={{ color: '#b91c1c', borderColor: 'rgba(239, 68, 68, 0.22)', backgroundColor: 'rgba(239, 68, 68, 0.06)' }}
-            >
-              <LogOut size={16} aria-hidden />
-              Đăng xuất
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer"
+            style={{ color: '#b91c1c', borderColor: 'rgba(239, 68, 68, 0.22)', backgroundColor: 'rgba(239, 68, 68, 0.06)' }}
+          >
+            <LogOut size={16} aria-hidden />
+            Đăng xuất
+          </button>
         </div>
       </section>
 
@@ -105,32 +95,10 @@ export function CustomerProfilePage() {
             <InfoRow label="BMI" value={latestBmi ? `${latestBmi.bmi.toFixed(1)} · ${bmiCategory(latestBmi.bmi)}` : 'Chưa có'} />
             <InfoRow label="Cân nặng" value={latestBmi ? `${latestBmi.weightKg.toFixed(1)} kg` : 'Chưa có'} />
             <InfoRow label="Chuỗi kỷ luật" value={gam.stats.moodStreak > 0 ? `${gam.stats.moodStreak} ngày` : 'Chưa có'} />
-            <Link
-              to={ROUTES.app.bmi}
-              className="mt-4 inline-flex rounded-xl px-3 py-2 text-sm font-semibold no-underline"
-              style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
-            >
-              Cập nhật BMI
-            </Link>
+
           </section>
 
-          <section className="rounded-2xl border p-5" style={tezcaCardStyle}>
-            <div className="flex items-center gap-2 mb-3">
-              <Shield size={20} style={{ color: tezcaTheme.accentDark }} aria-hidden />
-              <h2 className="text-base font-bold m-0" style={{ color: tezcaTheme.text }}>Bảo mật dữ liệu</h2>
-            </div>
-            <p className="text-sm leading-relaxed m-0" style={{ color: tezcaTheme.textMuted }}>
-              Hồ sơ sức khỏe dùng để cá nhân hóa AI và giúp chuyên gia tư vấn chính xác hơn khi bạn đã chọn chuyên gia.
-            </p>
-            <Link
-              to={ROUTES.legal.privacy}
-              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold no-underline"
-              style={{ color: tezcaTheme.accentDark }}
-            >
-              <Mail size={15} aria-hidden />
-              Chính sách bảo mật
-            </Link>
-          </section>
+
         </aside>
 
         <section className="rounded-2xl border p-5 md:p-6" style={tezcaCardStyle}>

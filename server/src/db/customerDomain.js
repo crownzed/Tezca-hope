@@ -43,6 +43,42 @@ function assignmentId() {
   return crypto.randomUUID();
 }
 
+function getOtherActiveAssignmentForCustomer(customerId, expertId) {
+  return getDb()
+    .prepare(
+      `SELECT expert_id AS expertId, status
+       FROM expert_customer_assignments
+       WHERE customer_id = ?
+         AND expert_id <> ?
+         AND status IN ('requested', 'accepted')
+       ORDER BY CASE status WHEN 'accepted' THEN 0 ELSE 1 END, updated_at DESC
+       LIMIT 1`,
+    )
+    .get(customerId, expertId);
+}
+
+function getOtherAcceptedAssignmentForCustomer(customerId, expertId) {
+  return getDb()
+    .prepare(
+      `SELECT expert_id AS expertId
+       FROM expert_customer_assignments
+       WHERE customer_id = ?
+         AND expert_id <> ?
+         AND status = 'accepted'
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+    )
+    .get(customerId, expertId);
+}
+
+function revokeOtherPendingRequests(db, customerId, expertId, now) {
+  db.prepare(
+    `UPDATE expert_customer_assignments
+     SET status = 'revoked', updated_at = ?
+     WHERE customer_id = ? AND expert_id <> ? AND status = 'requested'`,
+  ).run(now, customerId, expertId);
+}
+
 export function listLiveMessagesForCustomer(customerId) {
   return getDb()
     .prepare(
@@ -118,19 +154,24 @@ export function assignExpertToCustomer(expertId, customerId) {
   if (!p || p.role !== 'user') return { ok: false, error: 'invalid_customer' };
   const e = findUserById(expertId);
   if (!e || e.role !== 'expert') return { ok: false, error: 'invalid_expert' };
+  if (getOtherAcceptedAssignmentForCustomer(customerId, expertId)) {
+    return { ok: false, error: 'customer_has_expert' };
+  }
+
   const now = Date.now();
-  getDb()
-    .prepare(
+  const db = getDb();
+  db.transaction(() => {
+    revokeOtherPendingRequests(db, customerId, expertId, now);
+    db.prepare(
       `INSERT INTO expert_customer_assignments
          (id, expert_id, customer_id, status, requested_by, created_at, updated_at)
        VALUES (?, ?, ?, 'accepted', 'expert', ?, ?)
        ON CONFLICT(expert_id, customer_id) DO UPDATE SET
          status = 'accepted', updated_at = excluded.updated_at`,
-    )
-    .run(assignmentId(), expertId, customerId, now, now);
-  getDb()
-    .prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
-    .run(expertId, customerId);
+    ).run(assignmentId(), expertId, customerId, now, now);
+    db.prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
+      .run(expertId, customerId);
+  })();
   return { ok: true };
 }
 
@@ -172,9 +213,18 @@ export function listExpertRequestsForCustomer(customerId) {
 
 export function requestExpertAssignment(customerId, expertId) {
   const p = findUserById(customerId);
-  if (!p || p.role !== 'user') return { ok: false };
+  if (!p || p.role !== 'user') return { ok: false, error: 'invalid_customer' };
   const e = findUserById(expertId);
-  if (!e || e.role !== 'expert') return { ok: false };
+  if (!e || e.role !== 'expert') return { ok: false, error: 'invalid_expert' };
+
+  const otherActive = getOtherActiveAssignmentForCustomer(customerId, expertId);
+  if (otherActive) {
+    return {
+      ok: false,
+      error: otherActive.status === 'accepted' ? 'customer_has_expert' : 'active_request_exists',
+    };
+  }
+
   const now = Date.now();
   getDb()
     .prepare(
@@ -208,20 +258,37 @@ export function listPendingCustomersForExpert(expertId) {
 
 export function decideExpertAssignment(expertId, customerId, action) {
   const next = action === 'approve' ? 'accepted' : 'rejected';
-  const result = getDb()
-    .prepare(
-      `UPDATE expert_customer_assignments
-       SET status = ?, updated_at = ?
-       WHERE expert_id = ? AND customer_id = ? AND status = 'requested'`,
-    )
-    .run(next, Date.now(), expertId, customerId);
-  if (result.changes === 0) return { ok: false };
+  const now = Date.now();
+  const db = getDb();
+
   if (next === 'accepted') {
-    getDb()
-      .prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
-      .run(expertId, customerId);
+    if (getOtherAcceptedAssignmentForCustomer(customerId, expertId)) {
+      return { ok: false, error: 'customer_has_expert' };
+    }
+
+    let changed = 0;
+    db.transaction(() => {
+      const result = db.prepare(
+        `UPDATE expert_customer_assignments
+         SET status = ?, updated_at = ?
+         WHERE expert_id = ? AND customer_id = ? AND status = 'requested'`,
+      ).run(next, now, expertId, customerId);
+      changed = result.changes;
+      if (changed > 0) {
+        revokeOtherPendingRequests(db, customerId, expertId, now);
+        db.prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
+          .run(expertId, customerId);
+      }
+    })();
+    return changed === 0 ? { ok: false, error: 'not_found' } : { ok: true };
   }
-  return { ok: true };
+
+  const result = db.prepare(
+    `UPDATE expert_customer_assignments
+     SET status = ?, updated_at = ?
+     WHERE expert_id = ? AND customer_id = ? AND status = 'requested'`,
+  ).run(next, now, expertId, customerId);
+  return result.changes === 0 ? { ok: false, error: 'not_found' } : { ok: true };
 }
 
 export function getCustomerHealthProfile(userId) {

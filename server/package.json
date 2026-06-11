@@ -9,6 +9,7 @@
     "verify:db": "node scripts/verify-db.mjs",
     "seed:test-users": "node scripts/ensure-test-users.mjs",
     "test:expert-chat": "node scripts/test-expert-chat-access.mjs",
+    "test:single-expert": "node scripts/test-single-expert-selection.mjs",
     "seed:demo-customers": "node scripts/seed-demo-customers.mjs",
     "seed:demo-experts-work": "node scripts/seed-demo-experts-work.mjs",
     "seed:all-demo": "node scripts/seed-all-demo.mjs",

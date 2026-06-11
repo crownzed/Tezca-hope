@@ -136,6 +136,14 @@ userRouter.post('/me/experts/:expertId/request', requireUser, (req, res) => {
   }
   const result = requestExpertAssignment(req.user.sub, expertId);
   if (!result.ok) {
+    if (result.error === 'active_request_exists') {
+      res.status(409).json({ error: 'Bạn đang có yêu cầu chọn chuyên gia khác. Hãy chờ xử lý trước khi chọn lại.' });
+      return;
+    }
+    if (result.error === 'customer_has_expert') {
+      res.status(409).json({ error: 'Bạn đã có chuyên gia đồng hành. Không thể chọn thêm chuyên gia khác.' });
+      return;
+    }
     res.status(400).json({ error: 'Không thể gửi yêu cầu chọn chuyên gia' });
     return;
   }
@@ -445,11 +453,11 @@ Yêu cầu: kế hoạch cụ thể, áp dụng ngay, an toàn. Markdown gọn.`
 Nguyên tắc: an toàn > hiệu quả; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
 Markdown gọn: tiêu đề ##/###, bullet cho lịch tập.`;
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
+  res.flushHeaders?.();
 
   try {
     const stream = aiChatStream(
@@ -465,7 +473,7 @@ Markdown gọn: tiêu đề ##/###, bullet cho lịch tập.`;
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (e) {
-    res.write(`data: ${JSON.stringify({ error: 'Lỗi AI' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: sanitizeClientError(e, 'Lỗi AI') })}\n\n`);
     res.end();
   }
 });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { KeyRound, LogIn, LogOut, Shield, SlidersHorizontal, UserCircle } from 'lucide-react';
+import { LogIn, LogOut, SlidersHorizontal, UserCircle } from 'lucide-react';
 import { ROUTES } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
 
@@ -120,23 +120,6 @@ export function AccountProfileButton({
           </div>
 
           <ProfileMenuLink to={profileTo} icon={ProfileIcon} label={settingsLabel} onClick={() => setOpen(false)} />
-          {role === 'customer' && (
-            <ProfileMenuLink
-              to={ROUTES.auth.forgotPassword}
-              icon={KeyRound}
-              label="Đổi mật khẩu"
-              onClick={() => setOpen(false)}
-              muted
-            />
-          )}
-          <ProfileMenuLink to={ROUTES.legal.privacy} icon={Shield} label="Chính sách bảo mật" onClick={() => setOpen(false)} muted />
-          <ProfileMenuLink
-            to={role === 'expert' ? ROUTES.app.login : ROUTES.auth.expertLogin}
-            icon={LogIn}
-            label={role === 'expert' ? 'Đăng nhập khách hàng' : 'Cổng chuyên gia'}
-            onClick={() => setOpen(false)}
-            muted
-          />
           <button
             type="button"
             className="mt-1 w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold border-0 cursor-pointer hover:opacity-90"

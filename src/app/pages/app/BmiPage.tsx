@@ -13,6 +13,8 @@ import {
 import {
   loadBmiEntries,
   saveBmiEntries,
+  flushPendingHealthSync,
+  syncBmiEntry,
   calcBmi,
   bmiCategory,
   idealWeightRangeKg,
@@ -24,8 +26,9 @@ import { SessionLoading } from '../../components/tezca/SessionLoading';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 export function BmiPage() {
-  const { token } = useCustomerAuth();
-  const [entries, setEntries] = useState<BmiEntry[]>(() => loadBmiEntries());
+  const { token, user, sessionReady } = useCustomerAuth();
+  const userId = user?.id ?? null;
+  const [entries, setEntries] = useState<BmiEntry[]>(() => loadBmiEntries(userId));
   const [heightCm, setHeightCm] = useState('165');
   const [weightKg, setWeightKg] = useState('60');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -33,19 +36,29 @@ export function BmiPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!sessionReady) return;
+    if (!token || !userId) {
+      setEntries(loadBmiEntries(userId));
+      return;
+    }
+    let cancelled = false;
     setLoading(true);
-    apiFetch<{ entries: BmiEntry[] }>('/api/me/bmi', { token })
-      .then((r) => {
+    void (async () => {
+      await flushPendingHealthSync(userId, token);
+      try {
+        const r = await apiFetch<{ entries: BmiEntry[] }>('/api/me/bmi', { token });
+        if (cancelled) return;
         const sorted = [...r.entries].sort((a, b) => b.date.localeCompare(a.date));
         setEntries(sorted);
-        saveBmiEntries(sorted);
-      })
-      .catch(() => {
+        saveBmiEntries(sorted, userId);
+      } catch {
         /* API chưa chạy — giữ local */
-      })
-      .finally(() => setLoading(false));
-  }, [token]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionReady, token, userId]);
 
   const chartData = useMemo(
     () =>
@@ -74,15 +87,9 @@ export function BmiPage() {
     const next = [entry, ...entries.filter((e) => !(e.date === date && Math.abs(e.weightKg - w) < 0.01))];
     next.sort((a, b) => b.date.localeCompare(a.date));
     setEntries(next);
-    saveBmiEntries(next);
-    if (token) {
-      apiFetch('/api/me/bmi', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ date, heightCm: h, weightKg: w, bmi }),
-      }).catch(() => {
-        /* offline */
-      });
+    saveBmiEntries(next, userId);
+    if (token && userId) {
+      void syncBmiEntry(userId, token, entry);
     }
   };
 

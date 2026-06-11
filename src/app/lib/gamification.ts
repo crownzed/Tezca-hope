@@ -1,8 +1,21 @@
-import { loadAiChat, loadBmiEntries, loadMoodEntries } from './healthStorage';
+import { getCurrentCustomerUserId, loadAiChat, loadBmiEntries, loadMoodEntries } from './healthStorage';
 
-const PLAN_COUNT_KEY = 'tezca_gamification_plan_count_v1';
+const PLAN_COUNT_KEY_LEGACY = 'tezca_gamification_plan_count_v1';
+const PLAN_COUNT_KEY_PREFIX = 'tezca_gamification_plan_count_user_v1';
 const XP_PER_LEVEL = 200;
 const MAX_LEVEL = 20;
+
+function resolveGamificationUserId(userId?: string | null): string | null {
+  return userId ?? getCurrentCustomerUserId();
+}
+
+function planCountKey(userId: string | null): string {
+  return userId ? `${PLAN_COUNT_KEY_PREFIX}_${userId}` : PLAN_COUNT_KEY_LEGACY;
+}
+
+function planCountStorage(userId: string | null): Storage {
+  return userId ? localStorage : sessionStorage;
+}
 
 export type ActivityStats = {
   bmiCount: number;
@@ -12,14 +25,25 @@ export type ActivityStats = {
   plansGenerated: number;
 };
 
-export function getPlanGenerationCount(): number {
-  return Math.min(999, Number(localStorage.getItem(PLAN_COUNT_KEY) || 0));
+export function getPlanGenerationCount(userId?: string | null): number {
+  const scopeUserId = resolveGamificationUserId(userId);
+  try {
+    const raw = planCountStorage(scopeUserId).getItem(planCountKey(scopeUserId));
+    return Math.min(999, Math.max(0, Number(raw || 0)));
+  } catch {
+    return 0;
+  }
 }
 
 /** Gọi sau mỗi lần người dùng sinh kế hoạch thành công (AI hoặc cục bộ). */
-export function recordPlanGenerated(): void {
-  const n = getPlanGenerationCount() + 1;
-  localStorage.setItem(PLAN_COUNT_KEY, String(n));
+export function recordPlanGenerated(userId?: string | null): void {
+  const scopeUserId = resolveGamificationUserId(userId);
+  const n = getPlanGenerationCount(scopeUserId) + 1;
+  try {
+    planCountStorage(scopeUserId).setItem(planCountKey(scopeUserId), String(n));
+  } catch {
+    /* ignore */
+  }
   window.dispatchEvent(new CustomEvent('tezca-gamification-update'));
 }
 
@@ -144,22 +168,11 @@ export type GamificationState = {
   unlockedCount: number;
 };
 
-export function deriveGamificationState(): GamificationState {
-  const bmi = loadBmiEntries();
-  const moods = loadMoodEntries();
-  const chat = loadAiChat(
-    typeof localStorage !== 'undefined'
-      ? (() => {
-          try {
-            const raw = localStorage.getItem('tezca_customer_user');
-            if (!raw) return null;
-            return (JSON.parse(raw) as { id?: string }).id ?? null;
-          } catch {
-            return null;
-          }
-        })()
-      : null,
-  );
+export function deriveGamificationState(userId?: string | null): GamificationState {
+  const scopeUserId = resolveGamificationUserId(userId);
+  const bmi = loadBmiEntries(scopeUserId);
+  const moods = loadMoodEntries(scopeUserId);
+  const chat = loadAiChat(scopeUserId);
   const moodDates = moods.map((m) => m.date);
   const streak = computeCurrentMoodStreak(moodDates);
   const userChatMessages = chat.filter((m) => m.role === 'user').length;
@@ -169,7 +182,7 @@ export function deriveGamificationState(): GamificationState {
     moodCount: moods.length,
     userChatMessages,
     moodStreak: streak,
-    plansGenerated: getPlanGenerationCount(),
+    plansGenerated: getPlanGenerationCount(scopeUserId),
   };
 
   const xp = computeXpFromStats(stats);

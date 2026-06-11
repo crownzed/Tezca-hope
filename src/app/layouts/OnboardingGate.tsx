@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router';
 import { useCustomerSession } from '../lib/customerSessionGate';
 import { OnboardingWizard, type OnboardingData } from '../components/OnboardingWizard';
-import { loadBmiEntries, saveBmiEntries } from '../lib/healthStorage';
+import { calcBmi, flushPendingHealthSync, loadBmiEntries, saveBmiEntries, syncBmiEntry } from '../lib/healthStorage';
 import { useNavigate } from 'react-router';
 import { ROUTES } from '../routes';
 
@@ -24,7 +24,7 @@ function markOnboardingDone(userId: string | null) {
  * Nếu đã hoàn thành onboarding hoặc là guest → render Outlet bình thường.
  */
 export function OnboardingGate() {
-  const { user, isAuthenticated } = useCustomerSession();
+  const { user, isAuthenticated, token } = useCustomerSession();
   const userId = user?.id || null;
   const navigate = useNavigate();
 
@@ -33,15 +33,40 @@ export function OnboardingGate() {
     return !isOnboardingDone(userId);
   });
 
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) {
+      setShowOnboarding(false);
+      return;
+    }
+    setShowOnboarding(!isOnboardingDone(userId));
+  }, [isAuthenticated, userId]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId || !token) return;
+    void flushPendingHealthSync(userId, token);
+  }, [isAuthenticated, token, userId]);
+
   const handleComplete = useCallback((data: OnboardingData) => {
     // Lưu BMI data
     if (data.weightKg && data.heightCm) {
       const w = parseFloat(data.weightKg);
       const h = parseFloat(data.heightCm);
       if (w > 0 && h > 0) {
-        const entries = loadBmiEntries();
-        entries.push({ weightKg: w, heightCm: h, date: new Date().toISOString().slice(0, 10) });
-        saveBmiEntries(entries);
+        const date = new Date().toISOString().slice(0, 10);
+        const entry = {
+          id: crypto.randomUUID(),
+          date,
+          heightCm: h,
+          weightKg: w,
+          bmi: calcBmi(h, w),
+        };
+        const entries = loadBmiEntries(userId);
+        const next = [entry, ...entries.filter((e) => e.date !== date)];
+        saveBmiEntries(next, userId);
+        if (userId && token) {
+          void syncBmiEntry(userId, token, entry);
+        }
       }
     }
 
@@ -59,7 +84,7 @@ export function OnboardingGate() {
 
     // Redirect tới trang Kế hoạch để sinh plan AI ngay
     navigate(ROUTES.app.plans);
-  }, [userId, navigate]);
+  }, [userId, token, navigate]);
 
   const handleSkip = useCallback(() => {
     markOnboardingDone(userId);

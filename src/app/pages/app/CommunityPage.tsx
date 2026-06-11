@@ -86,9 +86,9 @@ export function CommunityPage({ mode }: CommunityPageProps) {
   const [roomReadAtByTopic, setRoomReadAtByTopic] =
     useState<Record<CommunityRoomTopic, number>>(loadRoomReadState);
 
-  const loadPosts = useCallback(() => {
+  const loadPosts = useCallback((showLoading = true) => {
     if (!token) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const params = new URLSearchParams({ mode: feedMode, limit: '30' });
     if (topicFilter) params.set('topic', topicFilter);
     apiFetch<{ posts: ForumPost[]; nextCursor?: string }>(
@@ -101,7 +101,7 @@ export function CommunityPage({ mode }: CommunityPageProps) {
         setError('');
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Không tải được bài viết'))
-      .finally(() => setLoading(false));
+      .finally(() => { if (showLoading) setLoading(false); });
   }, [token, topicFilter, feedMode]);
 
   const loadMorePosts = useCallback(async () => {
@@ -142,6 +142,8 @@ export function CommunityPage({ mode }: CommunityPageProps) {
       .catch(() => {});
   }, [token, tab]);
 
+  const pollPosts = useCallback(() => loadPosts(false), [loadPosts]);
+
   useCommunityForumRealtime(token, tab === 'forum', {
     onPost: (post) => {
       const p = post as ForumPost;
@@ -175,6 +177,8 @@ export function CommunityPage({ mode }: CommunityPageProps) {
       );
     },
   });
+
+  useCommunityRoomPoll(pollPosts, tab === 'forum' && !canUseWebSocket(), 15000);
 
   const submitPost = async () => {
     if (!token || !newPost.content.trim()) return;
@@ -339,6 +343,15 @@ export function CommunityPage({ mode }: CommunityPageProps) {
     if (!comments[postId]) loadComments(postId);
     if (!threadReplies[postId]) loadThreadReplies(postId);
   };
+
+  useEffect(() => {
+    if (tab !== 'forum' || canUseWebSocket() || !expandedPost || !token) return;
+    const id = window.setInterval(() => {
+      void loadComments(expandedPost);
+      void loadThreadReplies(expandedPost);
+    }, 8000);
+    return () => window.clearInterval(id);
+  }, [expandedPost, tab, token]);
 
   const toggleFollowAuthor = async (userId: string) => {
     if (!token || userId === user?.id) return;

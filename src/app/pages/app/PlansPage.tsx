@@ -3,17 +3,120 @@ import { Link, useNavigate } from 'react-router';
 import { generatePersonalizedPlan, type PlanInput } from '../../lib/planGenerator';
 import { ROUTES } from '../../routes';
 import { recordPlanGenerated } from '../../lib/gamification';
-import { apiFetch } from '../../lib/api';
+import { apiBase, apiFetch, apiUrl } from '../../lib/api';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { parseExercisesFromPlanMarkdown } from '../../lib/planToExercises';
 import { saveDashboardExercises } from '../../lib/dashboardStorage';
 import { adoptGuestDisciplineDataIntoAccount } from '../../lib/disciplineDataScope';
-import { simulateTextStream } from '../../lib/streamAiChat';
 import { FormAlert } from '../../components/tezca/FormAlert';
 import { loadBmiEntries } from '../../lib/healthStorage';
 
+type PlanStreamPayload = {
+  age: number;
+  goal: PlanInput['goal'];
+  activity: PlanInput['activity'];
+  dietNote: string;
+  weightKg?: number;
+  heightCm?: number;
+  sessionsPerWeek: number;
+  equipment: 'gym' | 'home' | 'both';
+  focusArea?: string;
+};
+
+async function streamPlanAi({
+  token,
+  payload,
+  onDelta,
+}: {
+  token: string;
+  payload: PlanStreamPayload;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const urls = apiBase()
+    ? [apiUrl('/api/me/plan-ai/stream'), '/api/me/plan-ai/stream']
+    : [apiUrl('/api/me/plan-ai/stream')];
+  let lastRes: Response | null = null;
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]!;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        lastRes = res;
+        if (res.status === 404 || res.status === 405) continue;
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || `${res.status} ${res.statusText}`);
+      }
+      if (!res.body) throw new Error('Không nhận được luồng kế hoạch AI');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let accumulated = '';
+
+      const processBlock = (block: string) => {
+        for (const line of block.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const raw = trimmed.slice(5).trim();
+          if (!raw) continue;
+          if (raw === '[DONE]') return;
+          let data: { text?: string; error?: string };
+          try {
+            data = JSON.parse(raw) as typeof data;
+          } catch {
+            continue;
+          }
+          if (data.error) throw new Error(data.error);
+          if (typeof data.text === 'string' && data.text) {
+            accumulated += data.text;
+            onDelta(accumulated);
+          }
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        sseBuffer = sseBuffer.replace(/\r\n/g, '\n');
+
+        let boundary = sseBuffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          const block = sseBuffer.slice(0, boundary);
+          sseBuffer = sseBuffer.slice(boundary + 2);
+          processBlock(block);
+          boundary = sseBuffer.indexOf('\n\n');
+        }
+      }
+
+      if (sseBuffer.trim()) processBlock(sseBuffer);
+      if (!accumulated.trim()) throw new Error('AI không trả nội dung');
+      return accumulated;
+    } catch (e) {
+      if (!(e instanceof TypeError) || i === urls.length - 1) throw e;
+    }
+  }
+
+  if (lastRes) {
+    const err = (await lastRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error || `${lastRes.status} ${lastRes.statusText}`);
+  }
+  throw new Error('Không kết nối được AI');
+}
+
 export function PlansPage() {
   const { token, user } = useCustomerAuth();
+  const userId = user?.id ?? null;
   const navigate = useNavigate();
   const [age, setAge] = useState('28');
   const [weightKg, setWeightKg] = useState('');
@@ -27,13 +130,13 @@ export function PlansPage() {
 
   // Tự động load BMI data gần nhất
   useEffect(() => {
-    const entries = loadBmiEntries();
+    const entries = loadBmiEntries(userId);
     if (entries.length > 0) {
-      const latest = entries[entries.length - 1];
+      const latest = entries[0];
       if (!weightKg) setWeightKg(String(latest.weightKg));
       if (!heightCm) setHeightCm(String(latest.heightCm));
     }
-  }, []);
+  }, [heightCm, userId, weightKg]);
   const [plan, setPlan] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [planSource, setPlanSource] = useState<'ai' | 'local' | null>(null);
@@ -78,48 +181,20 @@ export function PlansPage() {
       setPlan(null);
       setPlanSource(null);
       try {
-        // Streaming SSE — hiển thị dần text
-        const res = await fetch('/api/me/plan-ai/stream', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(extendedData),
-        });
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
         setPlanSource('ai');
         setPlan('');
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let accumulated = '';
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const text = decoder.decode(value, { stream: true });
-            const lines = text.split('\n');
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const payload = line.slice(6);
-                if (payload === '[DONE]') break;
-                try {
-                  const parsed = JSON.parse(payload);
-                  if (parsed.text) {
-                    accumulated += parsed.text;
-                    setPlan(accumulated);
-                  }
-                  if (parsed.error) {
-                    throw new Error(parsed.error);
-                  }
-                } catch {}
-              }
-            }
-          }
+        try {
+          await streamPlanAi({ token, payload: extendedData, onDelta: setPlan });
+        } catch {
+          const r = await apiFetch<{ plan: string }>('/api/me/plan-ai', {
+            method: 'POST',
+            token,
+            body: JSON.stringify(extendedData),
+          });
+          if (!r.plan?.trim()) throw new Error('AI không trả nội dung');
+          setPlan(r.plan);
         }
-        recordPlanGenerated();
+        recordPlanGenerated(userId);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Lỗi không xác định';
         const fallback = generatePersonalizedPlan(input);
@@ -127,7 +202,7 @@ export function PlansPage() {
           `**Không gọi được AI (${msg}).** Hiển thị bản gợi ý cố định (dự phòng):\n\n${fallback}`,
         );
         setPlanSource('local');
-        recordPlanGenerated();
+        recordPlanGenerated(userId);
       } finally {
         setPending(false);
       }
@@ -137,7 +212,7 @@ export function PlansPage() {
     const local = generatePersonalizedPlan(input);
     setPlan(local);
     setPlanSource('local');
-    recordPlanGenerated();
+    recordPlanGenerated(userId);
   };
 
   const integrateToTraining = async () => {

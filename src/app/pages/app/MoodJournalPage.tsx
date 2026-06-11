@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PenLine } from 'lucide-react';
-import { loadMoodEntries, saveMoodEntries, type MoodEntry } from '../../lib/healthStorage';
+import {
+  flushPendingHealthSync,
+  loadMoodEntries,
+  saveMoodEntries,
+  syncMoodEntry,
+  type MoodEntry,
+} from '../../lib/healthStorage';
 import { apiFetch } from '../../lib/api';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -25,8 +31,9 @@ function resolveSelection(entry?: Pick<MoodEntry, 'moodLabel' | 'moodEmoji' | 'm
 }
 
 export function MoodJournalPage() {
-  const { token } = useCustomerAuth();
-  const [entries, setEntries] = useState<MoodEntry[]>(() => loadMoodEntries());
+  const { token, user, sessionReady } = useCustomerAuth();
+  const userId = user?.id ?? null;
+  const [entries, setEntries] = useState<MoodEntry[]>(() => loadMoodEntries(userId));
   const [date, setDate] = useState(todayIso);
   const [selected, setSelected] = useState<MoodOption>(DEFAULT_MOOD);
   const [freeText, setFreeText] = useState('');
@@ -44,15 +51,24 @@ export function MoodJournalPage() {
   }, [date, entryForDate]);
 
   useEffect(() => {
-    if (!token) return;
-    apiFetch<{ entries: MoodEntry[] }>('/api/me/moods', { token })
-      .then((r) => {
+    if (!sessionReady) return;
+    if (!token || !userId) {
+      setEntries(loadMoodEntries(userId));
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      await flushPendingHealthSync(userId, token);
+      try {
+        const r = await apiFetch<{ entries: MoodEntry[] }>('/api/me/moods', { token });
+        if (cancelled) return;
         const sorted = [...r.entries].sort((a, b) => b.date.localeCompare(a.date));
         setEntries(sorted);
-        saveMoodEntries(sorted);
-      })
-      .catch(() => {});
-  }, [token]);
+        saveMoodEntries(sorted, userId);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [sessionReady, token, userId]);
 
   const save = async () => {
     setSaveBusy(true);
@@ -71,20 +87,9 @@ export function MoodJournalPage() {
       const rest = entries.filter((e) => e.date !== date);
       const next = [entry, ...rest].sort((a, b) => b.date.localeCompare(a.date));
       setEntries(next);
-      saveMoodEntries(next);
-      if (token) {
-        await apiFetch('/api/me/moods', {
-          method: 'POST',
-          token,
-          body: JSON.stringify({
-            date,
-            moodLabel: selected.label,
-            moodScore: selected.score,
-            moodEmoji: selected.emoji,
-            moodKey: selected.key,
-            freeText: freeText.trim(),
-          }),
-        });
+      saveMoodEntries(next, userId);
+      if (token && userId) {
+        await syncMoodEntry(userId, token, entry);
       }
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 2500);

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useMemo } from 'react';
 import { useAuthSession, type AuthUser } from '../lib/useAuthSession';
+import { clearGuestHealthCache } from '../lib/healthStorage';
 
 export type CustomerUser = AuthUser;
 
@@ -26,6 +27,11 @@ const customerSessionConfig = {
 
 export function CustomerAuthProvider({ children }: { children: React.ReactNode }) {
   const session = useAuthSession(customerSessionConfig);
+  const logout = useCallback(() => {
+    session.logout();
+    clearGuestHealthCache();
+  }, [session.logout]);
+
 
   const value = useMemo(
     () => ({
@@ -34,7 +40,7 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       sessionReady: session.sessionReady,
       login: session.login,
       register: session.register!,
-      logout: session.logout,
+      logout,
     }),
     [
       session.token,
@@ -42,7 +48,7 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       session.sessionReady,
       session.login,
       session.register,
-      session.logout,
+      logout,
     ],
   );
 

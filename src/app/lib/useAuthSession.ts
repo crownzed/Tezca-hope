@@ -29,6 +29,16 @@ function refreshKeyFrom(tokenKey: string): string {
   return tokenKey.replace(/_token$/, '_refresh_token');
 }
 
+function userKeyFrom(tokenKey: string): string {
+  return tokenKey.replace(/_token$/, '_user');
+}
+
+const AUTH_SESSION_EVENT = 'tezca-auth-session-changed';
+
+type AuthSessionChangeDetail = {
+  tokenKeys: string[];
+};
+
 /** Tất cả role session token keys — dùng để tách luồng phiên khi đăng nhập */
 const ALL_ROLE_TOKEN_KEYS = [
   'tezca_customer_token',
@@ -41,13 +51,24 @@ const ALL_ROLE_TOKEN_KEYS = [
  * Tránh tình trạng đăng nhập chồng nhiều phiên (khách hàng / expert / admin cùng lúc),
  * gây nhầm scope dữ liệu (vd: trung tâm kỷ luật load nhầm data phiên cũ).
  */
-function clearOtherRoleSessions(currentTokenKey: string): void {
+function clearOtherRoleSessions(currentTokenKey: string): string[] {
+  const clearedTokenKeys: string[] = [];
   for (const tokenKey of ALL_ROLE_TOKEN_KEYS) {
     if (tokenKey === currentTokenKey) continue;
+    clearedTokenKeys.push(tokenKey);
     localStorage.removeItem(tokenKey);
-    localStorage.removeItem(tokenKey.replace(/_token$/, '_user'));
-    localStorage.removeItem(tokenKey.replace(/_token$/, '_refresh_token'));
+    localStorage.removeItem(userKeyFrom(tokenKey));
+    localStorage.removeItem(refreshKeyFrom(tokenKey));
   }
+  return clearedTokenKeys;
+}
+
+function dispatchAuthSessionChanged(tokenKeys: string[]): void {
+  window.dispatchEvent(
+    new CustomEvent<AuthSessionChangeDetail>(AUTH_SESSION_EVENT, {
+      detail: { tokenKeys: [...new Set(tokenKeys)] },
+    }),
+  );
 }
 
 /** Decode JWT payload không verify (chỉ đọc exp) */
@@ -99,14 +120,48 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
     return !hasToken || hasUser;
   });
   const tokenRef = useRef<string | null>(token);
+  const userRef = useRef<AuthUser | null>(user);
   tokenRef.current = token;
-  const refreshingRef = useRef(false);
+  userRef.current = user;
+  const refreshPromiseRef = useRef<Promise<string | null> | null>(null);
+
+  const syncFromStorage = useCallback(() => {
+    const storedToken = localStorage.getItem(tokenStorageKey);
+    const storedUser = readStoredUser(userStorageKey);
+    tokenRef.current = storedToken;
+    userRef.current = storedUser;
+    setToken(storedToken);
+    setUser(storedUser);
+    setSessionReady(!storedToken || !!storedUser);
+  }, [tokenStorageKey, userStorageKey]);
+
+  useEffect(() => {
+    const watchedKeys = new Set([tokenStorageKey, userStorageKey, refreshTokenKey]);
+
+    const handleSessionChanged = (event: Event) => {
+      const detail = (event as CustomEvent<AuthSessionChangeDetail>).detail;
+      if (!detail?.tokenKeys?.includes(tokenStorageKey)) return;
+      syncFromStorage();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (!event.key || watchedKeys.has(event.key)) syncFromStorage();
+    };
+
+    window.addEventListener(AUTH_SESSION_EVENT, handleSessionChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EVENT, handleSessionChanged);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [refreshTokenKey, syncFromStorage, tokenStorageKey, userStorageKey]);
 
   const persist = useCallback(
     (t: string | null, u: AuthUser | null, rt?: string | null) => {
       setToken(t);
       setUser(u);
       tokenRef.current = t;
+      userRef.current = u;
       if (t) localStorage.setItem(tokenStorageKey, t);
       else localStorage.removeItem(tokenStorageKey);
       if (u) localStorage.setItem(userStorageKey, JSON.stringify(u));
@@ -122,25 +177,32 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
 
   /** Gọi /api/auth/refresh để lấy access token mới */
   const doRefresh = useCallback(async (): Promise<string | null> => {
-    if (refreshingRef.current) return null;
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
     const rt = localStorage.getItem(refreshTokenKey);
     if (!rt) return null;
-    refreshingRef.current = true;
-    try {
-      const r = await apiFetch<{ token: string }>('/api/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken: rt }),
-      });
-      persist(r.token, user, undefined);
-      return r.token;
-    } catch {
-      // Refresh token hết hạn → logout
-      persist(null, null, null);
-      return null;
-    } finally {
-      refreshingRef.current = false;
-    }
-  }, [refreshTokenKey, persist, user]);
+    const tokenAtStart = tokenRef.current;
+
+    refreshPromiseRef.current = (async () => {
+      try {
+        const r = await apiFetch<{ token: string }>('/api/auth/refresh', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+        if (tokenRef.current === tokenAtStart) {
+          persist(r.token, userRef.current, undefined);
+        }
+        return r.token;
+      } catch {
+        // Refresh token hết hạn → logout, nhưng không ghi đè nếu phiên đã đổi role/logout.
+        if (tokenRef.current === tokenAtStart) persist(null, null, null);
+        return null;
+      } finally {
+        refreshPromiseRef.current = null;
+      }
+    })();
+
+    return refreshPromiseRef.current;
+  }, [refreshTokenKey, persist]);
 
   // Auto-refresh: kiểm tra mỗi 5 phút, refresh khi access token còn <10 phút
   useEffect(() => {
@@ -190,10 +252,11 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
     (authToken: string, authUser: AuthUser, authRefreshToken?: string) => {
       if (authUser.role !== expectedRole) throw new Error(wrongRoleLoginMessage);
       // Tách luồng: xoá phiên các role khác trước khi set phiên hiện tại
-      clearOtherRoleSessions(tokenStorageKey);
+      const clearedTokenKeys = clearOtherRoleSessions(tokenStorageKey);
       tokenRef.current = authToken;
       persist(authToken, authUser, authRefreshToken || null);
       setSessionReady(true);
+      dispatchAuthSessionChanged([tokenStorageKey, ...clearedTokenKeys]);
     },
     [expectedRole, wrongRoleLoginMessage, persist, tokenStorageKey],
   );
@@ -227,7 +290,8 @@ export function useAuthSession(config: AuthSessionConfig): AuthSessionState {
   const logout = useCallback(() => {
     setSessionReady(true);
     persist(null, null, null);
-  }, [persist]);
+    dispatchAuthSessionChanged([tokenStorageKey]);
+  }, [persist, tokenStorageKey]);
 
   return {
     token,

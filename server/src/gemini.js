@@ -203,6 +203,7 @@ export async function* geminiChatStream(messages, opts = {}) {
     const { done, value } = await reader.read();
     if (done) break;
     sseBuffer += decoder.decode(value, { stream: true });
+    sseBuffer = sseBuffer.replace(/\r\n/g, '\n');
 
     let boundary = sseBuffer.indexOf('\n\n');
     while (boundary !== -1) {
@@ -234,6 +235,31 @@ export async function* geminiChatStream(messages, opts = {}) {
       }
 
       boundary = sseBuffer.indexOf('\n\n');
+    }
+  }
+
+  if (sseBuffer.trim()) {
+    for (const line of sseBuffer.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const payload = trimmed.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      let parsed;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      const chunkText = textFromStreamChunk(parsed);
+      if (!chunkText) continue;
+      let delta = chunkText;
+      if (chunkText.startsWith(accumulated)) {
+        delta = chunkText.slice(accumulated.length);
+        accumulated = chunkText;
+      } else {
+        accumulated += chunkText;
+      }
+      if (delta) yield delta;
     }
   }
 

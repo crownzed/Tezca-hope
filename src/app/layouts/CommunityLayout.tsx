@@ -2,7 +2,7 @@ import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
 import { Bell, Bookmark, Flame, Home, LogIn, Megaphone, MessageCircle, MessagesSquare, Search, Users, type LucideIcon } from 'lucide-react';
 import { ROUTES } from '../routes';
-import { apiFetch } from '../lib/api';
+import { apiFetch, canUseWebSocket } from '../lib/api';
 import { useCommunityNotificationRealtime } from '../hooks/useCommunityRealtime';
 import { AccountProfileButton } from '../components/AccountProfileRail';
 import { CommunityLeftNav } from '../components/community/CommunityLeftNav';
@@ -55,6 +55,17 @@ export function CommunityLayout() {
       .then((r) => setUnread(r.unread || 0))
       .catch(() => {});
   }, [isAuthenticated, token, location.pathname]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !token || canUseWebSocket()) return;
+    const loadUnread = () => {
+      apiFetch<{ unread: number }>('/api/community/notifications/unread-count', { token })
+        .then((r) => setUnread(r.unread || 0))
+        .catch(() => {});
+    };
+    const id = window.setInterval(loadUnread, 15000);
+    return () => window.clearInterval(id);
+  }, [isAuthenticated, token]);
 
   // Realtime cập nhật badge
   useCommunityNotificationRealtime(token, user?.id, isAuthenticated, setUnread);

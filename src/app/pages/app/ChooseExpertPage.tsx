@@ -44,6 +44,11 @@ export function ChooseExpertPage() {
     return map;
   }, [requests]);
 
+  const activeRequest = useMemo(
+    () => requests.find((r) => r.status === 'accepted') ?? requests.find((r) => r.status === 'requested') ?? null,
+    [requests],
+  );
+
   const loadData = () => {
     if (!token) return;
     setLoading(true);
@@ -65,9 +70,13 @@ export function ChooseExpertPage() {
   }, [token]);
 
   const requestExpert = async (expertId: string) => {
-    if (!token) return;
+    if (!token || busyId) return;
     const existing = requestByExpertId.get(expertId);
     if (existing?.status === 'requested' || existing?.status === 'accepted') return;
+    if (activeRequest && activeRequest.expertId !== expertId) {
+      setMessage('Bạn chỉ có thể chọn một chuyên gia. Hãy chờ yêu cầu hiện tại được xử lý.');
+      return;
+    }
 
     setBusyId(expertId);
     setMessage('');
@@ -106,6 +115,17 @@ export function ChooseExpertPage() {
           }}
         >
           {message}
+        </p>
+      )}
+
+      {activeRequest && (
+        <p
+          className="text-sm m-0 rounded-xl px-4 py-3 border"
+          style={{ ...tezcaCardStyle, color: tezcaTheme.textMuted }}
+        >
+          {activeRequest.status === 'accepted'
+            ? `Bạn đang đồng hành với ${activeRequest.expertName || 'một chuyên gia'}.`
+            : `Yêu cầu gửi tới ${activeRequest.expertName || 'một chuyên gia'} đang chờ duyệt.`}
         </p>
       )}
 
@@ -183,8 +203,21 @@ export function ChooseExpertPage() {
               const displayName = e.fullName || e.name || 'Chuyên gia Tezca';
               const req = requestByExpertId.get(e.id);
               const badge = statusLabel(req?.status);
-              const canRequest = !req || req.status === 'rejected' || req.status === 'revoked';
-
+              const blockedByOtherExpert = Boolean(activeRequest && activeRequest.expertId !== e.id);
+              const canRequest = !blockedByOtherExpert && (!req || req.status === 'rejected' || req.status === 'revoked');
+              const buttonDisabled = Boolean(busyId) || !canRequest;
+              const buttonLabel =
+                busyId === e.id
+                  ? 'Đang gửi…'
+                  : blockedByOtherExpert
+                    ? activeRequest?.status === 'requested'
+                      ? 'Đang chờ chuyên gia khác'
+                      : 'Đã có chuyên gia'
+                    : canRequest
+                      ? 'Chọn chuyên gia này'
+                      : req?.status === 'accepted'
+                        ? 'Đã đồng hành'
+                        : 'Đã gửi yêu cầu';
               return (
                 <li
                   key={e.id}
@@ -234,19 +267,15 @@ export function ChooseExpertPage() {
                       <button
                         type="button"
                         onClick={() => void requestExpert(e.id)}
-                        disabled={busyId === e.id || !canRequest}
+                        disabled={buttonDisabled}
                         className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{
-                          background: canRequest ? tezcaTheme.accentGradient : tezcaTheme.subtleBg,
+                          background: !buttonDisabled && canRequest ? tezcaTheme.accentGradient : tezcaTheme.subtleBg,
                           color: tezcaTheme.text,
                         }}
                       >
-                        {busyId === e.id
-                          ? 'Đang gửi…'
-                          : canRequest
-                            ? 'Chọn chuyên gia này'
-                            : 'Đã gửi yêu cầu'}
-                        {canRequest && <ChevronRight size={16} aria-hidden />}
+                        {buttonLabel}
+                        {!buttonDisabled && canRequest && <ChevronRight size={16} aria-hidden />}
                       </button>
                     </div>
                   </div>

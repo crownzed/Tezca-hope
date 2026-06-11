@@ -24,7 +24,8 @@ export async function streamAiChat({
     : [apiUrl('/api/me/ai-chat/stream')];
   let lastRes: Response | null = null;
 
-  for (const url of urls) {
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]!;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -53,6 +54,7 @@ export async function streamAiChat({
         const { done, value } = await reader.read();
         if (done) break;
         sseBuffer += decoder.decode(value, { stream: true });
+        sseBuffer = sseBuffer.replace(/\r\n/g, '\n');
 
         let boundary = sseBuffer.indexOf('\n\n');
         while (boundary !== -1) {
@@ -92,7 +94,7 @@ export async function streamAiChat({
       return finalText;
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') throw e;
-      if (base === bases[bases.length - 1]) throw e;
+      if (!(e instanceof TypeError) || i === urls.length - 1) throw e;
     }
   }
 

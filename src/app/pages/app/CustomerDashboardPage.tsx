@@ -294,13 +294,9 @@ export function CustomerDashboardPage() {
                       {weightDelta}
                     </p>
                   ) : (
-                    <Link
-                      to={ROUTES.app.bmi}
-                      className="text-xs mt-2 inline-block no-underline hover:underline font-medium"
-                      style={{ color: tezcaTheme.accentDark }}
-                    >
-                      Thêm đo BMI →
-                    </Link>
+                    <p className="text-xs mt-2 m-0" style={{ color: tezcaTheme.textMuted }}>
+                      Chưa có dữ liệu đo BMI
+                    </p>
                   )}
                 </div>
                 <div className="p-4 rounded-xl border" style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}>
