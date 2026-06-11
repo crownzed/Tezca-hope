@@ -110,8 +110,14 @@ export const ROUTES = {
     bookmarks: '/cong-dong/da-luu',
     notifications: '/cong-dong/thong-bao-cua-toi',
     search: '/cong-dong/tim-kiem',
+    profile: '/cong-dong/thanh-vien',
   },
 } as const;
+
+/** Trang cá nhân công khai của một thành viên trong cộng đồng */
+export function communityProfilePath(userId: string) {
+  return `${ROUTES.community.profile}/${encodeURIComponent(userId)}`;
+}
 
 /** Hồ sơ khách hàng — workspace chuyên gia */
 export function expertCustomerPath(customerId: string) {

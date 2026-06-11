@@ -10,7 +10,7 @@ import {
   announcementsChannel,
 } from './communityDelivery.js';
 import { getCommunityDmThreadForUser } from './db.js';
-import { isValidRoomTopic } from './communityTopics.js';
+import { isValidRoomTopic, COMMUNITY_ROOM_TOPICS } from './communityTopics.js';
 
 /** @type {Map<string, Set<import('ws').WebSocket>>} */
 const liveRooms = new Map();
@@ -100,7 +100,7 @@ registerCommunityChannelBroadcast(forumChannel(), (payload, exceptWs) =>
   broadcastCommunity(forumChannel(), payload, exceptWs),
 );
 
-for (const topic of ['nutrition', 'psychology', 'musculoskeletal']) {
+for (const topic of COMMUNITY_ROOM_TOPICS) {
   registerCommunityChannelBroadcast(roomChannel(topic), (payload, exceptWs) =>
     broadcastCommunity(roomChannel(topic), payload, exceptWs),
   );

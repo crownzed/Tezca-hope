@@ -31,6 +31,7 @@ type ForumFeedProps = {
   onTopicFilterChange: (topic: CommunityPostTopic | '') => void;
   onToggleTopicFollow: (topic: CommunityPostTopic) => void;
   onToggleFollowAuthor: (userId: string) => void;
+  onAuthorClick?: (userId: string) => void;
   onLoadMore: () => void;
   onNewPostTopicChange: (topic: CommunityPostTopic) => void;
   onNewPostContentChange: (content: string) => void;
@@ -88,6 +89,7 @@ export function ForumFeed({
   loadingMore,
   onToggleTopicFollow,
   onToggleFollowAuthor,
+  onAuthorClick,
   onLoadMore,
   onCommentDraftChange,
   onThreadReplyDraftChange,
@@ -173,6 +175,7 @@ export function ForumFeed({
             currentUserId={currentUserId}
             isFollowingAuthor={post.userId ? followedUserIds.has(post.userId) : false}
             onToggleFollowAuthor={onToggleFollowAuthor}
+            onAuthorClick={onAuthorClick}
             expanded={expandedPost === post.id}
             comments={comments[post.id] || []}
             threadReplies={threadReplies[post.id] || []}

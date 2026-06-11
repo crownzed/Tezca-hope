@@ -26,6 +26,11 @@ import {
   countUnreadCommunityNotifications,
   markCommunityNotificationsRead,
   searchCommunityPosts,
+  getCommunityPublicProfile,
+  listCommunityPostsByUser,
+  getCommunityUserSettings,
+  updateCommunityUserSettings,
+  updateCommunityPublicProfile,
 } from '../db.js';
 import { randomUUID } from 'node:crypto';
 import { broadcastCommunityEvent, forumChannel } from '../communityDelivery.js';
@@ -210,4 +215,26 @@ export function likePost(postId, userId) {
 
 export function reportContent(input) {
   return createCommunityReport(input);
+}
+
+// ===== Hồ sơ công khai =====
+
+export function getPublicProfile(userId, viewerId) {
+  return getCommunityPublicProfile(userId, viewerId);
+}
+
+export function listPostsByUser(userId, opts) {
+  return listCommunityPostsByUser(userId, opts);
+}
+
+export function getMySettings(userId) {
+  return getCommunityUserSettings(userId);
+}
+
+export function updateMySettings(userId, patch) {
+  return updateCommunityUserSettings(userId, patch);
+}
+
+export function updateMyPublicProfile(userId, patch) {
+  return updateCommunityPublicProfile(userId, patch);
 }

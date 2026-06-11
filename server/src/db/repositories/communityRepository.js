@@ -648,3 +648,125 @@ export function searchCommunityPosts({ query, topic, limit = 30, beforeTs, viewe
   const rows = getDb().prepare(sql).all(...params);
   return rows.map((r) => mapCommunityPostRow(r, viewerId));
 }
+
+// ===== Hồ sơ công khai (giống trang cá nhân) =====
+
+/** Đếm số người theo dõi + đang theo dõi + số bài đã đăng (root, published). */
+function profileCounts(userId) {
+  const db = getDb();
+  const followers = db
+    .prepare(`SELECT COUNT(*) AS c FROM community_user_follows WHERE following_id = ?`)
+    .get(userId);
+  const following = db
+    .prepare(`SELECT COUNT(*) AS c FROM community_user_follows WHERE follower_id = ?`)
+    .get(userId);
+  const posts = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM community_posts
+       WHERE user_id = ? AND status = 'published' AND parent_post_id IS NULL`,
+    )
+    .get(userId);
+  return {
+    followers: followers ? Number(followers.c) : 0,
+    following: following ? Number(following.c) : 0,
+    posts: posts ? Number(posts.c) : 0,
+  };
+}
+
+/**
+ * Hồ sơ công khai của một user (khách hàng hoặc chuyên gia).
+ * Chỉ trả thông tin công khai: tên, vai trò, avatar, bio, số liệu.
+ * KHÔNG lộ email / SĐT / địa chỉ / ngày sinh.
+ */
+export function getCommunityPublicProfile(userId, viewerId = null) {
+  const u = getDb()
+    .prepare(
+      `SELECT id, name, role, COALESCE(avatar_url, '') AS avatar_url, COALESCE(bio, '') AS bio
+       FROM users WHERE id = ?`,
+    )
+    .get(userId);
+  if (!u) return null;
+
+  const settings = getDb()
+    .prepare(`SELECT show_followers FROM community_user_settings WHERE user_id = ?`)
+    .get(userId);
+  const showFollowers = settings ? Boolean(settings.show_followers) : true;
+
+  const counts = profileCounts(userId);
+  const isSelf = viewerId === userId;
+  return {
+    id: u.id,
+    name: u.name || 'Thành viên',
+    role: u.role || 'user',
+    avatarUrl: u.avatar_url,
+    bio: u.bio,
+    showFollowers,
+    // Chủ tài khoản luôn thấy số của mình; người khác bị ẩn nếu showFollowers=false.
+    followersCount: isSelf || showFollowers ? counts.followers : null,
+    followingCount: counts.following,
+    postsCount: counts.posts,
+    isFollowedByMe:
+      viewerId && viewerId !== userId ? isFollowingCommunityUser(viewerId, userId) : false,
+    isSelf,
+  };
+}
+
+/** Bài đăng (root, published) của một user — cho tab "Bài đã đăng". */
+export function listCommunityPostsByUser(userId, { beforeTs, limit = 30, viewerId } = {}) {
+  let sql = `
+    SELECT p.*, u.name AS author_name, u.role AS author_role,
+      ${POST_STATS_SQL}
+    FROM community_posts p
+    JOIN users u ON u.id = p.user_id
+    WHERE p.user_id = ? AND p.status = 'published' AND p.parent_post_id IS NULL`;
+  const params = [userId];
+  if (beforeTs) {
+    sql += ` AND p.created_at < ?`;
+    params.push(beforeTs);
+  }
+  sql += ` ORDER BY p.created_at DESC LIMIT ?`;
+  params.push(Math.min(Math.max(limit, 1), 50));
+  const rows = getDb().prepare(sql).all(...params);
+  return rows.map((r) => mapCommunityPostRow(r, viewerId));
+}
+
+/** Lấy cài đặt cộng đồng của chính mình (mặc định show_followers = true). */
+export function getCommunityUserSettings(userId) {
+  const row = getDb()
+    .prepare(`SELECT show_followers FROM community_user_settings WHERE user_id = ?`)
+    .get(userId);
+  return { showFollowers: row ? Boolean(row.show_followers) : true };
+}
+
+/** Cập nhật cài đặt hiển thị người theo dõi. */
+export function updateCommunityUserSettings(userId, { showFollowers }) {
+  const now = Date.now();
+  getDb()
+    .prepare(
+      `INSERT INTO community_user_settings (user_id, show_followers, created_at, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET show_followers = excluded.show_followers, updated_at = excluded.updated_at`,
+    )
+    .run(userId, showFollowers ? 1 : 0, now, now);
+  return getCommunityUserSettings(userId);
+}
+
+/** Cập nhật avatar + bio (hồ sơ công khai). */
+export function updateCommunityPublicProfile(userId, { avatarUrl, bio }) {
+  const sets = [];
+  const params = [];
+  if (avatarUrl !== undefined) {
+    sets.push('avatar_url = ?');
+    params.push(String(avatarUrl || '').slice(0, 512));
+  }
+  if (bio !== undefined) {
+    sets.push('bio = ?');
+    params.push(String(bio || '').slice(0, 500));
+  }
+  if (sets.length === 0) return getCommunityPublicProfile(userId, userId);
+  params.push(userId);
+  getDb()
+    .prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
+    .run(...params);
+  return getCommunityPublicProfile(userId, userId);
+}

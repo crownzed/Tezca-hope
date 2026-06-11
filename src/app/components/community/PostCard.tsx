@@ -54,6 +54,7 @@ type PostCardProps = {
   currentUserId?: string;
   isFollowingAuthor?: boolean;
   onToggleFollowAuthor?: (userId: string) => void;
+  onAuthorClick?: (userId: string) => void;
   expanded: boolean;
   comments: ForumComment[];
   threadReplies: ForumPost[];
@@ -82,6 +83,7 @@ export function PostCard({
   currentUserId,
   isFollowingAuthor,
   onToggleFollowAuthor,
+  onAuthorClick,
   expanded,
   comments,
   threadReplies,
@@ -143,13 +145,19 @@ export function PostCard({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shrink-0${post.userId && onAuthorClick ? ' cursor-pointer' : ''}`}
               style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
+              onClick={() => post.userId && onAuthorClick?.(post.userId)}
             >
               {initials(post.authorName)}
             </div>
             <div>
-              <p className="m-0 font-semibold text-sm">{post.authorName}</p>
+              <p
+                className={`m-0 font-semibold text-sm${post.userId && onAuthorClick ? ' cursor-pointer hover:underline' : ''}`}
+                onClick={() => post.userId && onAuthorClick?.(post.userId)}
+              >
+                {post.authorName}
+              </p>
               <p className="m-0 text-xs opacity-60 mt-0.5">
                 {roleBadgeLabel(post.authorRole)} · {postTopicLabel(post.topic)} · {formatTime(post.createdAt)}
               </p>

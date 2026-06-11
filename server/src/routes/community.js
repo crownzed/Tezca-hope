@@ -16,6 +16,16 @@ import {
 export const communityRouter = Router();
 const requireMember = authMiddlewareRoles(['user', 'expert', 'admin']);
 
+// Chỉ khách hàng (role 'user') được khởi tạo / gửi tin nhắn DM trong cộng đồng.
+// Chuyên gia/admin vẫn xem được hồ sơ nhưng không nhắn tin qua kênh này.
+function requireCustomerForDm(req, res, next) {
+  if (req.user?.role !== 'user') {
+    res.status(403).json({ error: 'Chỉ khách hàng được nhắn tin trong cộng đồng' });
+    return;
+  }
+  next();
+}
+
 const FEED_MODES = new Set(['for_you', 'following', 'latest']);
 
 communityRouter.get('/feed', requireMember, (req, res) => {
@@ -481,7 +491,7 @@ communityRouter.get('/dm/members', requireMember, (req, res) => {
   res.json({ members });
 });
 
-communityRouter.post('/dm/threads', requireMember, (req, res) => {
+communityRouter.post('/dm/threads', requireMember, requireCustomerForDm, (req, res) => {
   const otherUserId = String(req.body?.otherUserId || '').trim();
   if (!otherUserId) {
     res.status(400).json({ error: 'Thiếu người nhận' });
@@ -521,7 +531,7 @@ communityRouter.get('/dm/threads/:threadId/messages', requireMember, (req, res) 
   res.json({ messages });
 });
 
-communityRouter.post('/dm/threads/:threadId/messages', requireMember, communityDmLimiter, (req, res) => {
+communityRouter.post('/dm/threads/:threadId/messages', requireMember, requireCustomerForDm, communityDmLimiter, (req, res) => {
   const threadId = String(req.params.threadId);
   const content = String(req.body?.content || '').trim();
   if (!content || content.length > 2000) {
@@ -555,4 +565,68 @@ communityRouter.post('/dm/threads/:threadId/read', requireMember, (req, res) => 
 // Tổng số tin nhắn DM chưa đọc (cho badge)
 communityRouter.get('/dm/unread-count', requireMember, (req, res) => {
   res.json({ unread: communityExtendedService.countUnreadDm(req.user.sub) });
+});
+
+// ===== Hồ sơ công khai (trang cá nhân) =====
+
+// Xem hồ sơ công khai của một thành viên (khách hàng hoặc chuyên gia)
+communityRouter.get('/users/:userId/profile', requireMember, (req, res) => {
+  const profile = communityService.getPublicProfile(String(req.params.userId), req.user.sub);
+  if (!profile) {
+    res.status(404).json({ error: 'Không tìm thấy thành viên' });
+    return;
+  }
+  res.json({ profile });
+});
+
+// Bài đã đăng của một thành viên
+communityRouter.get('/users/:userId/posts', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const pageLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 30;
+  const posts = communityService.listPostsByUser(String(req.params.userId), {
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    limit: pageLimit,
+    viewerId: req.user.sub,
+  });
+  const nextCursor =
+    posts.length >= pageLimit ? String(posts[posts.length - 1].createdAt) : undefined;
+  res.json({ posts, nextCursor });
+});
+
+// Cài đặt cộng đồng của chính mình (bật/tắt hiển thị người theo dõi)
+communityRouter.get('/me/settings', requireMember, (req, res) => {
+  res.json({ settings: communityService.getMySettings(req.user.sub) });
+});
+
+communityRouter.put('/me/settings', requireMember, (req, res) => {
+  const showFollowers = req.body?.showFollowers;
+  if (typeof showFollowers !== 'boolean') {
+    res.status(400).json({ error: 'showFollowers phải là true/false' });
+    return;
+  }
+  const settings = communityService.updateMySettings(req.user.sub, { showFollowers });
+  res.json({ settings });
+});
+
+// Cập nhật hồ sơ công khai của chính mình (avatar + bio)
+communityRouter.put('/me/profile', requireMember, (req, res) => {
+  const patch = {};
+  if (req.body?.avatarUrl !== undefined) {
+    const url = String(req.body.avatarUrl || '').trim();
+    if (url && !validateImageUrl(url)) {
+      res.status(400).json({ error: 'Ảnh đại diện không hợp lệ' });
+      return;
+    }
+    patch.avatarUrl = url;
+  }
+  if (req.body?.bio !== undefined) {
+    patch.bio = String(req.body.bio || '').trim().slice(0, 500);
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'Không có thay đổi' });
+    return;
+  }
+  const profile = communityService.updateMyPublicProfile(req.user.sub, patch);
+  res.json({ profile });
 });

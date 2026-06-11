@@ -461,6 +461,11 @@ export {
   countUnreadCommunityNotifications,
   markCommunityNotificationsRead,
   searchCommunityPosts,
+  getCommunityPublicProfile,
+  listCommunityPostsByUser,
+  getCommunityUserSettings,
+  updateCommunityUserSettings,
+  updateCommunityPublicProfile,
 } from './db/repositories/communityRepository.js';
 
 export {

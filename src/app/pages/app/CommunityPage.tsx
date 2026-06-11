@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { apiFetch, canUseWebSocket } from '../../lib/api';
 import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
@@ -13,6 +14,7 @@ import { CommunityRightAside } from '../../components/community/CommunityRightAs
 import { ForumFeed } from '../../components/community/ForumFeed';
 import type { ForumComment, ForumPost } from '../../components/community/PostCard';
 import { GroupChatBox, type RoomChatMessage } from '../../components/community/GroupChatBox';
+import { communityProfilePath } from '../../routes';
 import {
   mergeUniqueById,
   useCommunityForumRealtime,
@@ -55,6 +57,7 @@ function loadRoomReadState(): Record<CommunityRoomTopic, number> {
 
 export function CommunityPage({ mode }: CommunityPageProps) {
   const { token, user } = useAnyCommunitySession();
+  const navigate = useNavigate();
   const tab = mode;
   const [feedMode, setFeedMode] = useState<CommunityFeedMode>('for_you');
   const [topicFilter, setTopicFilter] = useState<CommunityPostTopic | ''>('');
@@ -638,6 +641,7 @@ export function CommunityPage({ mode }: CommunityPageProps) {
               loadingMore={loadingMore}
               onToggleTopicFollow={toggleTopicFollow}
               onToggleFollowAuthor={toggleFollowAuthor}
+              onAuthorClick={(userId) => navigate(communityProfilePath(userId))}
               onLoadMore={loadMorePosts}
               onThreadReplyDraftChange={(postId, value) =>
                 setThreadReplyDraft((d) => ({ ...d, [postId]: value }))

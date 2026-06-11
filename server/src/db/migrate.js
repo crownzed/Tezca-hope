@@ -583,6 +583,109 @@ export function runMigrations(db) {
         }
       },
     },
+    {
+      version: 24,
+      name: 'community_topics_drop_check',
+      up: () => {
+        // Gỡ CHECK constraint cứng trên cột topic để cho phép thêm chủ đề mới
+        // mà KHÔNG cần migration nữa. Validate chuyển lên tầng ứng dụng
+        // (communityTopics.js: isValidPostTopic / isValidRoomTopic).
+        // SQLite không DROP CHECK trực tiếp được → rebuild bảng (table recreate).
+        // foreign_keys phải OFF trong khi rebuild để không phá vỡ FK con trỏ tới.
+        const fkWasOn = db.pragma('foreign_keys', { simple: true });
+        db.pragma('foreign_keys = OFF');
+        try {
+          // 1. community_posts
+          db.exec(`
+            CREATE TABLE community_posts_new (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              topic TEXT NOT NULL,
+              content TEXT NOT NULL,
+              image_url TEXT NOT NULL DEFAULT '',
+              likes_count INTEGER NOT NULL DEFAULT 0,
+              status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'hidden')),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              parent_post_id TEXT,
+              edited_at INTEGER,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            INSERT INTO community_posts_new
+              (id, user_id, topic, content, image_url, likes_count, status, created_at, updated_at, parent_post_id, edited_at)
+              SELECT id, user_id, topic, content, image_url, likes_count, status, created_at, updated_at, parent_post_id, edited_at
+              FROM community_posts;
+            DROP TABLE community_posts;
+            ALTER TABLE community_posts_new RENAME TO community_posts;
+            CREATE INDEX IF NOT EXISTS idx_community_posts_topic ON community_posts(topic, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_created ON community_posts(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_parent ON community_posts(parent_post_id, created_at ASC);
+          `);
+
+          // 2. community_room_messages
+          db.exec(`
+            CREATE TABLE community_room_messages_new (
+              id TEXT PRIMARY KEY,
+              topic TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              content TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'hidden')),
+              created_at INTEGER NOT NULL,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            INSERT INTO community_room_messages_new
+              (id, topic, user_id, content, status, created_at)
+              SELECT id, topic, user_id, content, status, created_at
+              FROM community_room_messages;
+            DROP TABLE community_room_messages;
+            ALTER TABLE community_room_messages_new RENAME TO community_room_messages;
+            CREATE INDEX IF NOT EXISTS idx_community_room_topic ON community_room_messages(topic, created_at);
+          `);
+
+          // 3. community_topic_follows
+          db.exec(`
+            CREATE TABLE community_topic_follows_new (
+              user_id TEXT NOT NULL,
+              topic TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (user_id, topic),
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            INSERT INTO community_topic_follows_new
+              (user_id, topic, created_at)
+              SELECT user_id, topic, created_at
+              FROM community_topic_follows;
+            DROP TABLE community_topic_follows;
+            ALTER TABLE community_topic_follows_new RENAME TO community_topic_follows;
+          `);
+        } finally {
+          if (fkWasOn) db.pragma('foreign_keys = ON');
+        }
+      },
+    },
+    {
+      version: 25,
+      name: 'community_public_profile',
+      up: () => {
+        // Avatar + bio cho hồ sơ công khai (chung mọi vai trò) → để trên bảng users.
+        if (!tableHasColumn(db, 'users', 'avatar_url')) {
+          db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''`);
+        }
+        if (!tableHasColumn(db, 'users', 'bio')) {
+          db.exec(`ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''`);
+        }
+        // Cài đặt cộng đồng: bật/tắt hiển thị danh sách người theo dõi.
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS community_user_settings (
+            user_id TEXT PRIMARY KEY,
+            show_followers INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+        `);
+      },
+    },
   ];
 
   for (const m of migrations) {
