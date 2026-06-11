@@ -38,8 +38,10 @@ import {
   applyDayProgress,
   buildWeekDaysWithIso,
   countDayDone,
+  exercisesForPlanDay,
   extractDayProgress,
   isoDateForWeekDayId,
+  planDayForIso,
 } from '../../lib/trainingDayProgress';
 
 const MOTIVATIONAL_QUOTES = [
@@ -120,9 +122,19 @@ export function CustomerDashboardPage() {
     [activeDay, weekDays],
   );
 
+  const activePlanDay = useMemo(
+    () => planDayForIso(activeIso, weekDays),
+    [activeIso, weekDays],
+  );
+
+  const dayBaseExercises = useMemo(
+    () => exercisesForPlanDay(baseExercises, activePlanDay),
+    [baseExercises, activePlanDay],
+  );
+
   const exercises = useMemo(
-    () => applyDayProgress(baseExercises, dailyProgress[activeIso]),
-    [baseExercises, dailyProgress, activeIso],
+    () => applyDayProgress(dayBaseExercises, dailyProgress[activeIso]),
+    [dayBaseExercises, dailyProgress, activeIso],
   );
   const bmiList = useMemo(() => loadBmiEntries(userId).sort((a, b) => b.date.localeCompare(a.date)), [userId]);
   const latestBmi = bmiList[0];
@@ -490,7 +502,8 @@ export function CustomerDashboardPage() {
                 style={{ backgroundColor: tezcaTheme.subtleBg, borderColor: tezcaTheme.border }}
               >
                 {weekDays.map((day) => {
-                  const { done, total } = countDayDone(baseExercises, dailyProgress[day.isoDate]);
+                  const chipBase = exercisesForPlanDay(baseExercises, planDayForIso(day.isoDate, weekDays));
+                  const { done, total } = countDayDone(chipBase, dailyProgress[day.isoDate]);
                   const allDone = total > 0 && done === total;
                   const partial = done > 0 && !allDone;
                   return (

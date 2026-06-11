@@ -1,53 +1,83 @@
 import type { DashboardExercise } from './dashboardStorage';
 
-/** Trích mục vận động từ Markdown kế hoạch AI → bài tập cho Chiến dịch tập luyện. */
+function detectDayNumber(line: string): number | null {
+  const m = line.match(/ng[àa]y\s*(\d{1,2})/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n >= 1 && n <= 7 ? n : null;
+}
+
+function isMotionHeading(trimmed: string): boolean {
+  if (!/^#{2,4}\s+/.test(trimmed)) return false;
+  const heading = trimmed.replace(/^#{2,4}\s+/, '').toLowerCase();
+  return /vận động|van dong|tập luyện|tap luyen|hoạt động thể|exercise|lịch tập|lich tap|danh sách bài/.test(
+    heading,
+  );
+}
+
+function cleanTitle(raw: string): string {
+  return raw.replace(/\*\*/g, '').trim().replace(/^\[[ x]\]\s*/i, '').trim();
+}
+
+/** Trích mục vận động từ Markdown kế hoạch AI → bài tập, kèm số ngày (1..7) nếu có. */
 export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[] {
   const lines = plan.split('\n');
+  let currentDay: number | null = null;
   let inMotion = false;
-  const titles: string[] = [];
+  const collected: { title: string; day: number | null }[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^###\s+/.test(trimmed)) {
-      const heading = trimmed.replace(/^###\s+/, '').toLowerCase();
-      inMotion = /vận động|van dong|tập luyện|tap luyen|hoạt động thể|exercise/.test(heading);
+
+    if (/^#{1,6}\s+/.test(trimmed) || /^\*\*.*\*\*$/.test(trimmed)) {
+      const day = detectDayNumber(trimmed);
+      if (day) {
+        currentDay = day;
+        inMotion = true;
+        continue;
+      }
+      inMotion = isMotionHeading(trimmed);
+      if (/^#{2,3}\s+/.test(trimmed) && !isMotionHeading(trimmed)) {
+        currentDay = null;
+      }
       continue;
     }
-    if (!inMotion) continue;
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+
+    if (!inMotion && currentDay == null) continue;
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/) || trimmed.match(/^\d+[.)]\s+(.+)$/);
     if (!bullet) continue;
-    let title = bullet[1]!.replace(/\*\*/g, '').trim();
-    title = title.replace(/^\[[ x]\]\s*/i, '').trim();
+    const title = cleanTitle(bullet[1]!);
     if (title.length < 4) continue;
-    if (title.length > 140) title = `${title.slice(0, 137)}…`;
-    titles.push(title);
+    collected.push({ title: title.length > 140 ? `${title.slice(0, 137)}…` : title, day: currentDay });
   }
 
-  if (titles.length === 0) {
+  if (collected.length === 0) {
     for (const line of lines) {
       const trimmed = line.trim();
       const bullet = trimmed.match(/^[-*]\s+(.+)$/);
       if (!bullet) continue;
       const raw = bullet[1]!.toLowerCase();
       if (
-        !/(phút|phut|buổi|buoi|đi bộ|di bo|squat|cardio|tập|tap|zone|hiit|yoga|mobility|kháng|khang)/.test(
+        !/(phút|phut|buổi|buoi|đi bộ|di bo|squat|cardio|tập|tap|zone|hiit|yoga|mobility|kháng|khang|hiệp|hiep|rep|set)/.test(
           raw,
         )
       ) {
         continue;
       }
-      let title = bullet[1]!.replace(/\*\*/g, '').trim();
+      const title = cleanTitle(bullet[1]!);
       if (title.length < 4 || title.length > 140) continue;
-      titles.push(title);
+      collected.push({ title, day: null });
     }
   }
 
   const baseId = Date.now();
-  return titles.slice(0, 12).map((title, i) => ({
+  return collected.slice(0, 60).map((item, i) => ({
     id: baseId + i,
-    title,
+    title: item.title,
     sets: 1,
     reps: 'Theo kế hoạch',
+    day: item.day,
     isPTLocked: true,
     completed: false,
     actualWeight: '',

@@ -8,7 +8,7 @@ import {
 } from '../jsonStore.js';
 import { assertIsoDate, assertNonEmptyId } from '../validators.js';
 
-const MAX_EXERCISES = 20;
+const MAX_EXERCISES = 70;
 const DAILY_HISTORY_DAYS = 120;
 
 const SELECT_PLAN = `
@@ -37,18 +37,22 @@ function assertCustomerRole(customerId) {
 }
 
 export function structureExercises(list) {
-  return (list || []).slice(0, MAX_EXERCISES).map((ex, i) => ({
-    id: Number(ex.id) || Date.now() + i,
-    title: String(ex.title || 'Bài tập').trim().slice(0, 140),
-    sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
-    reps:
-      typeof ex.reps === 'string' || typeof ex.reps === 'number'
-        ? String(ex.reps).slice(0, 40)
-        : 'Theo kế hoạch',
-    isPTLocked: ex.isPTLocked !== false,
-    completed: false,
-    actualWeight: String(ex.actualWeight || '').slice(0, 24),
-  }));
+  return (list || []).slice(0, MAX_EXERCISES).map((ex, i) => {
+    const dayNum = Number(ex.day);
+    return {
+      id: Number(ex.id) || Date.now() + i,
+      title: String(ex.title || 'Bài tập').trim().slice(0, 140),
+      sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
+      reps:
+        typeof ex.reps === 'string' || typeof ex.reps === 'number'
+          ? String(ex.reps).slice(0, 40)
+          : 'Theo kế hoạch',
+      day: Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 7 ? dayNum : null,
+      isPTLocked: ex.isPTLocked !== false,
+      completed: false,
+      actualWeight: String(ex.actualWeight || '').slice(0, 24),
+    };
+  });
 }
 
 function migrateLegacyProgressToDaily(exercises, daily) {

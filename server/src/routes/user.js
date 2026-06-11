@@ -136,12 +136,12 @@ userRouter.post('/me/experts/:expertId/request', requireUser, (req, res) => {
   }
   const result = requestExpertAssignment(req.user.sub, expertId);
   if (!result.ok) {
-    if (result.error === 'active_request_exists') {
-      res.status(409).json({ error: 'Bạn đang có yêu cầu chọn chuyên gia khác. Hãy chờ xử lý trước khi chọn lại.' });
+    if (result.error === 'invalid_expert') {
+      res.status(400).json({ error: 'Chuyên gia không hợp lệ' });
       return;
     }
-    if (result.error === 'customer_has_expert') {
-      res.status(409).json({ error: 'Bạn đã có chuyên gia đồng hành. Không thể chọn thêm chuyên gia khác.' });
+    if (result.error === 'invalid_customer') {
+      res.status(400).json({ error: 'Tài khoản không hợp lệ' });
       return;
     }
     res.status(400).json({ error: 'Không thể gửi yêu cầu chọn chuyên gia' });
@@ -359,33 +359,44 @@ userRouter.post('/me/plan-ai', requireUser, aiPlanLimiter, async (req, res) => {
     bmiInfo = `\n- Cân nặng: ${weight} kg`;
   }
 
-  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động chi tiết cho **7 ngày** (tiếng Việt, Markdown có tiêu đề ## / ###).
+  // Compress plan prompt
+  const params = [
+    `${a}y`,
+    goalVi,
+    actVi,
+    `${sessions}d/w`,
+    equipVi,
+    focus,
+    note
+  ].filter(Boolean).join(' | ');
 
-Đầu vào:
-- Tuổi: ${a}
-- Mục tiêu: ${goalVi}
-- Mức vận động hiện tại: ${actVi}${bmiInfo}
-- Số buổi tập mong muốn/tuần: ${sessions}
-- Thiết bị: ${equipVi}
-${focus ? `- Vùng cơ thể tập trung: ${focus}` : ''}
-${note ? `- Ghi chú (ưu tiên nếu không mâu thuẫn an toàn): ${note}` : ''}
+  const userPrompt = `Plan 7d workout (Vietnamese, Markdown).
 
-Yêu cầu nội dung:
-1) **Tóm tắt** 2–3 câu (định hướng tuần, không hứa kết quả cụ thể).
-2) **Dinh dưỡng:** nguyên tắc calo/macro phù hợp mục tiêu & cân nặng; ví dụ khẩu phần **bữa sáng/trưa/tối** linh hoạt; protein target dựa trên cân nặng nếu có.
-3) **Vận động:** lịch ${sessions} buổi/tuần CHI TIẾT từng buổi (tên bài tập, số hiệp × số lần, thời gian nghỉ). Phân chia nhóm cơ hợp lý.${focus ? ` Ưu tiên vùng: ${focus}.` : ''} Thiết bị: ${equipVi}. Bao gồm khởi động + cool down.
-4) **Theo dõi:** cân, vòng eo (nếu giảm cân), giấc ngủ/cảm xúc.
-5) Cuối cùng có mục **### Vận động** với danh sách bullet các bài tập chính (để hệ thống trích xuất tự động).
-6) **Tuyên bố miễn trừ** ngắn gọn cuối.
+Input: ${params}${bmiInfo ? ` | BMI: ${bmiInfo.trim()}` : ''}
 
-Không kê thuốc, không liều bổ sung cụ thể trừ khi chỉ là "thảo luận với bác sĩ".`;
+Output requirements:
+1) Summary (2-3 sentences, realistic goals)
+2) Schedule: ${sessions} sessions/week with:
+   - Exercise names (specific)
+   - Sets × reps × rest time
+   - Warm-up (5-10 min) + cool-down (5-10 min)
+   - Muscle group split (push/pull/legs or upper/lower)
+   - Equipment: ${equipVi}
+${focus ? `   - Focus area: ${focus}
+` : ''}3) Progressive overload guidelines (weekly progression)
+4) Progress tracking tips (photos, measurements)
+5) Section "### Danh sách bài tập" with exercise list (bullets)
+6) Brief disclaimer
 
-  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) & chuyên gia dinh dưỡng thể thao — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
-Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
-Khi có cân nặng/chiều cao, tính TDEE ước tính và đề xuất calo target cụ thể.
-Lịch tập CHI TIẾT: từng buổi ghi rõ bài tập, hiệp, lần lặp, thời gian nghỉ giữa hiệp.
-Chọn bài tập phù hợp thiết bị có sẵn. Phân chia nhóm cơ khoa học (push/pull/legs hoặc upper/lower).
-Không chẩn đoán hay kê đơn; chỉ giáo dục sức khỏe. Tôn trọng ghi chú y tế.
+No medications, no specific supplements.`;
+
+  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) chuyên nghiệp — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
+Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững và progressive overload.
+Lịch tập CHI TIẾT: từng buổi ghi rõ bài tập, hiệp, lần lặp, thời gian nghỉ giữa hiệp, tempo nếu cần.
+Chọn bài tập phù hợp thiết bị có sẵn. Phân chia nhóm cơ khoa học (push/pull/legs, upper/lower, hoặc full body).
+Khởi động bắt buộc: dynamic stretching + mobility. Cool down: static stretching + foam rolling.
+Progressive overload rõ ràng: tuần 1-2 làm quen, tuần 3-4 tăng volume/intensity.
+Không chẩn đoán hay kê đơn; chỉ giáo dục thể lực. Tôn trọng ghi chú y tế/giới hạn.
 Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập, câu nối mạch lạc.`;
 
   try {
@@ -394,7 +405,7 @@ Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập, câu 
         { role: 'system', content: PLAN_SYSTEM },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.6, max_tokens: 4000 },
+      { temperature: 0.6, max_tokens: 2000 },
     );
     res.json({ plan: polishAiText(plan) });
   } catch (e) {
@@ -436,22 +447,31 @@ userRouter.post('/me/plan-ai/stream', requireUser, aiPlanLimiter, async (req, re
     bmiInfo = `\n- Cân nặng: ${weight} kg`;
   }
 
-  const userPrompt = `Soạn **một kế hoạch** dinh dưỡng + vận động chi tiết cho **7 ngày** (tiếng Việt, Markdown có tiêu đề ## / ###).
+  // Compress plan prompt (streaming endpoint)
+  const params = [
+    `${a}y`,
+    goalVi,
+    actVi,
+    `${sessions}d/w`,
+    equipVi,
+    focus,
+    note
+  ].filter(Boolean).join(' | ');
 
-Đầu vào:
-- Tuổi: ${a}
-- Mục tiêu: ${goalVi}
-- Mức vận động hiện tại: ${actVi}${bmiInfo}
-- Số buổi tập mong muốn/tuần: ${sessions}
-- Thiết bị: ${equipVi}
-${focus ? `- Vùng cơ thể tập trung: ${focus}` : ''}
-${note ? `- Ghi chú: ${note}` : ''}
+  const userPrompt = `Plan 7d workout (Vietnamese, Markdown).
 
-Yêu cầu: kế hoạch cụ thể, áp dụng ngay, an toàn. Markdown gọn.`;
+Input: ${params}${bmiInfo ? ` | BMI: ${bmiInfo.trim()}` : ''}
 
-  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân & chuyên gia dinh dưỡng thể thao — viết tiếng Việt tự nhiên, cụ thể.
-Nguyên tắc: an toàn > hiệu quả; tránh cam kết số kg/tuần; nhấn thói quen bền vững.
-Markdown gọn: tiêu đề ##/###, bullet cho lịch tập.`;
+Output: detailed schedule (sets×reps×rest), warm-up/cool-down, progressive overload. Markdown.`;
+
+  const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) chuyên nghiệp — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
+Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững và progressive overload.
+Lịch tập CHI TIẾT: từng buổi ghi rõ bài tập, hiệp, lần lặp, thời gian nghỉ giữa hiệp, tempo nếu cần.
+Chọn bài tập phù hợp thiết bị có sẵn. Phân chia nhóm cơ khoa học (push/pull/legs, upper/lower, hoặc full body).
+Khởi động bắt buộc: dynamic stretching + mobility. Cool down: static stretching + foam rolling.
+Progressive overload rõ ràng: tuần 1-2 làm quen, tuần 3-4 tăng volume/intensity.
+Không chẩn đoán hay kê đơn; chỉ giáo dục thể lực. Tôn trọng ghi chú y tế/giới hạn.
+Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập.`;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -527,14 +547,14 @@ userRouter.patch('/me/training-plan/progress', requireUser, (req, res) => {
       res.status(400).json({ error: 'Cần mảng exercises với id và trạng thái' });
       return;
     }
-    const progress = items.slice(0, 20).map((ex) => ({
+    const progress = items.slice(0, 70).map((ex) => ({
       id: Number(ex.id),
       completed: ex.completed,
       actualWeight: ex.actualWeight,
     }));
     const bootstrap =
       Array.isArray(workout) && workout.length > 0
-        ? workout.slice(0, 20).map((ex, i) => ({
+        ? workout.slice(0, 70).map((ex, i) => ({
             id: Number(ex.id) || Date.now() + i,
             title: String(ex.title || 'Bài tập'),
             sets: ex.sets,
