@@ -28,6 +28,7 @@ export type DashboardExercise = {
   title: string;
   sets: number;
   reps: number | string;
+  day?: number | null;
   isPTLocked: boolean;
   completed: boolean;
   actualWeight: string;

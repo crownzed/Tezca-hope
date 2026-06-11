@@ -7,7 +7,9 @@ import {
   applyDayProgress,
   buildWeekDaysWithIso,
   countDayDone,
+  exercisesForPlanDay,
   normalizeDailyProgressFromApi,
+  planDayForIso,
 } from '../../lib/trainingDayProgress';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
@@ -46,9 +48,16 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
     [dailyProgress],
   );
 
+  const planDay = useMemo(() => planDayForIso(viewIso, weekDays), [viewIso, weekDays]);
+
+  const dayStructure = useMemo(
+    () => exercisesForPlanDay(structure, planDay),
+    [structure, planDay],
+  );
+
   const viewExercises = useMemo(
-    () => applyDayProgress(structure, normalizedDaily[viewIso]),
-    [structure, normalizedDaily, viewIso],
+    () => applyDayProgress(dayStructure, normalizedDaily[viewIso]),
+    [dayStructure, normalizedDaily, viewIso],
   );
 
   const load = useCallback(() => {
@@ -119,6 +128,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
         title: 'Bài tập mới',
         sets: 3,
         reps: 10,
+        day: planDay,
         isPTLocked: true,
         completed: false,
         actualWeight: '',
@@ -161,7 +171,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
       <span className="text-amber-700">Chờ duyệt</span>
     );
   const when = new Date(plan.integratedAt).toLocaleString('vi-VN');
-  const { done: viewDone, total: viewTotal } = countDayDone(structure, normalizedDaily[viewIso]);
+  const { done: viewDone, total: viewTotal } = countDayDone(dayStructure, normalizedDaily[viewIso]);
 
   return (
     <section className="xl:col-span-12 rounded-2xl border p-4 space-y-4" style={tezcaCardStyle}>
@@ -184,7 +194,9 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
 
       <div className="flex flex-wrap gap-1.5">
         {weekDays.map((day) => {
-          const { done, total } = countDayDone(structure, normalizedDaily[day.isoDate]);
+          const dayPlanNum = planDayForIso(day.isoDate, weekDays);
+          const dayBase = exercisesForPlanDay(structure, dayPlanNum);
+          const { done, total } = countDayDone(dayBase, normalizedDaily[day.isoDate]);
           const allDone = total > 0 && done === total;
           return (
             <button
@@ -240,7 +252,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
       </p>
 
       <div className="space-y-2">
-        {structure.map((ex) => {
+        {dayStructure.map((ex) => {
           const view = viewExercises.find((v) => v.id === ex.id);
           return (
             <div
@@ -300,7 +312,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
             </div>
           );
         })}
-        {structure.length === 0 && (
+        {dayStructure.length === 0 && (
           <p className="text-xs m-0" style={{ color: tezcaTheme.textMuted }}>
             Chưa có bài tập — thêm ít nhất một dòng.
           </p>
