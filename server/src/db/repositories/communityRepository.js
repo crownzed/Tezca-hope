@@ -567,13 +567,34 @@ export function createCommunityNotification({
 }) {
   if (!userId || !type) return null;
   if (actorId && actorId === userId) return null; // không tự thông báo cho mình
-  getDb()
+  const db = getDb();
+  const now = Date.now();
+
+  // Chống trùng: nếu đã có thông báo CHƯA ĐỌC cùng (user + actor + type + post + comment),
+  // gộp lại — cập nhật thời gian + preview, đưa về chưa đọc — thay vì tạo dòng mới.
+  // Tránh spam khi like→bỏ→like lại, hoặc bình luận/trả lời nhiều lần cùng bài.
+  const existing = db
     .prepare(
-      `INSERT INTO community_notifications
+      `SELECT id FROM community_notifications
+       WHERE user_id = ? AND type = ? AND read_at IS NULL
+         AND actor_id IS ? AND post_id IS ? AND comment_id IS ?
+       LIMIT 1`,
+    )
+    .get(userId, type, actorId, postId, commentId);
+  if (existing) {
+    db.prepare(
+      `UPDATE community_notifications
+       SET created_at = ?, preview = ?, thread_id = ?, read_at = NULL
+       WHERE id = ?`,
+    ).run(now, preview, threadId, existing.id);
+    return { id: existing.id, deduped: true };
+  }
+
+  db.prepare(
+    `INSERT INTO community_notifications
         (id, user_id, actor_id, type, post_id, comment_id, thread_id, preview, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(id, userId, actorId, type, postId, commentId, threadId, preview, Date.now());
+  ).run(id, userId, actorId, type, postId, commentId, threadId, preview, now);
   return { id };
 }
 

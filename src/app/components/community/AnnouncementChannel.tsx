@@ -88,7 +88,7 @@ export function AnnouncementChannel({ token, userRole, userName }: AnnouncementC
       <div>
         <h1 className="text-2xl font-bold m-0 flex items-center gap-2">
           <Megaphone size={26} />
-          #thong-bao
+          Bảng tin Tezca
         </h1>
         <p className="mt-2 m-0 text-sm opacity-70">
           Kênh read-only — chỉ chuyên gia và quản trị viên đăng thông báo chính thức từ Tezca.

@@ -7,11 +7,11 @@ import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 const navItems = [
   { to: ROUTES.community.forum, label: 'Diễn đàn', icon: Home, end: true },
   { to: ROUTES.community.rooms, label: 'Phòng chat', icon: MessagesSquare, end: true },
-  { to: ROUTES.community.announcements, label: '#thong-bao', icon: Megaphone, end: true },
+  { to: ROUTES.community.announcements, label: 'Bảng tin Tezca', icon: Megaphone, end: true },
   { to: ROUTES.community.dm, label: 'Tin nhắn riêng', icon: MessageCircle, end: true },
   { to: ROUTES.community.search, label: 'Tìm kiếm', icon: Search, end: true },
   { to: ROUTES.community.bookmarks, label: 'Đã lưu', icon: Bookmark, end: true },
-  { to: ROUTES.community.notifications, label: 'Thông báo', icon: Bell, end: true },
+  { to: ROUTES.community.notifications, label: 'Thông báo của tôi', icon: Bell, end: true },
   { to: ROUTES.legal.community, label: 'Quy tắc cộng đồng', icon: ScrollText, end: true },
 ] as const;
 

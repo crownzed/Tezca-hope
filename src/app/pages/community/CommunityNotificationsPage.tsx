@@ -100,7 +100,7 @@ export function CommunityNotificationsPage() {
           className="text-2xl md:text-3xl font-bold m-0 flex items-center gap-2"
           style={{ color: tezcaTheme.text }}
         >
-          <Bell size={26} /> Thông báo
+          <Bell size={26} /> Thông báo của tôi
         </h1>
         <p className="mt-2 m-0 opacity-70 text-sm" style={{ color: tezcaTheme.text }}>
           Hoạt động liên quan đến bạn trong cộng đồng.
