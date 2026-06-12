@@ -43,34 +43,6 @@ function assignmentId() {
   return crypto.randomUUID();
 }
 
-function getOtherActiveAssignmentForCustomer(customerId, expertId) {
-  return getDb()
-    .prepare(
-      `SELECT expert_id AS expertId, status
-       FROM expert_customer_assignments
-       WHERE customer_id = ?
-         AND expert_id <> ?
-         AND status IN ('requested', 'accepted')
-       ORDER BY CASE status WHEN 'accepted' THEN 0 ELSE 1 END, updated_at DESC
-       LIMIT 1`,
-    )
-    .get(customerId, expertId);
-}
-
-function getOtherAcceptedAssignmentForCustomer(customerId, expertId) {
-  return getDb()
-    .prepare(
-      `SELECT expert_id AS expertId
-       FROM expert_customer_assignments
-       WHERE customer_id = ?
-         AND expert_id <> ?
-         AND status = 'accepted'
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-    )
-    .get(customerId, expertId);
-}
-
 function revokeOtherPendingRequests(db, customerId, expertId, now) {
   db.prepare(
     `UPDATE expert_customer_assignments
@@ -83,7 +55,8 @@ export function listLiveMessagesForCustomer(customerId) {
   return getDb()
     .prepare(
       `SELECT id, patient_id AS patientId, patient_id AS customerId,
-              sender_user_id AS senderUserId, sender_role AS senderRole, content, ts
+              sender_user_id AS senderUserId, sender_role AS senderRole, content, ts,
+              image_url AS imageUrl
        FROM live_messages WHERE patient_id = ? ORDER BY ts ASC`,
     )
     .all(customerId);
@@ -94,7 +67,8 @@ export function listLiveMessagesForCustomerSince(customerId, sinceTs) {
   return getDb()
     .prepare(
       `SELECT id, patient_id AS patientId, patient_id AS customerId,
-              sender_user_id AS senderUserId, sender_role AS senderRole, content, ts
+              sender_user_id AS senderUserId, sender_role AS senderRole, content, ts,
+              image_url AS imageUrl
        FROM live_messages WHERE patient_id = ? AND ts > ? ORDER BY ts ASC`,
     )
     .all(customerId, since);
@@ -103,12 +77,12 @@ export function listLiveMessagesForCustomerSince(customerId, sinceTs) {
 export function getExpertsForCustomer(customerId) {
   return getDb()
     .prepare(
-      `SELECT u.id AS id, u.email AS email, u.name AS name
+      `SELECT u.id AS id, u.name AS name
        FROM expert_customer_assignments a
        JOIN users u ON u.id = a.expert_id
        WHERE a.customer_id = ? AND a.status = 'accepted'
        UNION
-       SELECT u.id, u.email, u.name
+       SELECT u.id, u.name
        FROM assignments a
        JOIN users u ON u.id = a.expert_id
        WHERE a.patient_id = ?
@@ -154,9 +128,8 @@ export function assignExpertToCustomer(expertId, customerId) {
   if (!p || p.role !== 'user') return { ok: false, error: 'invalid_customer' };
   const e = findUserById(expertId);
   if (!e || e.role !== 'expert') return { ok: false, error: 'invalid_expert' };
-  if (getOtherAcceptedAssignmentForCustomer(customerId, expertId)) {
-    return { ok: false, error: 'customer_has_expert' };
-  }
+  // Multi-expert: khách hàng có thể được gán nhiều chuyên gia (admin chỉ định trực tiếp).
+  // Đã bỏ check 1-expert.
 
   const now = Date.now();
   const db = getDb();
@@ -176,18 +149,27 @@ export function assignExpertToCustomer(expertId, customerId) {
 }
 
 export function removeExpertCustomerAssignment(expertId, customerId) {
-  getDb()
-    .prepare(`DELETE FROM expert_customer_assignments WHERE expert_id = ? AND customer_id = ?`)
-    .run(expertId, customerId);
-  getDb()
-    .prepare(`DELETE FROM assignments WHERE expert_id = ? AND patient_id = ?`)
-    .run(expertId, customerId);
+  // Defense-in-depth: chỉ gỡ chính cặp (expertId, customerId) được truyền vào.
+  // Route đã chặn bằng canExpertAccessCustomer; trả về số dòng đã gỡ để caller biết kết quả.
+  if (!expertId || !customerId) return { ok: false, removed: 0 };
+  const db = getDb();
+  let removed = 0;
+  db.transaction(() => {
+    const r1 = db
+      .prepare(`DELETE FROM expert_customer_assignments WHERE expert_id = ? AND customer_id = ?`)
+      .run(expertId, customerId);
+    const r2 = db
+      .prepare(`DELETE FROM assignments WHERE expert_id = ? AND patient_id = ?`)
+      .run(expertId, customerId);
+    removed = (r1.changes || 0) + (r2.changes || 0);
+  })();
+  return { ok: true, removed };
 }
 
 export function listAvailableExperts() {
   return getDb()
     .prepare(
-      `SELECT u.id, u.email, u.name,
+      `SELECT u.id, u.name,
               COALESCE(ep.full_name, u.name) AS fullName,
               COALESCE(ep.specialty, '') AS specialty
        FROM users u
@@ -202,7 +184,7 @@ export function listExpertRequestsForCustomer(customerId) {
   return getDb()
     .prepare(
       `SELECT a.id, a.expert_id AS expertId, a.status, a.requested_by AS requestedBy,
-              a.created_at AS createdAt, u.name AS expertName, u.email AS expertEmail
+              a.created_at AS createdAt, u.name AS expertName
        FROM expert_customer_assignments a
        JOIN users u ON u.id = a.expert_id
        WHERE a.customer_id = ?
@@ -217,13 +199,7 @@ export function requestExpertAssignment(customerId, expertId) {
   const e = findUserById(expertId);
   if (!e || e.role !== 'expert') return { ok: false, error: 'invalid_expert' };
 
-  const otherActive = getOtherActiveAssignmentForCustomer(customerId, expertId);
-  if (otherActive) {
-    return {
-      ok: false,
-      error: otherActive.status === 'accepted' ? 'customer_has_expert' : 'active_request_exists',
-    };
-  }
+  // Allow multiple expert assignments — removed check for other active assignments
 
   const now = Date.now();
   getDb()
@@ -262,9 +238,7 @@ export function decideExpertAssignment(expertId, customerId, action) {
   const db = getDb();
 
   if (next === 'accepted') {
-    if (getOtherAcceptedAssignmentForCustomer(customerId, expertId)) {
-      return { ok: false, error: 'customer_has_expert' };
-    }
+    // Allow multiple accepted experts — removed check and auto-revoke
 
     let changed = 0;
     db.transaction(() => {
@@ -275,7 +249,6 @@ export function decideExpertAssignment(expertId, customerId, action) {
       ).run(next, now, expertId, customerId);
       changed = result.changes;
       if (changed > 0) {
-        revokeOtherPendingRequests(db, customerId, expertId, now);
         db.prepare(`INSERT OR IGNORE INTO assignments (expert_id, patient_id) VALUES (?, ?)`)
           .run(expertId, customerId);
       }

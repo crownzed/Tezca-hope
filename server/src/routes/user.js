@@ -20,6 +20,7 @@ import {
 } from '../db.js';
 import { parseExercisesFromPlanMarkdown } from '../planToExercises.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
+import { validateImageUrl } from '../validate.js';
 import { authMiddleware } from '../auth.js';
 import { aiChat, aiChatStream, isAiConfigured } from '../ai.js';
 import { polishAiText } from '../polishAiText.js';
@@ -202,7 +203,13 @@ userRouter.get('/me/live-messages', requireUser, (req, res) => {
 userRouter.post('/me/live-messages', requireUser, (req, res) => {
   if (!ensureAcceptedExpertForLiveChat(req, res)) return;
   const text = String((req.body || {}).text || '').trim();
-  if (!text) {
+  const imgResult = validateImageUrl((req.body || {}).imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  const imageUrl = imgResult.sanitized;
+  if (!text && !imageUrl) {
     res.status(400).json({ error: 'Tin nhắn trống' });
     return;
   }
@@ -211,9 +218,11 @@ userRouter.post('/me/live-messages', requireUser, (req, res) => {
     senderUserId: req.user.sub,
     senderRole: 'customer',
     content: text,
+    imageUrl,
   });
-  if (!msg) {
-    res.status(400).json({ error: 'Không gửi được' });
+  if (!msg || msg.error) {
+    const status = msg && msg.code === 'CONTENT_VIOLATION' ? 422 : 400;
+    res.status(status).json({ error: (msg && msg.error) || 'Không gửi được' });
     return;
   }
   res.status(201).json({ message: msg });

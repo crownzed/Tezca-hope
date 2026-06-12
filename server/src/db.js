@@ -336,19 +336,20 @@ export function getLastLiveMessageMap(patientIds) {
   return map;
 }
 
-export function insertLiveMessage({ patientId, customerId, senderUserId, senderRole, content }) {
+export function insertLiveMessage({ patientId, customerId, senderUserId, senderRole, content, imageUrl = '' }) {
   const cid = customerId ?? patientId;
   const id = crypto.randomUUID();
   const ts = Date.now();
   const role =
     senderRole === 'patient' || senderRole === 'user' ? 'customer' : senderRole;
+  const img = String(imageUrl || '');
   getDb()
     .prepare(
-      `INSERT INTO live_messages (id, patient_id, sender_user_id, sender_role, content, ts)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO live_messages (id, patient_id, sender_user_id, sender_role, content, ts, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, cid, senderUserId, role, content, ts);
-  return { id, patientId: cid, customerId: cid, senderUserId, senderRole: role, content, ts };
+    .run(id, cid, senderUserId, role, content, ts, img);
+  return { id, patientId: cid, customerId: cid, senderUserId, senderRole: role, content, ts, imageUrl: img };
 }
 
 /** Bootstrap admin — CHỈ từ env variables; không dùng giá trị mặc định trong production. */

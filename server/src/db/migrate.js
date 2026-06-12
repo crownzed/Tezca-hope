@@ -686,6 +686,16 @@ export function runMigrations(db) {
         `);
       },
     },
+    {
+      version: 26,
+      name: 'live_messages_image',
+      up: () => {
+        // Cho phép đính kèm ảnh (data URL đã nén client-side) trong chat chuyên gia↔khách.
+        if (!tableHasColumn(db, 'live_messages', 'image_url')) {
+          db.exec(`ALTER TABLE live_messages ADD COLUMN image_url TEXT NOT NULL DEFAULT ''`);
+        }
+      },
+    },
   ];
 
   for (const m of migrations) {

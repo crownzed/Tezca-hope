@@ -224,10 +224,10 @@ export function DoctorDashboardPage() {
   const liveMode = Boolean(customerId && detail);
   const customerLabel = detail?.customer.name ?? (customerId ? `KH ${customerId.slice(0, 8)}…` : 'Chưa chọn khách hàng');
 
-  const sendDoctor = async () => {
+  const sendDoctor = async (imageUrl?: string) => {
     const t = draft.trim();
-    if (!t || !liveMode || !live.ready) return;
-    const ok = await live.send(t);
+    if ((!t && !imageUrl) || !liveMode || !live.ready) return;
+    const ok = await live.send(t, imageUrl);
     if (ok) setDraft('');
   };
 

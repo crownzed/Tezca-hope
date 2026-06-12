@@ -21,8 +21,6 @@ export function ExpertCustomerListPage() {
   const { token } = useExpertAuth();
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [error, setError] = useState('');
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [requests, setRequests] = useState<PendingRequest[]>([]);
 
@@ -42,27 +40,6 @@ export function ExpertCustomerListPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  const assign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !email.trim()) return;
-    setBusy(true);
-    setToast('');
-    try {
-      await apiFetch('/api/expert/customers/assign', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      setEmail('');
-      setToast('Đã thêm khách hàng vào danh sách của bạn.');
-      load();
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Không gán được');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const unassign = async (customerId: string, name: string) => {
     if (!token) return;
@@ -97,7 +74,7 @@ export function ExpertCustomerListPage() {
           Danh sách khách hàng
         </h1>
         <p className="text-sm" style={{ color: tezcaTheme.textMuted }}>
-          Thêm khách hàng bằng <strong>email đăng ký</strong> (tài khoản vai trò khách hàng). Nhấn vào khách hàng để
+          Khách hàng gửi <strong>yêu cầu ghép nối</strong> hoặc được quản trị viên chỉ định. Nhấn vào khách hàng để
           mở hồ sơ và chỉnh sửa kế hoạch tập. Sau khi gán, họ thấy bạn trong app và có thể chat trực tiếp; dữ liệu BMI /
           nhật ký / Tezca AI dùng để đồng hành —{' '}
           <span style={{ color: tezcaTheme.accent }}>không thay cho khám trực tiếp hay kết luận y khoa.</span>
@@ -138,28 +115,12 @@ export function ExpertCustomerListPage() {
       >
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: tezcaTheme.accent }}>
           <UserPlus size={18} />
-          Gán khách hàng mới
+          Thêm khách hàng
         </h2>
-        <form onSubmit={assign} className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="email@khachhang.com"
-            disabled={busy}
-            className="flex-1 rounded-xl border px-4 py-3 text-sm placeholder:opacity-50"
-            style={{ borderColor: tezcaTheme.border, backgroundColor: tezcaTheme.bg, color: tezcaTheme.text }}
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-xl px-6 py-3 text-sm font-semibold disabled:opacity-50 shrink-0 shadow-md"
-            style={{ background: tezcaTheme.accentGradient, color: tezcaTheme.text }}
-          >
-            {busy ? 'Đang thêm…' : 'Thêm vào danh sách khách hàng'}
-          </button>
-        </form>
+        <p className="text-sm m-0" style={{ color: tezcaTheme.textMuted }}>
+          Khách hàng sẽ tự chọn bạn và gửi <strong>yêu cầu ghép nối</strong>; yêu cầu xuất hiện trong mục
+          <strong> “Yêu cầu chờ duyệt”</strong> bên dưới để bạn duyệt. Quản trị viên cũng có thể chỉ định khách hàng cho bạn.
+        </p>
         {toast && (
           <p className={`text-sm mt-3 m-0 ${toast.includes('Không') || toast.includes('Lỗi') ? 'text-amber-700' : 'text-emerald-700'}`}>
             {toast}
@@ -250,7 +211,7 @@ export function ExpertCustomerListPage() {
 
       {customers.length === 0 && !error && (
         <p className="text-sm m-0" style={{ color: tezcaTheme.textMuted }}>
-          Chưa có khách hàng trong danh sách. Nhập email tài khoản khách hàng ở trên (người đã đăng ký tại{' '}
+          Chưa có khách hàng trong danh sách. Khách hàng sẽ xuất hiện sau khi bạn duyệt yêu cầu ghép nối hoặc khi quản trị viên chỉ định (khách đăng ký tại{' '}
           <Link to={ROUTES.app.login} className="underline" style={{ color: tezcaTheme.accent }}>
             đăng nhập khách hàng
           </Link>

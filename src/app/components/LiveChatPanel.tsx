@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Loader2, RefreshCw, Send, Stethoscope, User, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Loader2, RefreshCw, Send, Stethoscope, User, Wifi, WifiOff, Image as ImageIcon, X } from 'lucide-react';
 import type { LiveMessage } from '../lib/liveChat';
 import { tezcaTheme } from '../lib/tezcaTheme';
+import { pickAndCompressImage } from '../lib/imageCompress';
 
 function normalizeSenderRole(role: string) {
   return role === 'patient' ? 'customer' : role;
@@ -54,7 +55,7 @@ type LiveChatPanelProps = {
   sendError: string | null;
   draft: string;
   onDraftChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (imageUrl?: string) => void;
   viewer: 'customer' | 'expert';
   myUserId?: string;
   placeholder: string;
@@ -89,6 +90,35 @@ export function LiveChatPanel({
 }: LiveChatPanelProps) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingImage, setPendingImage] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgError, setImgError] = useState('');
+
+  const handlePickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImgError('');
+    setImgBusy(true);
+    const result = await pickAndCompressImage(file);
+    setImgBusy(false);
+    if (result.ok) setPendingImage(result.dataUrl);
+    else setImgError(result.error);
+  };
+
+  const clearPendingImage = () => {
+    setPendingImage('');
+    setImgError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSendClick = () => {
+    const img = pendingImage;
+    onSend(img || undefined);
+    // Xóa ảnh chờ ngay; draft do parent quản lý.
+    if (img) clearPendingImage();
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -272,7 +302,26 @@ export function LiveChatPanel({
                         }
                   }
                 >
-                  <p className="m-0 leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
+                  {m.imageUrl && (
+                    <a
+                      href={m.imageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block mb-1.5 rounded-xl overflow-hidden"
+                      style={{ lineHeight: 0 }}
+                    >
+                      <img
+                        src={m.imageUrl}
+                        alt="Ảnh đính kèm"
+                        className="max-h-60 max-w-full object-cover rounded-xl"
+                        style={{ display: 'block' }}
+                        loading="lazy"
+                      />
+                    </a>
+                  )}
+                  {m.content && (
+                    <p className="m-0 leading-relaxed whitespace-pre-wrap break-words">{m.content}</p>
+                  )}
                 </div>
                 <span className="text-[10px] mt-1 px-1 tabular-nums" style={{ color: tezcaTheme.textMuted }}>
                   {formatClock(m.ts)}
@@ -317,10 +366,53 @@ export function LiveChatPanel({
             ))}
           </div>
         )}
+        {/* Ảnh chờ gửi */}
+        {(pendingImage || imgBusy || imgError) && (
+          <div className="flex items-center gap-2">
+            {imgBusy && (
+              <span className="text-xs flex items-center gap-1.5" style={{ color: tezcaTheme.textMuted }}>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang xử lý ảnh…
+              </span>
+            )}
+            {pendingImage && !imgBusy && (
+              <div className="relative inline-block rounded-xl overflow-hidden border" style={{ borderColor: tezcaTheme.border }}>
+                <img src={pendingImage} alt="Ảnh sẽ gửi" className="max-h-24 max-w-full object-cover" style={{ display: 'block' }} />
+                <button
+                  type="button"
+                  onClick={clearPendingImage}
+                  aria-label="Xóa ảnh"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center border-0 cursor-pointer"
+                  style={{ backgroundColor: 'rgba(15,23,42,0.65)', color: '#fff' }}
+                >
+                  <X size={12} aria-hidden />
+                </button>
+              </div>
+            )}
+            {imgError && <span className="text-xs text-rose-600">{imgError}</span>}
+          </div>
+        )}
         <div
           className="flex gap-2 items-end rounded-2xl border p-2"
           style={{ borderColor: tezcaTheme.borderStrong, backgroundColor: tezcaTheme.surface }}
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            aria-label="Chọn ảnh để gửi"
+            onChange={(e) => void handlePickImage(e)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!ready || sending || imgBusy}
+            className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 hover:opacity-90 transition-opacity mb-0.5"
+            style={{ backgroundColor: tezcaTheme.subtleBg, color: tezcaTheme.accentDark }}
+            aria-label="Đính kèm ảnh"
+          >
+            <ImageIcon size={20} />
+          </button>
           <textarea
             ref={textareaRef}
             value={draft}
@@ -328,7 +420,7 @@ export function LiveChatPanel({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                void onSend();
+                handleSendClick();
               }
             }}
             disabled={!ready || sending}
@@ -340,8 +432,8 @@ export function LiveChatPanel({
           />
           <button
             type="button"
-            onClick={onSend}
-            disabled={!ready || sending || !draft.trim()}
+            onClick={handleSendClick}
+            disabled={!ready || sending || (!draft.trim() && !pendingImage)}
             className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-white disabled:opacity-40 hover:opacity-90 transition-opacity mb-0.5"
             style={{ background: tezcaTheme.accentGradient }}
             aria-label="Gửi tin nhắn"
@@ -350,7 +442,7 @@ export function LiveChatPanel({
           </button>
         </div>
         <p className="text-[10px] m-0 text-center" style={{ color: tezcaTheme.textMuted }}>
-          Enter để gửi · Shift+Enter xuống dòng
+          Enter để gửi · Shift+Enter xuống dòng · 📎 đính kèm ảnh
         </p>
       </div>
     </div>

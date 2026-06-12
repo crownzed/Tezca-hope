@@ -34,11 +34,15 @@ export function CustomerExpertChatPage() {
   const [careLoading, setCareLoading] = useState(true);
   const [careError, setCareError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedExpertId, setSelectedExpertId] = useState<string | null>(null);
 
   const customerId = user?.id;
-  const primaryExpert = careTeam.primary;
+  const acceptedExperts = careTeam.experts.filter((e) => 
+    requests.some((r) => r.expertId === e.id && r.status === 'accepted')
+  );
+  const selectedExpert = acceptedExperts.find((e) => e.id === selectedExpertId) || acceptedExperts[0] || null;
   const pendingRequest = requests.find((r) => r.status === 'requested');
-  const peerName = primaryExpert?.fullName || primaryExpert?.name || 'Chuyên gia Tezca';
+  const peerName = selectedExpert?.fullName || selectedExpert?.name || 'Chuyên gia Tezca';
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +89,13 @@ export function CustomerExpertChatPage() {
     historyUrl: '/api/me/live-messages',
     sendUrl: '/api/me/live-messages',
     senderRole: 'customer',
-    enabled: Boolean(token && customerId && primaryExpert && !careLoading),
+    enabled: Boolean(token && customerId && selectedExpert && !careLoading),
   });
 
-  const handleSend = async () => {
+  const handleSend = async (imageUrl?: string) => {
     const text = draft.trim();
-    if (!text || !live.ready) return;
-    const ok = await live.send(text);
+    if ((!text && !imageUrl) || !live.ready) return;
+    const ok = await live.send(text, imageUrl);
     if (ok) setDraft('');
   };
 
@@ -148,7 +152,7 @@ export function CustomerExpertChatPage() {
             />
           )}
 
-          {!careLoading && !careError && !primaryExpert && (
+          {!careLoading && !careError && !selectedExpert && (
             <EmptyState
               icon={UserCheck}
               title={pendingRequest ? 'Đang chờ chuyên gia duyệt' : 'Chưa có chuyên gia đồng hành'}
@@ -162,29 +166,58 @@ export function CustomerExpertChatPage() {
             />
           )}
 
-          {!careLoading && !careError && primaryExpert && (
-            <LiveChatPanel
-              className="flex-1 min-h-0"
-              messages={live.messages}
-              loading={live.loading}
-              ready={live.ready}
-              sending={live.sending}
-              sendError={live.sendError}
-              draft={draft}
-              onDraftChange={setDraft}
-              onSend={handleSend}
-              viewer="customer"
-              placeholder={`Nhắn cho ${peerName}…`}
-              header={{
-                title: 'Chuyên gia đồng hành',
-                peerName,
-                peerEmail: primaryExpert.email,
-                transportLabel: live.transportLabel,
-                onRefresh: live.refresh,
-              }}
-              emptyTitle="Bắt đầu cuộc trò chuyện"
-              emptyHint="Hỏi về kế hoạch tập, dinh dưỡng hoặc tâm trạng — chuyên gia sẽ phản hồi sớm."
-            />
+          {!careLoading && !careError && selectedExpert && (
+            <>
+              {acceptedExperts.length > 1 && (
+                <div className="mb-3 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium" style={{ color: tezcaTheme.textMuted }}>
+                    Chat với:
+                  </span>
+                  {acceptedExperts.map((e) => {
+                    const isSelected = e.id === selectedExpert.id;
+                    const displayName = e.fullName || e.name || 'Chuyên gia';
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => setSelectedExpertId(e.id)}
+                        className="text-xs px-3 py-1.5 rounded-lg border-0 cursor-pointer transition-all"
+                        style={{
+                          background: isSelected ? tezcaTheme.accentGradient : tezcaTheme.subtleBg,
+                          color: tezcaTheme.text,
+                          fontWeight: isSelected ? 600 : 400,
+                          opacity: isSelected ? 1 : 0.7,
+                        }}
+                      >
+                        {displayName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <LiveChatPanel
+                className="flex-1 min-h-0"
+                messages={live.messages}
+                loading={live.loading}
+                ready={live.ready}
+                sending={live.sending}
+                sendError={live.sendError}
+                draft={draft}
+                onDraftChange={setDraft}
+                onSend={handleSend}
+                viewer="customer"
+                placeholder={`Nhắn cho ${peerName}…`}
+                header={{
+                  title: 'Chuyên gia đồng hành',
+                  peerName,
+                  peerEmail: selectedExpert.email,
+                  transportLabel: live.transportLabel,
+                  onRefresh: live.refresh,
+                }}
+                emptyTitle="Bắt đầu cuộc trò chuyện"
+                emptyHint="Hỏi về kế hoạch tập, dinh dưỡng hoặc tâm trạng — chuyên gia sẽ phản hồi sớm."
+              />
+            </>
           )}
         </div>
       </div>

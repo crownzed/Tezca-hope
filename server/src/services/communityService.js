@@ -34,6 +34,50 @@ import {
 } from '../db.js';
 import { randomUUID } from 'node:crypto';
 import { broadcastCommunityEvent, forumChannel } from '../communityDelivery.js';
+import { moderateText, moderationMessage } from '../contentModeration.js';
+import { pushAudit } from '../db.js';
+
+/**
+ * Lỗi nội dung vi phạm (chặn). Route bắt err.code === 'CONTENT_VIOLATION' → 422.
+ */
+export class ContentViolationError extends Error {
+  constructor(result) {
+    super(moderationMessage(result));
+    this.code = 'CONTENT_VIOLATION';
+    this.status = 422;
+    this.categories = result.categories;
+    this.reasons = result.reasons;
+  }
+}
+
+/**
+ * Kiểm duyệt nội dung trước khi lưu.
+ * - block  → ném ContentViolationError (không lưu).
+ * - flag   → cho lưu nhưng ghi audit_log để kiểm duyệt viên rà soát.
+ * - allow  → bỏ qua.
+ * @param {{ userId: string, kind: string, text: string }} arg
+ */
+function guardContent({ userId, kind, text }) {
+  const result = moderateText(text);
+  if (result.action === 'block') {
+    throw new ContentViolationError(result);
+  }
+  if (result.action === 'flag') {
+    try {
+      pushAudit({
+        actorId: userId,
+        role: 'user',
+        action: 'content_flagged',
+        meta: { kind, categories: result.categories, reasons: result.reasons, score: result.score },
+      });
+    } catch {
+      /* không chặn luồng chính nếu ghi audit lỗi */
+    }
+  }
+  return result;
+}
+
+export { guardContent };
 
 // Gửi thông báo + bắn realtime để cập nhật badge
 function notify({ userId, actorId, type, postId = null, commentId = null, threadId = null, preview = null }) {
@@ -109,6 +153,7 @@ export function listThreadReplies(parentPostId, opts) {
 }
 
 export function addThreadReply(input) {
+  guardContent({ userId: input.userId, kind: 'thread_reply', text: input.content });
   const post = createCommunityThreadReply(input);
   if (post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post', post });
@@ -134,6 +179,7 @@ export function getPost(postId, viewerId, opts) {
 }
 
 export function createPost(input) {
+  guardContent({ userId: input.userId, kind: 'post', text: input.content });
   const post = createCommunityPost(input);
   if (post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post', post });
@@ -146,6 +192,7 @@ export function removeOwnPost(postId, userId, isAdmin) {
 }
 
 export function editPost({ postId, userId, content, imageUrl, isAdmin }) {
+  if (!isAdmin) guardContent({ userId, kind: 'post_edit', text: content });
   const result = updateCommunityPost({ postId, userId, content, imageUrl, isAdmin });
   if (result.post) {
     broadcastCommunityEvent(forumChannel(), { type: 'community_post_updated', post: result.post });
@@ -158,6 +205,7 @@ export function listComments(postId, opts) {
 }
 
 export function addComment(input) {
+  guardContent({ userId: input.userId, kind: 'comment', text: input.content });
   const comment = createCommunityComment(input);
   if (comment) {
     broadcastCommunityEvent(forumChannel(), {
@@ -182,6 +230,7 @@ export function addComment(input) {
 }
 
 export function editComment({ commentId, userId, content, isAdmin }) {
+  if (!isAdmin) guardContent({ userId, kind: 'comment_edit', text: content });
   return updateCommunityComment({ commentId, userId, content, isAdmin });
 }
 

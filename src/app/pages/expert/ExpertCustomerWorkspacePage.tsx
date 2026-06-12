@@ -97,10 +97,10 @@ export function ExpertCustomerWorkspacePage() {
     [detail?.moods],
   );
 
-  const sendLive = async () => {
+  const sendLive = async (imageUrl?: string) => {
     const text = draft.trim();
-    if (!text || !live.ready) return;
-    const ok = await live.send(text);
+    if ((!text && !imageUrl) || !live.ready) return;
+    const ok = await live.send(text, imageUrl);
     if (ok) setDraft('');
   };
 

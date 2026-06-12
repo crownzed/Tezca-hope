@@ -8,6 +8,7 @@ export type LiveMessage = {
   senderRole: 'expert' | 'customer';
   content: string;
   ts: number;
+  imageUrl?: string;
 };
 
 export type LiveChatTransport = 'ws' | 'poll' | 'connecting';
@@ -217,9 +218,10 @@ export function useLiveChat({
   }, [enabled, token, customerId, transport, poll]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, imageUrl?: string) => {
       const trimmed = text.trim();
-      if (!trimmed || !token || !customerId || !enabled) return false;
+      const img = (imageUrl || '').trim();
+      if ((!trimmed && !img) || !token || !customerId || !enabled) return false;
       setSending(true);
       setSendError('');
 
@@ -231,6 +233,7 @@ export function useLiveChat({
         senderRole,
         content: trimmed,
         ts: Date.now(),
+        imageUrl: img || undefined,
       };
       appendMessages([optimistic]);
 
@@ -238,7 +241,7 @@ export function useLiveChat({
         const r = await apiFetch<{ message: LiveMessage }>(sendUrl, {
           method: 'POST',
           token,
-          body: JSON.stringify({ text: trimmed }),
+          body: JSON.stringify({ text: trimmed, imageUrl: img }),
         });
         if (r.message.customerId !== customerIdRef.current) return true;
         setMessages((prev) => {
@@ -256,7 +259,7 @@ export function useLiveChat({
         setSending(false);
       }
     },
-    [token, customerId, enabled, sendUrl, appendMessages],
+    [token, customerId, enabled, sendUrl, appendMessages, senderRole],
   );
 
   const ready = Boolean(customerId && token && (transport === 'ws' || transport === 'poll') && !loading);

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Image, X } from 'lucide-react';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 import { POST_TOPICS, type CommunityPostTopic } from '../../lib/communityTopics';
+import { pickAndCompressImage } from '../../lib/imageCompress';
 
 type CommunityCreatePostProps = {
   authorName: string;
@@ -22,40 +23,6 @@ function initials(name: string) {
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join('');
-}
-
-/** Nén ảnh xuống tối đa maxDim px, trả về data URL (JPEG 0.78). */
-function compressImage(file: File, maxDim = 1200): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = (ev) => {
-      const src = ev.target?.result as string;
-      const img = new window.Image();
-      img.onerror = reject;
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width >= height) {
-            height = Math.round((height / width) * maxDim);
-            width = maxDim;
-          } else {
-            width = Math.round((width / height) * maxDim);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('canvas')); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.78));
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 export function CommunityCreatePost({
@@ -79,23 +46,14 @@ export function CommunityCreatePost({
     // reset input để chọn cùng file lại được
     e.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setImgError('Chỉ hỗ trợ file ảnh (JPG, PNG, GIF, WebP…)');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setImgError('Ảnh tối đa 10 MB');
-      return;
-    }
     setImgError('');
     setCompressing(true);
-    try {
-      const dataUrl = await compressImage(file);
-      onImageUrlChange(dataUrl);
-    } catch {
-      setImgError('Không đọc được ảnh, hãy thử file khác.');
-    } finally {
-      setCompressing(false);
+    const result = await pickAndCompressImage(file);
+    setCompressing(false);
+    if (result.ok) {
+      onImageUrlChange(result.dataUrl);
+    } else {
+      setImgError(result.error);
     }
   };
 

@@ -232,6 +232,21 @@ export function updateTrainingPlanByExpert(
     throw new DbError('INVALID_EXPERT', 'Phiên chuyên gia không hợp lệ', 400);
   }
 
+  // Defense-in-depth: chỉ chuyên gia được gán (accepted) hoặc gán legacy mới được sửa kế hoạch.
+  // Route đã chặn bằng canExpertAccessCustomer; đây là lớp chặn cuối ở tầng repo.
+  const assigned = getDb()
+    .prepare(
+      `SELECT 1 AS ok FROM expert_customer_assignments
+       WHERE expert_id = ? AND customer_id = ? AND status = 'accepted'
+       UNION
+       SELECT 1 AS ok FROM assignments WHERE expert_id = ? AND patient_id = ?
+       LIMIT 1`,
+    )
+    .get(eid, pid, eid, pid);
+  if (!assigned) {
+    throw new DbError('NOT_ASSIGNED', 'Chuyên gia không được gán cho khách hàng này', 403);
+  }
+
   const lockAt =
     expectedUpdatedAt != null && expectedUpdatedAt !== ''
       ? Number(expectedUpdatedAt)

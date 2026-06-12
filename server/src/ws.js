@@ -211,8 +211,9 @@ export function attachWebSocketServer(wss) {
 
       if (data.type === 'message') {
         const customerId = roomIdFromPayload(data);
-        const { text } = data;
-        if (!customerId || !text || typeof text !== 'string') return;
+        const { text, imageUrl } = data;
+        const img = typeof imageUrl === 'string' ? imageUrl : '';
+        if (!customerId || ((!text || typeof text !== 'string') && !img)) return;
         if (!ws.__customerId || ws.__customerId !== customerId) return;
         if (role === 'user' && customerId !== userId) return;
         if (role === 'expert' && !canExpertAccessCustomer(userId, customerId)) return;
@@ -223,12 +224,15 @@ export function attachWebSocketServer(wss) {
             customerId,
             senderUserId: userId,
             senderRole,
-            content: text,
+            content: typeof text === 'string' ? text : '',
+            imageUrl: img,
           },
           ws,
         );
-        if (msg) {
+        if (msg && !msg.error) {
           ws.send(JSON.stringify({ type: 'live_message', message: msg }));
+        } else if (msg && msg.error) {
+          ws.send(JSON.stringify({ type: 'live_error', error: msg.error, code: msg.code }));
         }
       }
     });

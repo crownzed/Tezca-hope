@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
   findUserById,
-  findUserByEmail,
   canExpertAccessCustomer,
   pushAudit,
   getCustomerIdsForExpert,
@@ -11,7 +10,6 @@ import {
   listLiveMessagesForCustomer,
   listLiveMessagesForCustomerSince,
   getLastLiveMessageMap,
-  assignExpertToCustomer,
   removeExpertCustomerAssignment,
   getTrainingPlanForCustomer,
   updateTrainingPlanByExpert,
@@ -22,6 +20,7 @@ import {
 import { authMiddleware } from '../auth.js';
 import { buildWeeklyReport } from '../weeklyReport.js';
 import { sendLiveChatMessage } from '../liveChatDelivery.js';
+import { validateImageUrl } from '../validate.js';
 import { DbError, mapDbDomainError } from '../dbErrors.js';
 import * as adminManagementService from '../services/adminManagementService.js';
 
@@ -96,32 +95,13 @@ expertRouter.get('/customers/requests', requireExpert, (req, res) => {
 
 /** Đặt TRƯỚC GET /customers/:customerId để không khớp nhầm customerId = "assign" */
 function assignCustomerHandler(req, res) {
-  const expertId = req.user.sub;
-  const email = String((req.body || {}).email || '').trim();
-  if (!email) {
-    res.status(400).json({ error: 'Cần email khách hàng' });
-    return;
-  }
-  const u = findUserByEmail(email);
-  if (!u || u.role !== 'user') {
-    res.status(404).json({ error: 'Không tìm thấy tài khoản khách hàng với email này' });
-    return;
-  }
-  const r = assignExpertToCustomer(expertId, u.id);
-  if (!r.ok) {
-    const msg =
-      r.error === 'invalid_expert'
-        ? 'Phiên chuyên gia không hợp lệ. Hãy đăng xuất và đăng nhập lại.'
-        : r.error === 'invalid_customer'
-          ? 'Tài khoản khách hàng không hợp lệ.'
-          : r.error === 'customer_has_expert'
-            ? 'Khách hàng đã có chuyên gia đồng hành.'
-            : 'Không thể gán';
-    res.status(r.error === 'customer_has_expert' ? 409 : 400).json({ error: msg });
-    return;
-  }
-  pushAudit({ actorId: expertId, role: 'expert', action: 'assign_customer', customerId: u.id, meta: { email } });
-  res.status(201).json({ customer: { id: u.id, email: u.email, name: u.name } });
+  // Theo mô hình gán mới: chuyên gia KHÔNG tự gán khách (tránh gán không có đồng thuận).
+  // Gán trực tiếp chỉ do ADMIN chỉ định; hoặc khách hàng GỬ-I YÊU CẦU → chuyên gia đó duyệt.
+  res.status(403).json({
+    error:
+      'Chuyên gia không thể tự thêm khách hàng. Khách hàng gửi yêu cầu để bạn duyệt, hoặc quản trị viên chỉ định.',
+    code: 'EXPERT_SELF_ASSIGN_DISABLED',
+  });
 }
 
 expertRouter.post('/customers/assign', requireExpert, assignCustomerHandler);
@@ -131,10 +111,6 @@ function decideCustomerRequestHandler(action) {
     const customerId = customerIdFromReq(req);
     const result = decideExpertAssignment(req.user.sub, customerId, action);
     if (!result.ok) {
-      if (result.error === 'customer_has_expert') {
-        res.status(409).json({ error: 'Khách hàng đã có chuyên gia đồng hành.' });
-        return;
-      }
       res.status(404).json({ error: 'Không tìm thấy yêu cầu gán cần xử lý' });
       return;
     }
@@ -169,7 +145,13 @@ function liveMessagesPostHandler(req, res) {
     return;
   }
   const text = String((req.body || {}).text || '').trim();
-  if (!text) {
+  const imgResult = validateImageUrl((req.body || {}).imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  const imageUrl = imgResult.sanitized;
+  if (!text && !imageUrl) {
     res.status(400).json({ error: 'Tin nhắn trống' });
     return;
   }
@@ -178,9 +160,11 @@ function liveMessagesPostHandler(req, res) {
     senderUserId: expertId,
     senderRole: 'expert',
     content: text,
+    imageUrl,
   });
-  if (!msg) {
-    res.status(400).json({ error: 'Không gửi được' });
+  if (!msg || msg.error) {
+    const status = msg && msg.code === 'CONTENT_VIOLATION' ? 422 : 400;
+    res.status(status).json({ error: (msg && msg.error) || 'Không gửi được' });
     return;
   }
   pushAudit({ actorId: expertId, role: 'expert', action: 'live_message', customerId });
@@ -231,16 +215,24 @@ function trainingPlanPutHandler(req, res) {
     const sanitized =
       exercises == null
         ? null
-        : exercises.slice(0, 20).map((ex, i) => ({
-            id: Number(ex.id) || Date.now() + i,
-            title: String(ex.title || 'Bài tập').trim().slice(0, 140),
-            sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
-            reps:
-              typeof ex.reps === 'string' || typeof ex.reps === 'number'
-                ? String(ex.reps).slice(0, 40)
-                : 'Theo kế hoạch',
-            isPTLocked: ex.isPTLocked !== false,
-          }));
+        : exercises.slice(0, 70).map((ex, i) => {
+            const dayNum = Number(ex.day);
+            return {
+              id: Number(ex.id) || Date.now() + i,
+              title: String(ex.title || 'Bài tập').trim().slice(0, 140),
+              sets: Math.max(1, Math.min(20, Number(ex.sets) || 1)),
+              reps:
+                typeof ex.reps === 'string' || typeof ex.reps === 'number'
+                  ? String(ex.reps).slice(0, 40)
+                  : 'Theo kế hoạch',
+              day: Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 7 ? dayNum : null,
+              group:
+                typeof ex.group === 'string' && ex.group.trim()
+                  ? ex.group.trim().slice(0, 60)
+                  : null,
+              isPTLocked: ex.isPTLocked !== false,
+            };
+          });
     const saved = updateTrainingPlanByExpert(customerId, expertId, {
       exercises: sanitized,
       status,
