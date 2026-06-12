@@ -1,11 +1,11 @@
-import { Navigate } from 'react-router';
-import { Activity, LogOut, UserCircle } from 'lucide-react';
+import { Navigate, Link } from 'react-router';
+import { Activity, LogOut, UserCircle, ExternalLink } from 'lucide-react';
 import { HealthProfileForm } from '../../components/HealthProfileForm';
 import { SessionLoading } from '../../components/tezca/SessionLoading';
 import { useCustomerSession } from '../../lib/customerSessionGate';
 import { bmiCategory, loadBmiEntries } from '../../lib/healthStorage';
 import { deriveGamificationState } from '../../lib/gamification';
-import { ROUTES } from '../../routes';
+import { ROUTES, communityProfilePath } from '../../routes';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
 
 function initials(name: string) {
@@ -63,15 +63,27 @@ export function CustomerProfilePage() {
               {user?.email || 'Đang tải phiên tài khoản'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={logout}
-            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer"
-            style={{ color: '#b91c1c', borderColor: 'rgba(239, 68, 68, 0.22)', backgroundColor: 'rgba(239, 68, 68, 0.06)' }}
-          >
-            <LogOut size={16} aria-hidden />
-            Đăng xuất
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            {userId && (
+              <Link
+                to={communityProfilePath(userId)}
+                className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer no-underline"
+                style={{ color: tezcaTheme.accentDark, borderColor: tezcaTheme.border }}
+              >
+                <ExternalLink size={16} aria-hidden />
+                Trang cá nhân công khai
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold cursor-pointer"
+              style={{ color: '#b91c1c', borderColor: 'rgba(239, 68, 68, 0.22)', backgroundColor: 'rgba(239, 68, 68, 0.06)' }}
+            >
+              <LogOut size={16} aria-hidden />
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </section>
 

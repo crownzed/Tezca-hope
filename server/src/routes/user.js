@@ -376,7 +376,7 @@ Input: ${params}${bmiInfo ? ` | BMI: ${bmiInfo.trim()}` : ''}
 
 Output requirements:
 1) Summary (2-3 sentences, realistic goals)
-2) Schedule: ${sessions} sessions/week with:
+2) Schedule: ${sessions} sessions/week. QUAN TRỌNG: mỗi buổi BẮT BUỘC mở đầu bằng heading dạng "#### Ngày N: <nhóm cơ>" (N = 1..${sessions}, ví dụ "#### Ngày 1: Push (Ngực-Vai-Tay sau)"). Mỗi buổi gồm:
    - Exercise names (specific)
    - Sets × reps × rest time
    - Warm-up (5-10 min) + cool-down (5-10 min)
@@ -385,10 +385,9 @@ Output requirements:
 ${focus ? `   - Focus area: ${focus}
 ` : ''}3) Progressive overload guidelines (weekly progression)
 4) Progress tracking tips (photos, measurements)
-5) Section "### Danh sách bài tập" with exercise list (bullets)
-6) Brief disclaimer
+5) Brief disclaimer
 
-No medications, no specific supplements.`;
+KHÔNG gộp tất cả bài vào 1 mục chung; PHẢI tách theo từng "#### Ngày N". No medications, no specific supplements.`;
 
   const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) chuyên nghiệp — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
 Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững và progressive overload.
@@ -462,7 +461,7 @@ userRouter.post('/me/plan-ai/stream', requireUser, aiPlanLimiter, async (req, re
 
 Input: ${params}${bmiInfo ? ` | BMI: ${bmiInfo.trim()}` : ''}
 
-Output: detailed schedule (sets×reps×rest), warm-up/cool-down, progressive overload. Markdown.`;
+Output: lịch chi tiết ${sessions} buổi/tuần. Mỗi buổi BẮT BUỘC mở đầu bằng heading "#### Ngày N: <nhóm cơ>" (N=1..${sessions}). Mỗi buổi: bài tập (sets×reps×rest), warm-up/cool-down, progressive overload. KHÔNG gộp chung; tách theo từng "#### Ngày N". Markdown.`;
 
   const PLAN_SYSTEM = `Bạn là huấn luyện viên cá nhân (PT) chuyên nghiệp — viết tiếng Việt tự nhiên, cụ thể, có thể áp dụng ngay.
 Nguyên tắc: an toàn > hiệu quả nhanh; tránh cam kết số kg/tuần; nhấn thói quen bền vững và progressive overload.
@@ -471,7 +470,8 @@ Chọn bài tập phù hợp thiết bị có sẵn. Phân chia nhóm cơ khoa h
 Khởi động bắt buộc: dynamic stretching + mobility. Cool down: static stretching + foam rolling.
 Progressive overload rõ ràng: tuần 1-2 làm quen, tuần 3-4 tăng volume/intensity.
 Không chẩn đoán hay kê đơn; chỉ giáo dục thể lực. Tôn trọng ghi chú y tế/giới hạn.
-Markdown gọn: tiêu đề ##/###, bảng hoặc bullet cho lịch tập.`;
+Mỗi buổi tập PHẢI có heading riêng "#### Ngày N: <nhóm cơ>" để tách ngày rõ ràng.
+Markdown gọn: tiêu đề ##/###/####, bảng hoặc bullet cho lịch tập.`;;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');

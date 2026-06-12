@@ -1,4 +1,5 @@
-import { Bell, MessagesSquare } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, ChevronDown, ChevronUp, MessagesSquare } from 'lucide-react';
 import { tezcaTheme } from '../../lib/tezcaTheme';
 import { POST_TOPICS, type CommunityPostTopic } from '../../lib/communityTopics';
 import { EmptyState } from '../tezca/EmptyState';
@@ -96,6 +97,14 @@ export function ForumFeed({
   onSubmitComment,
   onSubmitThreadReply,
 }: ForumFeedProps) {
+  const [topicsExpanded, setTopicsExpanded] = useState(false);
+  // Số chip hiển thị khi thu gọn; phần còn lại ẩn sau nút "Thêm".
+  const TOPIC_COLLAPSED_COUNT = 5;
+  const visibleTopics =
+    topicsExpanded || POST_TOPICS.length <= TOPIC_COLLAPSED_COUNT
+      ? POST_TOPICS
+      : POST_TOPICS.slice(0, TOPIC_COLLAPSED_COUNT);
+  const hiddenTopicCount = POST_TOPICS.length - visibleTopics.length;
   return (
     <>
       <CommunityFeedTabs mode={feedMode} onModeChange={onFeedModeChange} />
@@ -124,7 +133,7 @@ export function ForumFeed({
         >
           Tất cả
         </button>
-        {POST_TOPICS.map((t) => (
+        {visibleTopics.map((t) => (
           <span key={t.id} className="inline-flex items-center gap-0.5">
             <button
               type="button"
@@ -153,6 +162,25 @@ export function ForumFeed({
             </button>
           </span>
         ))}
+        {POST_TOPICS.length > TOPIC_COLLAPSED_COUNT && (
+          <button
+            type="button"
+            onClick={() => setTopicsExpanded((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full border cursor-pointer"
+            style={{ borderColor: tezcaTheme.border, color: tezcaTheme.textMuted }}
+            aria-expanded={topicsExpanded}
+          >
+            {topicsExpanded ? (
+              <>
+                Thu gọn <ChevronUp size={14} />
+              </>
+            ) : (
+              <>
+                Thêm {hiddenTopicCount} chủ đề <ChevronDown size={14} />
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {loading && <p className="text-sm opacity-60">Đang tải…</p>}

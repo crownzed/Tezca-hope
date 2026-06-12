@@ -1,10 +1,27 @@
 import type { DashboardExercise } from './dashboardStorage';
 
 function detectDayNumber(line: string): number | null {
-  const m = line.match(/ng[àa]y\s*(\d{1,2})/i);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return n >= 1 && n <= 7 ? n : null;
+  const s = line.toLowerCase();
+  const m = s.match(/(?:ng[àa]y|bu[ổo]i|session|day)\s*(\d{1,2})/i);
+  if (m) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 7) return n;
+  }
+  const t = s.match(/th[ứu]\s*([2-7])/);
+  if (t) return Number(t[1]) - 1;
+  if (/ch[ủu]\s*nh[ậa]t|\bcn\b/.test(s)) return 7;
+  return null;
+}
+
+/** Trích nhóm cơ từ heading ngày: "#### Ngày 1: Push (Ngực)" → "Push (Ngực)". */
+function detectDayGroup(line: string): string | null {
+  const heading = line.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '').trim();
+  const m = heading.match(/^(?:ng[àa]y|bu[ổo]i|session|day|th[ứu])\s*\d{1,2}\s*[:\-–]\s*(.+)$/i);
+  if (m && m[1]) {
+    const g = m[1].trim();
+    return g.length >= 2 && g.length <= 60 ? g : null;
+  }
+  return null;
 }
 
 function isMotionHeading(trimmed: string): boolean {
@@ -23,8 +40,9 @@ function cleanTitle(raw: string): string {
 export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[] {
   const lines = plan.split('\n');
   let currentDay: number | null = null;
+  let currentGroup: string | null = null;
   let inMotion = false;
-  const collected: { title: string; day: number | null }[] = [];
+  const collected: { title: string; day: number | null; group: string | null }[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -33,12 +51,14 @@ export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[
       const day = detectDayNumber(trimmed);
       if (day) {
         currentDay = day;
+        currentGroup = detectDayGroup(trimmed);
         inMotion = true;
         continue;
       }
       inMotion = isMotionHeading(trimmed);
       if (/^#{2,3}\s+/.test(trimmed) && !isMotionHeading(trimmed)) {
         currentDay = null;
+        currentGroup = null;
       }
       continue;
     }
@@ -49,7 +69,11 @@ export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[
     if (!bullet) continue;
     const title = cleanTitle(bullet[1]!);
     if (title.length < 4) continue;
-    collected.push({ title: title.length > 140 ? `${title.slice(0, 137)}…` : title, day: currentDay });
+    collected.push({
+      title: title.length > 140 ? `${title.slice(0, 137)}…` : title,
+      day: currentDay,
+      group: currentGroup,
+    });
   }
 
   if (collected.length === 0) {
@@ -67,7 +91,7 @@ export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[
       }
       const title = cleanTitle(bullet[1]!);
       if (title.length < 4 || title.length > 140) continue;
-      collected.push({ title, day: null });
+      collected.push({ title, day: null, group: null });
     }
   }
 
@@ -78,6 +102,7 @@ export function parseExercisesFromPlanMarkdown(plan: string): DashboardExercise[
     sets: 1,
     reps: 'Theo kế hoạch',
     day: item.day,
+    group: item.group || null,
     isPTLocked: true,
     completed: false,
     actualWeight: '',

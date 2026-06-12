@@ -55,6 +55,11 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
     [structure, planDay],
   );
 
+  const dayGroup = useMemo(
+    () => dayStructure.find((ex) => ex.group)?.group ?? null,
+    [dayStructure],
+  );
+
   const viewExercises = useMemo(
     () => applyDayProgress(dayStructure, normalizedDaily[viewIso]),
     [dayStructure, normalizedDaily, viewIso],
@@ -129,6 +134,7 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
         sets: 3,
         reps: 10,
         day: planDay,
+        group: dayGroup,
         isPTLocked: true,
         completed: false,
         actualWeight: '',
@@ -181,6 +187,9 @@ export function ExpertTrainingPlanPanel({ token, customerId }: Props) {
         </h2>
         <p className="text-xs mt-1 m-0" style={{ color: tezcaTheme.textMuted }}>
           Tích hợp từ kế hoạch AI · {when} · {statusLabel}
+          {dayGroup && (
+            <span className="opacity-80"> · Nhóm cơ: {dayGroup}</span>
+          )}
           {viewTotal > 0 && (
             <span className="opacity-80">
               {' '}

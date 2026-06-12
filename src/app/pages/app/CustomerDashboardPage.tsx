@@ -132,6 +132,12 @@ export function CustomerDashboardPage() {
     [baseExercises, activePlanDay],
   );
 
+  // Nhóm cơ của ngày đang xem (lấy từ bài đầu tiên có group trong ngày)
+  const activeDayGroup = useMemo(
+    () => dayBaseExercises.find((ex) => ex.group)?.group ?? null,
+    [dayBaseExercises],
+  );
+
   const exercises = useMemo(
     () => applyDayProgress(dayBaseExercises, dailyProgress[activeIso]),
     [dayBaseExercises, dailyProgress, activeIso],
@@ -475,6 +481,11 @@ export function CustomerDashboardPage() {
                     Cấp {gam.level} · {gam.xp} XP ·{' '}
                     {weekDays.find((d) => d.id === activeDay)?.label ?? '—'}{' '}
                     {weekDays.find((d) => d.id === activeDay)?.isToday ? '(hôm nay)' : ''}
+                    {activeDayGroup && (
+                      <span className="block text-xs mt-1 font-semibold" style={{ color: tezcaTheme.accentDark }}>
+                        Nhóm cơ: {activeDayGroup}
+                      </span>
+                    )}
                     {trainingStatus === 'pending_review' && (
                       <span className="block text-amber-700 text-xs mt-1">Chờ chuyên gia duyệt kế hoạch</span>
                     )}

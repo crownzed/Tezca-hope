@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { MessageCircle, UserPlus, UserCheck, ArrowLeft } from 'lucide-react';
+import { MessageCircle, UserPlus, UserCheck, ArrowLeft, HeartPulse } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 import { postTopicLabel, roleBadgeLabel, type CommunityPostTopic } from '../../lib/communityTopics';
@@ -299,6 +299,18 @@ export function CommunityProfilePage() {
             </button>
           </div>
         )}
+
+        {/* Liên kết sang hồ sơ sức khỏe (chỉ khách hàng, khi xem hồ sơ của chính mình) */}
+        {profile.isSelf && canDm ? (
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.app.profile)}
+            className="flex items-center gap-1.5 mt-4 text-sm font-medium"
+            style={{ color: tezcaTheme.primary }}
+          >
+            <HeartPulse size={16} /> Hồ sơ sức khỏe của tôi
+          </button>
+        ) : null}
       </div>
 
       {/* Danh sách bài đã đăng */}

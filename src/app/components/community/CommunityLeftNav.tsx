@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router';
-import { Bell, Bookmark, Home, Megaphone, MessageCircle, MessagesSquare, ScrollText, Search, Users } from 'lucide-react';
-import { ROUTES } from '../../routes';
+import { Bell, Bookmark, Home, Megaphone, MessageCircle, MessagesSquare, ScrollText, Search, UserCircle, Users } from 'lucide-react';
+import { ROUTES, communityProfilePath } from '../../routes';
 import { tezcaCardStyle, tezcaTheme } from '../../lib/tezcaTheme';
+import { useAnyCommunitySession } from '../../lib/useCommunitySession';
 
 const navItems = [
   { to: ROUTES.community.forum, label: 'Diễn đàn', icon: Home, end: true },
@@ -19,6 +20,7 @@ type CommunityLeftNavProps = {
 };
 
 export function CommunityLeftNav({ unread = 0 }: CommunityLeftNavProps) {
+  const { user } = useAnyCommunitySession();
   return (
     <aside
       className="hidden lg:flex flex-col w-56 shrink-0 sticky top-28 self-start rounded-2xl border p-4"
@@ -64,6 +66,12 @@ export function CommunityLeftNav({ unread = 0 }: CommunityLeftNavProps) {
         </ul>
       </nav>
       <div className="mt-6 pt-4 border-t space-y-1" style={{ borderColor: tezcaTheme.border }}>
+        {user?.id && (
+          <NavLink to={communityProfilePath(user.id)} className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm no-underline opacity-70 hover:opacity-100" style={{ color: tezcaTheme.text }}>
+            <UserCircle size={16} aria-hidden />
+            Hồ sơ của tôi
+          </NavLink>
+        )}
         <NavLink to={ROUTES.home} className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm no-underline opacity-70 hover:opacity-100" style={{ color: tezcaTheme.text }}>
           <Home size={16} aria-hidden />
           Trang chủ

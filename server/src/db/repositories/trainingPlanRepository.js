@@ -48,6 +48,8 @@ export function structureExercises(list) {
           ? String(ex.reps).slice(0, 40)
           : 'Theo kế hoạch',
       day: Number.isInteger(dayNum) && dayNum >= 1 && dayNum <= 7 ? dayNum : null,
+      group:
+        typeof ex.group === 'string' && ex.group.trim() ? ex.group.trim().slice(0, 60) : null,
       isPTLocked: ex.isPTLocked !== false,
       completed: false,
       actualWeight: String(ex.actualWeight || '').slice(0, 24),
