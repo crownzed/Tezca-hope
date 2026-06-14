@@ -73,10 +73,7 @@ export function ChooseExpertPage() {
     if (!token || busyId) return;
     const existing = requestByExpertId.get(expertId);
     if (existing?.status === 'requested' || existing?.status === 'accepted') return;
-    if (activeRequest && activeRequest.expertId !== expertId) {
-      setMessage('Bạn chỉ có thể chọn một chuyên gia. Hãy chờ yêu cầu hiện tại được xử lý.');
-      return;
-    }
+    // Allow multiple expert requests — removed single-expert check
 
     setBusyId(expertId);
     setMessage('');
@@ -85,7 +82,7 @@ export function ChooseExpertPage() {
         method: 'POST',
         token,
       });
-      setMessage('Đã gửi yêu cầu chọn chuyên gia. Chờ chuyên gia xác nhận.');
+      setMessage('Đã gửi yêu cầu. Bạn có thể chọn thêm chuyên gia khác nếu muốn.');
       loadData();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Không gửi được yêu cầu');
@@ -118,14 +115,12 @@ export function ChooseExpertPage() {
         </p>
       )}
 
-      {activeRequest && (
+      {requests.filter(r => r.status === 'accepted').length > 0 && (
         <p
           className="text-sm m-0 rounded-xl px-4 py-3 border"
           style={{ ...tezcaCardStyle, color: tezcaTheme.textMuted }}
         >
-          {activeRequest.status === 'accepted'
-            ? `Bạn đang đồng hành với ${activeRequest.expertName || 'một chuyên gia'}.`
-            : `Yêu cầu gửi tới ${activeRequest.expertName || 'một chuyên gia'} đang chờ duyệt.`}
+          Bạn đang đồng hành với {requests.filter(r => r.status === 'accepted').length} chuyên gia.
         </p>
       )}
 
@@ -203,21 +198,17 @@ export function ChooseExpertPage() {
               const displayName = e.fullName || e.name || 'Chuyên gia Tezca';
               const req = requestByExpertId.get(e.id);
               const badge = statusLabel(req?.status);
-              const blockedByOtherExpert = Boolean(activeRequest && activeRequest.expertId !== e.id);
-              const canRequest = !blockedByOtherExpert && (!req || req.status === 'rejected' || req.status === 'revoked');
+              const blockedByOtherExpert = false; // Allow multiple experts
+              const canRequest = !req || req.status === 'rejected' || req.status === 'revoked';
               const buttonDisabled = Boolean(busyId) || !canRequest;
               const buttonLabel =
                 busyId === e.id
                   ? 'Đang gửi…'
-                  : blockedByOtherExpert
-                    ? activeRequest?.status === 'requested'
-                      ? 'Đang chờ chuyên gia khác'
-                      : 'Đã có chuyên gia'
-                    : canRequest
-                      ? 'Chọn chuyên gia này'
-                      : req?.status === 'accepted'
-                        ? 'Đã đồng hành'
-                        : 'Đã gửi yêu cầu';
+                  : canRequest
+                    ? 'Chọn chuyên gia này'
+                    : req?.status === 'accepted'
+                      ? 'Đã đồng hành'
+                      : 'Đã gửi yêu cầu';
               return (
                 <li
                   key={e.id}

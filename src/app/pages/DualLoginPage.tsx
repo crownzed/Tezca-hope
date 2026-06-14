@@ -8,6 +8,7 @@ import { ROUTES } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
 import { FormAlert } from '../components/tezca/FormAlert';
 import { AuthFormCard, AuthPrimaryButton, authInputClass, authInputStyle } from '../components/tezca/AuthFormCard';
+import { PasswordInput } from '../components/tezca/PasswordInput';
 
 export function LoginHubPage() {
   const { hash } = useLocation();
@@ -241,15 +242,12 @@ function CustomerLoginPanel() {
         </label>
         <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
           Mật khẩu
-          <input
-            type="password"
+          <PasswordInput
+            value={password}
+            onChange={setPassword}
             required
             minLength={mode === 'register' ? 8 : undefined}
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={authInputClass}
-            style={authInputStyle()}
           />
           {mode === 'register' && (
             <span className="block text-xs opacity-55 mt-1 font-normal">Ít nhất 8 ký tự</span>
@@ -421,13 +419,10 @@ function ExpertLoginPanel() {
         </label>
         <label className="block text-sm font-medium" style={{ color: tezcaTheme.text }}>
           Mật khẩu
-          <input
-            type="password"
-            required
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={authInputClass}
-            style={authInputStyle()}
+            onChange={setPassword}
+            required
             autoComplete="current-password"
           />
           <Link
