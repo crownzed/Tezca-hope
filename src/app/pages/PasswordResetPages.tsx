@@ -6,6 +6,7 @@ import { ROUTES } from '../routes';
 import { tezcaTheme } from '../lib/tezcaTheme';
 import { FormAlert } from '../components/tezca/FormAlert';
 import { AuthPrimaryButton, authInputClass, authInputStyle } from '../components/tezca/AuthFormCard';
+import { PasswordInput } from '../components/tezca/PasswordInput';
 
 function AuthShell({
   title,
@@ -193,29 +194,23 @@ export function ResetPasswordPage() {
         <form onSubmit={submit} className="space-y-4">
           <label className="block text-sm font-medium">
             Mật khẩu mới
-            <input
-              type="password"
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
               required
               minLength={8}
               autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
             />
             <span className="block text-xs opacity-55 mt-1 font-normal">Ít nhất 8 ký tự</span>
           </label>
           <label className="block text-sm font-medium">
             Nhập lại mật khẩu
-            <input
-              type="password"
+            <PasswordInput
+              value={confirm}
+              onChange={setConfirm}
               required
               minLength={8}
               autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              className="mt-1 w-full rounded-xl border px-4 py-3 text-sm"
-              style={{ borderColor: tezcaTheme.borderStrong, color: tezcaTheme.text }}
             />
           </label>
           {error && <FormAlert>{error}</FormAlert>}

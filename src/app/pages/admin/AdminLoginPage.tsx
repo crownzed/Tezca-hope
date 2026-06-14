@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ROUTES } from '../../routes';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { PasswordInput } from '../../components/tezca/PasswordInput';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -60,13 +61,14 @@ export function AdminLoginPage() {
         </label>
         <label className="block text-sm">
           Mật khẩu
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full mt-1 border rounded-lg px-3 py-2"
-          />
+          <div className="mt-1">
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
+              required
+              autoComplete="current-password"
+            />
+          </div>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className="w-full rounded-lg bg-teal-600 text-white py-2 text-sm">
