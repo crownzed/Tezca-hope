@@ -1,0 +1,88 @@
+{
+  "fileVersion": 1,
+  "recordType": "customer_health_export",
+  "label": "Hồ sơ khách hàng kh-demo-020@tezca.vn",
+  "generatedAt": "2026-05-24T12:13:13.950Z",
+  "tags": [
+    "data-management-demo",
+    "customer_health_export"
+  ],
+  "customerEmail": "kh-demo-020@tezca.vn",
+  "payload": {
+    "customer": {
+      "id": "b61fa229-218c-4969-bfdc-662d2e49f399",
+      "email": "kh-demo-020@tezca.vn",
+      "name": "Hoàng Thị Tuấn",
+      "role": "user",
+      "createdAt": 1779624233722
+    },
+    "assignments": [
+      {
+        "expertId": "044fe0c5-1dce-4434-8040-738d7e42dd19",
+        "expertEmail": "cg-demo-04@tezca.vn",
+        "expertName": "BS. Lan Phương"
+      }
+    ],
+    "bmi": [
+      {
+        "id": "474ea7f6-5465-4d8b-bce7-fcb541783901",
+        "userId": "b61fa229-218c-4969-bfdc-662d2e49f399",
+        "date": "2026-05-24",
+        "heightCm": 175,
+        "weightKg": 68,
+        "bmi": 22.2
+      }
+    ],
+    "moods": [
+      {
+        "id": "ef95f6ad-5860-4f64-935f-699c7adbee27",
+        "userId": "b61fa229-218c-4969-bfdc-662d2e49f399",
+        "date": "2026-05-24",
+        "moodLabel": "Ổn",
+        "moodScore": 2,
+        "note": "Dữ liệu thử nghiệm Tezca."
+      }
+    ],
+    "botMessages": [],
+    "trainingPlan": {
+      "customerId": "b61fa229-218c-4969-bfdc-662d2e49f399",
+      "sourcePlanMd": "[demo-work]\n## Kế hoạch demo — Hoàng Thị Tuấn\nChuyên gia phụ trách: BS. Lan Phương\n- Khởi động 5 phút\n- 2–3 bài chính\n- Giãn cơ 5 phút",
+      "status": "approved",
+      "exercises": [
+        {
+          "id": 900200,
+          "title": "Đi bộ nhẹ",
+          "sets": 1,
+          "reps": "15 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900201,
+          "title": "Thở 4-7-8",
+          "sets": 2,
+          "reps": "4 phút",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        },
+        {
+          "id": 900202,
+          "title": "Giãn cơ vai",
+          "sets": 2,
+          "reps": "30 giây",
+          "isPTLocked": true,
+          "completed": false,
+          "actualWeight": ""
+        }
+      ],
+      "dailyProgress": {},
+      "expertNote": "[demo-work] Đã duyệt tự động cho demo.",
+      "integratedAt": 1779624515378,
+      "updatedAt": 1779624515378,
+      "progressUpdatedAt": 0,
+      "updatedBy": "044fe0c5-1dce-4434-8040-738d7e42dd19"
+    }
+  }
+}

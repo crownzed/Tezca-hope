@@ -1,0 +1,100 @@
+import { Router } from 'express';
+import { getDatabaseInfo, runDatabaseDiagnostics, subscribeNewsletter } from '../db.js';
+import { isUsingTurso } from '../db/connection.js';
+import { isAiConfigured, aiProvider, pingAi } from '../ai.js';
+import { isProduction } from '../secrets.js';
+import { newsletterLimiter } from '../rateLimit.js';
+import { isValidEmail, normalizeEmail } from '../validate.js';
+import { DbError } from '../dbErrors.js';
+
+/** Route không cần JWT — đăng ký TRƯỚC userRouter để không bị middleware auth chặn */
+export const publicApiRouter = Router();
+
+publicApiRouter.get('/health', (_req, res) => res.json({ ok: true }));
+
+publicApiRouter.get('/health/ai', async (_req, res) => {
+  // Ping Gemini thật để xác nhận kết nối, không chỉ kiểm tra key tồn tại.
+  if (!isAiConfigured()) {
+    res.status(isProduction() ? 503 : 200).json(
+      isProduction() ? { ok: false } : { configured: false, provider: null, reachable: false },
+    );
+    return;
+  }
+  const ping = await pingAi();
+  if (isProduction()) {
+    res.status(ping.ok ? 200 : 503).json({ ok: ping.ok });
+    return;
+  }
+  res.json({
+    configured: true,
+    provider: aiProvider(),
+    reachable: ping.ok,
+    status: ping.status,
+    error: ping.error,
+  });
+});
+
+publicApiRouter.get('/health/db', (_req, res) => {
+  try {
+    const diagnostics = runDatabaseDiagnostics();
+    const info = getDatabaseInfo();
+    const turso = isUsingTurso();
+    const onVercel = Boolean(process.env.VERCEL);
+    const ephemeral =
+      onVercel && !turso && String(info.file || '').includes('/tmp');
+    const warnings = [];
+    if (ephemeral) {
+      warnings.push(
+        'DB đang ở /tmp — dữ liệu MẤT mỗi cold start. Đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN trên Vercel.',
+      );
+    }
+    res.status(diagnostics.ok ? 200 : 503).json({
+      ok: diagnostics.ok,
+      engine: turso ? 'libsql-turso' : 'sqlite',
+      persistent: turso || !ephemeral,
+      turso,
+      ephemeral,
+      warnings,
+      errors: diagnostics.errors,
+      users: info.rowCounts?.users ?? 0,
+      trainingPlans: info.rowCounts?.patient_training_plans ?? 0,
+      communityPosts: info.rowCounts?.community_posts ?? 0,
+      journalMode: info.journalMode,
+      synchronous: info.synchronous,
+      foreignKeysOn: info.foreignKeysOn,
+      busyTimeoutMs: info.busyTimeoutMs,
+      file: info.file,
+      sizeBytes: info.sizeBytes,
+      tables: info.tables,
+      rowCounts: info.rowCounts,
+      migrations: info.migrations,
+      checks: diagnostics.checks,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
+/** POST /api/newsletter — đăng ký nhận tin từ landing */
+publicApiRouter.post('/newsletter', newsletterLimiter, (req, res) => {
+  try {
+    const raw = (req.body || {}).email;
+    const normalized = normalizeEmail(raw);
+    if (!normalized || !isValidEmail(normalized)) {
+      res.status(400).json({ error: 'Email không hợp lệ' });
+      return;
+    }
+    const source = String((req.body || {}).source || 'landing').slice(0, 64);
+    const { created } = subscribeNewsletter(normalized, source);
+    res.status(created ? 201 : 200).json({
+      message: 'Cảm ơn bạn! Tezca sẽ gửi hướng dẫn và tin tức sớm nhất.',
+      alreadySubscribed: !created,
+    });
+  } catch (err) {
+    if (err instanceof DbError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: 'Không đăng ký được. Vui lòng thử lại.' });
+  }
+});

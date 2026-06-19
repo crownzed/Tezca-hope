@@ -1,0 +1,67 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Build & Test ───────────────────────────────────────────────
+  build:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies (root)
+        run: npm ci
+
+      - name: Install dependencies (server)
+        run: npm ci --prefix server
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify backend syntax
+        run: |
+          node --check server/src/createApp.js
+          node --check server/src/auth.js
+          node --check server/src/routes/auth.js
+          node --check server/src/routes/user.js
+          node --check server/src/routes/expert.js
+          node --check server/src/routes/admin.js
+          node --check server/src/routes/community.js
+          node --check server/src/routes/push.js
+          node --check server/src/routes/upload.js
+          node --check server/src/rateLimit.js
+          node --check server/src/security.js
+          node --check server/src/db.js
+
+      - name: Verify database migrations
+        run: npm run db:verify
+        env:
+          NODE_ENV: test
+
+      - name: Upload build artifacts
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 3
+
+  # ─── Deploy ────────────────────────────────────────────────────
+  # Deploy do Vercel Git Integration tu dong xu ly khi push/merge vao main.
+  # Khong deploy qua Vercel CLI o day de tranh deploy trung lap va loi thieu secret.
+  # Neu muon deploy qua GitHub Actions thay vi Git Integration: them secret
+  # VERCEL_TOKEN / VERCEL_ORG_ID / VERCEL_PROJECT_ID roi khoi phuc cac job deploy.

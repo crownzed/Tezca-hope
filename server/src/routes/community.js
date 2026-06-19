@@ -1,0 +1,632 @@
+import { Router } from 'express';
+import { authMiddlewareRoles } from '../auth.js';
+import { isValidPostTopic, isValidRoomTopic } from '../communityTopics.js';
+import { validateImageUrl } from '../validate.js';
+import * as communityService from '../services/communityService.js';
+import * as realtimeChatService from '../services/realtimeChatService.js';
+import * as communityExtendedService from '../services/communityExtendedService.js';
+import {
+  communityPostLimiter,
+  communityCommentLimiter,
+  communityDmLimiter,
+  communityRoomLimiter,
+  communityLikeLimiter,
+} from '../rateLimit.js';
+
+export const communityRouter = Router();
+const requireMember = authMiddlewareRoles(['user', 'expert', 'admin']);
+
+// Chỉ khách hàng (role 'user') được khởi tạo / gửi tin nhắn DM trong cộng đồng.
+// Chuyên gia/admin vẫn xem được hồ sơ nhưng không nhắn tin qua kênh này.
+function requireCustomerForDm(req, res, next) {
+  if (req.user?.role !== 'user') {
+    res.status(403).json({ error: 'Chỉ khách hàng được nhắn tin trong cộng đồng' });
+    return;
+  }
+  next();
+}
+
+const FEED_MODES = new Set(['for_you', 'following', 'latest']);
+
+communityRouter.get('/feed', requireMember, (req, res) => {
+  const mode = String(req.query.mode || 'for_you');
+  if (!FEED_MODES.has(mode)) {
+    res.status(400).json({ error: 'Chế độ feed không hợp lệ' });
+    return;
+  }
+  const topic = req.query.topic ? String(req.query.topic) : undefined;
+  if (topic && !isValidPostTopic(topic)) {
+    res.status(400).json({ error: 'Chủ đề không hợp lệ' });
+    return;
+  }
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const pageLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 30;
+  const posts = communityService.listFeed({
+    mode,
+    topic,
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    limit: pageLimit,
+    viewerId: req.user.sub,
+  });
+  const nextCursor =
+    posts.length >= pageLimit
+      ? String(posts[posts.length - 1].createdAt)
+      : undefined;
+  res.json({ posts, nextCursor, mode });
+});
+
+communityRouter.get('/users/following', requireMember, (req, res) => {
+  const userIds = communityService.listFollowedUserIds(req.user.sub);
+  res.json({ userIds });
+});
+
+communityRouter.post('/users/:userId/follow', requireMember, (req, res) => {
+  const followingId = String(req.params.userId);
+  communityService.followUser(req.user.sub, followingId);
+  res.json({ ok: true });
+});
+
+communityRouter.delete('/users/:userId/follow', requireMember, (req, res) => {
+  const followingId = String(req.params.userId);
+  communityService.unfollowUser(req.user.sub, followingId);
+  res.json({ ok: true });
+});
+
+communityRouter.get('/topics/following', requireMember, (req, res) => {
+  const topics = communityService.listFollowedTopics(req.user.sub);
+  res.json({ topics });
+});
+
+communityRouter.post('/topics/:topic/follow', requireMember, (req, res) => {
+  const topic = String(req.params.topic);
+  if (!isValidPostTopic(topic)) {
+    res.status(400).json({ error: 'Chủ đề không hợp lệ' });
+    return;
+  }
+  communityService.followTopic(req.user.sub, topic);
+  res.json({ ok: true });
+});
+
+communityRouter.delete('/topics/:topic/follow', requireMember, (req, res) => {
+  const topic = String(req.params.topic);
+  if (!isValidPostTopic(topic)) {
+    res.status(400).json({ error: 'Chủ đề không hợp lệ' });
+    return;
+  }
+  communityService.unfollowTopic(req.user.sub, topic);
+  res.json({ ok: true });
+});
+
+communityRouter.get('/posts', requireMember, (req, res) => {
+  const topic = req.query.topic ? String(req.query.topic) : undefined;
+  if (topic && !isValidPostTopic(topic)) {
+    res.status(400).json({ error: 'Chủ đề không hợp lệ' });
+    return;
+  }
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const posts = communityService.listPosts({
+    topic,
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    viewerId: req.user.sub,
+  });
+  res.json({ posts });
+});
+
+communityRouter.post('/posts', requireMember, communityPostLimiter, (req, res) => {
+  const topic = String(req.body?.topic || 'general');
+  const content = String(req.body?.content || '').trim();
+  const imgResult = validateImageUrl(req.body?.imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  const imageUrl = imgResult.sanitized;
+  if (!isValidPostTopic(topic)) {
+    res.status(400).json({ error: 'Chủ đề không hợp lệ' });
+    return;
+  }
+  if (!content || content.length > 4000) {
+    res.status(400).json({ error: 'Nội dung bài viết không hợp lệ (tối đa 4000 ký tự)' });
+    return;
+  }
+  const post = communityService.createPost({
+    id: crypto.randomUUID(),
+    userId: req.user.sub,
+    topic,
+    content,
+    imageUrl,
+  });
+  res.status(201).json({ post });
+});
+
+communityRouter.get('/posts/:postId', requireMember, (req, res) => {
+  const post = communityService.getPost(String(req.params.postId), req.user.sub);
+  if (!post) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json({ post });
+});
+
+communityRouter.delete('/posts/:postId', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const ok = communityService.removeOwnPost(
+    postId,
+    req.user.sub,
+    req.dbUser.role === 'admin',
+  );
+  if (!ok) {
+    res.status(403).json({ error: 'Không thể xóa bài viết' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+communityRouter.patch('/posts/:postId', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const content = String(req.body?.content || '').trim();
+  const imgResult = validateImageUrl(req.body?.imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  if (!content || content.length > 4000) {
+    res.status(400).json({ error: 'Nội dung bài viết không hợp lệ (tối đa 4000 ký tự)' });
+    return;
+  }
+  const result = communityService.editPost({
+    postId,
+    userId: req.user.sub,
+    content,
+    imageUrl: imgResult.sanitized,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể sửa bài viết này' });
+    return;
+  }
+  res.json({ post: result.post });
+});
+
+communityRouter.post('/posts/:postId/bookmark', requireMember, (req, res) => {
+  const result = communityService.toggleBookmark(String(req.params.postId), req.user.sub);
+  if (!result) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json(result);
+});
+
+communityRouter.get('/bookmarks', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const pageLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 30;
+  const posts = communityService.listBookmarks(req.user.sub, {
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    limit: pageLimit,
+  });
+  const nextCursor = posts.length >= pageLimit ? String(posts[posts.length - 1].createdAt) : undefined;
+  res.json({ posts, nextCursor });
+});
+
+communityRouter.get('/posts/:postId/comments', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const post = communityService.getPost(postId, req.user.sub);
+  if (!post) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.json({ comments: communityService.listComments(postId) });
+});
+
+communityRouter.get('/posts/:postId/replies', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const post = communityService.getPost(postId, req.user.sub);
+  if (!post) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  const replies = communityService.listThreadReplies(postId, { viewerId: req.user.sub });
+  res.json({ replies });
+});
+
+// Tìm kiếm nội dung bài viết (hỗ trợ hashtag dạng #tu_khoa)
+communityRouter.get('/search', requireMember, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const topic = req.query.topic && isValidPostTopic(String(req.query.topic))
+    ? String(req.query.topic)
+    : undefined;
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  if (!q) {
+    res.json({ posts: [], members: [], nextCursor: undefined });
+    return;
+  }
+  // Bỏ dấu # để tìm hashtag như từ khóa thường
+  const cleaned = q.startsWith('#') ? q.slice(1) : q;
+  const posts = communityService.searchPosts({
+    query: cleaned,
+    topic,
+    beforeTs,
+    limit,
+    viewerId: req.user.sub,
+  });
+  // Kèm thêm thành viên khớp (chỉ trang đầu)
+  const members = beforeTs
+    ? []
+    : communityExtendedService.searchMembers({ query: cleaned, excludeUserId: req.user.sub, limit: 8 });
+  const nextCursor =
+    posts.length === Math.min(Math.max(limit, 1), 50)
+      ? posts[posts.length - 1].createdAt
+      : undefined;
+  res.json({ posts, members, nextCursor });
+});
+
+communityRouter.post('/posts/:postId/reply', requireMember, communityPostLimiter, (req, res) => {
+  const postId = String(req.params.postId);
+  const content = String(req.body?.content || '').trim();
+  const imgResult = validateImageUrl(req.body?.imageUrl);
+  if (!imgResult.valid) {
+    res.status(400).json({ error: imgResult.error });
+    return;
+  }
+  const imageUrl = imgResult.sanitized;
+  if (!content || content.length > 4000) {
+    res.status(400).json({ error: 'Nội dung phản hồi không hợp lệ (tối đa 4000 ký tự)' });
+    return;
+  }
+  const post = communityService.addThreadReply({
+    id: crypto.randomUUID(),
+    userId: req.user.sub,
+    parentPostId: postId,
+    content,
+    imageUrl,
+  });
+  if (!post) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.status(201).json({ post });
+});
+
+communityRouter.post('/posts/:postId/comments', requireMember, communityCommentLimiter, (req, res) => {
+  const postId = String(req.params.postId);
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 1000) {
+    res.status(400).json({ error: 'Nội dung bình luận không hợp lệ' });
+    return;
+  }
+  const comment = communityService.addComment({
+    id: crypto.randomUUID(),
+    postId,
+    userId: req.user.sub,
+    content,
+  });
+  if (!comment) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  res.status(201).json({ comment });
+});
+
+communityRouter.patch('/comments/:commentId', requireMember, (req, res) => {
+  const commentId = String(req.params.commentId);
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 1000) {
+    res.status(400).json({ error: 'Nội dung bình luận không hợp lệ' });
+    return;
+  }
+  const result = communityService.editComment({
+    commentId,
+    userId: req.user.sub,
+    content,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bình luận' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể sửa bình luận này' });
+    return;
+  }
+  res.json({ comment: result.comment });
+});
+
+communityRouter.delete('/comments/:commentId', requireMember, (req, res) => {
+  const commentId = String(req.params.commentId);
+  const result = communityService.removeComment({
+    commentId,
+    userId: req.user.sub,
+    isAdmin: req.dbUser.role === 'admin',
+  });
+  if (result.error === 'not_found') {
+    res.status(404).json({ error: 'Không tìm thấy bình luận' });
+    return;
+  }
+  if (result.error === 'forbidden') {
+    res.status(403).json({ error: 'Không thể xóa bình luận này' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// ===== Thông báo cộng đồng =====
+communityRouter.get('/notifications', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const items = communityService.listNotifications(req.user.sub, { beforeTs, limit });
+  const unread = communityService.countUnreadNotifications(req.user.sub);
+  const nextCursor =
+    items.length === Math.min(Math.max(limit, 1), 50)
+      ? items[items.length - 1].createdAt
+      : undefined;
+  res.json({ items, unread, nextCursor });
+});
+
+communityRouter.get('/notifications/unread-count', requireMember, (req, res) => {
+  res.json({ unread: communityService.countUnreadNotifications(req.user.sub) });
+});
+
+communityRouter.post('/notifications/read', requireMember, (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+  communityService.markNotificationsRead(req.user.sub, ids);
+  res.json({ unread: communityService.countUnreadNotifications(req.user.sub) });
+});
+
+communityRouter.post('/posts/:postId/like', requireMember, communityLikeLimiter, (req, res) => {
+  const result = communityService.likePost(String(req.params.postId), req.user.sub);
+  if (!result) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  const post = communityService.getPost(String(req.params.postId), req.user.sub);
+  res.json({ ...result, likesCount: post?.likesCount ?? 0 });
+});
+
+communityRouter.post('/posts/:postId/report', requireMember, (req, res) => {
+  const postId = String(req.params.postId);
+  const post = communityService.getPost(postId, req.user.sub);
+  if (!post) {
+    res.status(404).json({ error: 'Không tìm thấy bài viết' });
+    return;
+  }
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  const report = communityService.reportContent({
+    id: crypto.randomUUID(),
+    targetType: 'post',
+    targetId: postId,
+    reporterId: req.user.sub,
+    reason: reason || 'Báo cáo từ người dùng',
+  });
+  res.status(201).json({ report });
+});
+
+communityRouter.get('/rooms/:topic/messages', requireMember, (req, res) => {
+  const topic = String(req.params.topic);
+  if (!isValidRoomTopic(topic)) {
+    res.status(400).json({ error: 'Phòng chat không hợp lệ' });
+    return;
+  }
+  const since = req.query.since ? Number(req.query.since) : undefined;
+  const messages = realtimeChatService.listRoomMessages(topic, {
+    sinceTs: Number.isFinite(since) ? since : undefined,
+  });
+  res.json({ messages });
+});
+
+communityRouter.post('/rooms/:topic/messages', requireMember, communityRoomLimiter, (req, res) => {
+  const topic = String(req.params.topic);
+  const content = String(req.body?.content || '').trim();
+  if (!isValidRoomTopic(topic)) {
+    res.status(400).json({ error: 'Phòng chat không hợp lệ' });
+    return;
+  }
+  if (!content || content.length > 500) {
+    res.status(400).json({ error: 'Tin nhắn không hợp lệ (tối đa 500 ký tự)' });
+    return;
+  }
+  const message = realtimeChatService.sendRoomMessage({
+    id: crypto.randomUUID(),
+    topic,
+    userId: req.user.sub,
+    content,
+  });
+  res.status(201).json({ message });
+});
+
+communityRouter.get('/rooms/:topic/mention-candidates', requireMember, (req, res) => {
+  const topic = String(req.params.topic);
+  if (!isValidRoomTopic(topic)) {
+    res.status(400).json({ error: 'Phòng chat không hợp lệ' });
+    return;
+  }
+  const q = String(req.query.q || '').trim();
+  const members = communityExtendedService.mentionCandidates(topic, { query: q });
+  res.json({ members });
+});
+
+communityRouter.get('/announcements/messages', requireMember, (req, res) => {
+  const since = req.query.since ? Number(req.query.since) : undefined;
+  const messages = communityExtendedService.listAnnouncements({
+    sinceTs: Number.isFinite(since) ? since : undefined,
+  });
+  res.json({ messages });
+});
+
+communityRouter.post('/announcements/messages', requireMember, (req, res) => {
+  if (!communityExtendedService.canPostAnnouncement(req.dbUser.role)) {
+    res.status(403).json({ error: 'Chỉ chuyên gia hoặc quản trị viên được đăng thông báo' });
+    return;
+  }
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 2000) {
+    res.status(400).json({ error: 'Nội dung thông báo không hợp lệ (tối đa 2000 ký tự)' });
+    return;
+  }
+  const message = communityExtendedService.postAnnouncement({
+    id: crypto.randomUUID(),
+    userId: req.user.sub,
+    content,
+  });
+  res.status(201).json({ message });
+});
+
+communityRouter.get('/dm/threads', requireMember, (req, res) => {
+  const threads = communityExtendedService.listDmThreads(req.user.sub);
+  res.json({ threads });
+});
+
+communityRouter.get('/dm/members', requireMember, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const members = communityExtendedService.searchMembers({
+    query: q,
+    excludeUserId: req.user.sub,
+  });
+  res.json({ members });
+});
+
+communityRouter.post('/dm/threads', requireMember, requireCustomerForDm, (req, res) => {
+  const otherUserId = String(req.body?.otherUserId || '').trim();
+  if (!otherUserId) {
+    res.status(400).json({ error: 'Thiếu người nhận' });
+    return;
+  }
+  if (otherUserId === req.user.sub) {
+    res.status(400).json({ error: 'Không thể nhắn tin với chính mình' });
+    return;
+  }
+  const thread = communityExtendedService.openDmThread(req.user.sub, otherUserId);
+  if (!thread) {
+    res.status(404).json({ error: 'Không tạo được cuộc trò chuyện' });
+    return;
+  }
+  res.status(201).json({ thread });
+});
+
+communityRouter.get('/dm/threads/:threadId', requireMember, (req, res) => {
+  const thread = communityExtendedService.getDmThread(String(req.params.threadId), req.user.sub);
+  if (!thread) {
+    res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện' });
+    return;
+  }
+  res.json({ thread });
+});
+
+communityRouter.get('/dm/threads/:threadId/messages', requireMember, (req, res) => {
+  const threadId = String(req.params.threadId);
+  const since = req.query.since ? Number(req.query.since) : undefined;
+  const messages = communityExtendedService.listDmMessages(threadId, req.user.sub, {
+    sinceTs: Number.isFinite(since) ? since : undefined,
+  });
+  if (!messages) {
+    res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện' });
+    return;
+  }
+  res.json({ messages });
+});
+
+communityRouter.post('/dm/threads/:threadId/messages', requireMember, requireCustomerForDm, communityDmLimiter, (req, res) => {
+  const threadId = String(req.params.threadId);
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 2000) {
+    res.status(400).json({ error: 'Tin nhắn không hợp lệ (tối đa 2000 ký tự)' });
+    return;
+  }
+  const message = communityExtendedService.sendDmMessage({
+    id: crypto.randomUUID(),
+    threadId,
+    senderId: req.user.sub,
+    content,
+  });
+  if (!message) {
+    res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện' });
+    return;
+  }
+  res.json({ message });
+});
+
+// Đánh dấu đã đọc 1 cuộc trò chuyện (read receipt)
+communityRouter.post('/dm/threads/:threadId/read', requireMember, (req, res) => {
+  const threadId = String(req.params.threadId);
+  const result = communityExtendedService.markDmThreadRead(threadId, req.user.sub);
+  if (!result) {
+    res.status(404).json({ error: 'Không tìm thấy cuộc trò chuyện' });
+    return;
+  }
+  res.json({ ok: true, readAt: result.readAt, unread: communityExtendedService.countUnreadDm(req.user.sub) });
+});
+
+// Tổng số tin nhắn DM chưa đọc (cho badge)
+communityRouter.get('/dm/unread-count', requireMember, (req, res) => {
+  res.json({ unread: communityExtendedService.countUnreadDm(req.user.sub) });
+});
+
+// ===== Hồ sơ công khai (trang cá nhân) =====
+
+// Xem hồ sơ công khai của một thành viên (khách hàng hoặc chuyên gia)
+communityRouter.get('/users/:userId/profile', requireMember, (req, res) => {
+  const profile = communityService.getPublicProfile(String(req.params.userId), req.user.sub);
+  if (!profile) {
+    res.status(404).json({ error: 'Không tìm thấy thành viên' });
+    return;
+  }
+  res.json({ profile });
+});
+
+// Bài đã đăng của một thành viên
+communityRouter.get('/users/:userId/posts', requireMember, (req, res) => {
+  const beforeTs = req.query.before ? Number(req.query.before) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 30;
+  const pageLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 30;
+  const posts = communityService.listPostsByUser(String(req.params.userId), {
+    beforeTs: Number.isFinite(beforeTs) ? beforeTs : undefined,
+    limit: pageLimit,
+    viewerId: req.user.sub,
+  });
+  const nextCursor =
+    posts.length >= pageLimit ? String(posts[posts.length - 1].createdAt) : undefined;
+  res.json({ posts, nextCursor });
+});
+
+// Cài đặt cộng đồng của chính mình (bật/tắt hiển thị người theo dõi)
+communityRouter.get('/me/settings', requireMember, (req, res) => {
+  res.json({ settings: communityService.getMySettings(req.user.sub) });
+});
+
+communityRouter.put('/me/settings', requireMember, (req, res) => {
+  const showFollowers = req.body?.showFollowers;
+  if (typeof showFollowers !== 'boolean') {
+    res.status(400).json({ error: 'showFollowers phải là true/false' });
+    return;
+  }
+  const settings = communityService.updateMySettings(req.user.sub, { showFollowers });
+  res.json({ settings });
+});
+
+// Cập nhật hồ sơ công khai của chính mình (avatar + bio)
+communityRouter.put('/me/profile', requireMember, (req, res) => {
+  const patch = {};
+  if (req.body?.avatarUrl !== undefined) {
+    const url = String(req.body.avatarUrl || '').trim();
+    if (url && !validateImageUrl(url)) {
+      res.status(400).json({ error: 'Ảnh đại diện không hợp lệ' });
+      return;
+    }
+    patch.avatarUrl = url;
+  }
+  if (req.body?.bio !== undefined) {
+    patch.bio = String(req.body.bio || '').trim().slice(0, 500);
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'Không có thay đổi' });
+    return;
+  }
+  const profile = communityService.updateMyPublicProfile(req.user.sub, patch);
+  res.json({ profile });
+});

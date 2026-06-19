@@ -1,0 +1,476 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { generatePersonalizedPlan, type PlanInput } from '../../lib/planGenerator';
+import { ROUTES } from '../../routes';
+import { recordPlanGenerated } from '../../lib/gamification';
+import { apiBase, apiFetch, apiUrl } from '../../lib/api';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { parseExercisesFromPlanMarkdown } from '../../lib/planToExercises';
+import { saveDashboardExercises } from '../../lib/dashboardStorage';
+import { adoptGuestDisciplineDataIntoAccount } from '../../lib/disciplineDataScope';
+import { FormAlert } from '../../components/tezca/FormAlert';
+import { loadBmiEntries } from '../../lib/healthStorage';
+
+type PlanStreamPayload = {
+  age: number;
+  goal: PlanInput['goal'];
+  activity: PlanInput['activity'];
+  dietNote: string;
+  weightKg?: number;
+  heightCm?: number;
+  sessionsPerWeek: number;
+  equipment: 'gym' | 'home' | 'both';
+  focusArea?: string;
+};
+
+async function streamPlanAi({
+  token,
+  payload,
+  onDelta,
+}: {
+  token: string;
+  payload: PlanStreamPayload;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const urls = apiBase()
+    ? [apiUrl('/api/me/plan-ai/stream'), '/api/me/plan-ai/stream']
+    : [apiUrl('/api/me/plan-ai/stream')];
+  let lastRes: Response | null = null;
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i]!;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        lastRes = res;
+        if (res.status === 404 || res.status === 405) continue;
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || `${res.status} ${res.statusText}`);
+      }
+      if (!res.body) throw new Error('Không nhận được luồng kế hoạch AI');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let accumulated = '';
+
+      const processBlock = (block: string) => {
+        for (const line of block.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const raw = trimmed.slice(5).trim();
+          if (!raw) continue;
+          if (raw === '[DONE]') return;
+          let data: { text?: string; error?: string };
+          try {
+            data = JSON.parse(raw) as typeof data;
+          } catch {
+            continue;
+          }
+          if (data.error) throw new Error(data.error);
+          if (typeof data.text === 'string' && data.text) {
+            accumulated += data.text;
+            onDelta(accumulated);
+          }
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sseBuffer += decoder.decode(value, { stream: true });
+        sseBuffer = sseBuffer.replace(/\r\n/g, '\n');
+
+        let boundary = sseBuffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          const block = sseBuffer.slice(0, boundary);
+          sseBuffer = sseBuffer.slice(boundary + 2);
+          processBlock(block);
+          boundary = sseBuffer.indexOf('\n\n');
+        }
+      }
+
+      if (sseBuffer.trim()) processBlock(sseBuffer);
+      if (!accumulated.trim()) throw new Error('AI không trả nội dung');
+      return accumulated;
+    } catch (e) {
+      if (!(e instanceof TypeError) || i === urls.length - 1) throw e;
+    }
+  }
+
+  if (lastRes) {
+    const err = (await lastRes.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error || `${lastRes.status} ${lastRes.statusText}`);
+  }
+  throw new Error('Không kết nối được AI');
+}
+
+export function PlansPage() {
+  const { token, user } = useCustomerAuth();
+  const userId = user?.id ?? null;
+  const navigate = useNavigate();
+  const [age, setAge] = useState('28');
+  const [weightKg, setWeightKg] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [goal, setGoal] = useState<PlanInput['goal']>('maintain');
+  const [activity, setActivity] = useState<PlanInput['activity']>('medium');
+  const [sessionsPerWeek, setSessionsPerWeek] = useState('3');
+  const [equipment, setEquipment] = useState<'gym' | 'home' | 'both'>('both');
+  const [focusArea, setFocusArea] = useState('');
+  const [dietNote, setDietNote] = useState('');
+
+  // Tự động load BMI data gần nhất
+  useEffect(() => {
+    const entries = loadBmiEntries(userId);
+    if (entries.length > 0) {
+      const latest = entries[0];
+      if (!weightKg) setWeightKg(String(latest.weightKg));
+      if (!heightCm) setHeightCm(String(latest.heightCm));
+    }
+  }, [heightCm, userId, weightKg]);
+  const [plan, setPlan] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [planSource, setPlanSource] = useState<'ai' | 'local' | null>(null);
+  const [integrating, setIntegrating] = useState(false);
+  const [integrateMsg, setIntegrateMsg] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const previewExercises = useMemo(
+    () => (plan ? parseExercisesFromPlanMarkdown(plan) : []),
+    [plan],
+  );
+
+  const generate = async () => {
+    setFormError('');
+    const a = parseInt(age, 10);
+    if (!a || a < 14 || a > 100) {
+      setFormError('Nhập độ tuổi từ 14 đến 100.');
+      return;
+    }
+    const input: PlanInput = {
+      age: a,
+      goal,
+      activity,
+      dietNote: dietNote.trim(),
+    };
+
+    // Data mở rộng gửi cho AI
+    const extendedData = {
+      age: a,
+      goal,
+      activity,
+      dietNote: dietNote.trim(),
+      weightKg: weightKg ? parseFloat(weightKg) : undefined,
+      heightCm: heightCm ? parseFloat(heightCm) : undefined,
+      sessionsPerWeek: parseInt(sessionsPerWeek, 10) || 3,
+      equipment,
+      focusArea: focusArea.trim() || undefined,
+    };
+
+    if (token) {
+      setPending(true);
+      setPlan(null);
+      setPlanSource(null);
+      try {
+        setPlanSource('ai');
+        setPlan('');
+        try {
+          await streamPlanAi({ token, payload: extendedData, onDelta: setPlan });
+        } catch {
+          const r = await apiFetch<{ plan: string }>('/api/me/plan-ai', {
+            method: 'POST',
+            token,
+            body: JSON.stringify(extendedData),
+          });
+          if (!r.plan?.trim()) throw new Error('AI không trả nội dung');
+          setPlan(r.plan);
+        }
+        recordPlanGenerated(userId);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Lỗi không xác định';
+        const fallback = generatePersonalizedPlan(input);
+        setPlan(
+          `**Không gọi được AI (${msg}).** Hiển thị bản gợi ý cố định (dự phòng):\n\n${fallback}`,
+        );
+        setPlanSource('local');
+        recordPlanGenerated(userId);
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
+
+    const local = generatePersonalizedPlan(input);
+    setPlan(local);
+    setPlanSource('local');
+    recordPlanGenerated(userId);
+  };
+
+  const integrateToTraining = async () => {
+    if (!plan || !token) return;
+    setIntegrating(true);
+    setIntegrateMsg('');
+    try {
+      const r = await apiFetch<{ plan: { exercises: ReturnType<typeof parseExercisesFromPlanMarkdown> } }>(
+        '/api/me/training-plan/integrate',
+        {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ plan }),
+        },
+      );
+      const scopeId = user?.id ?? null;
+      if (scopeId) adoptGuestDisciplineDataIntoAccount(scopeId);
+      saveDashboardExercises(scopeId, r.plan.exercises);
+      setIntegrateMsg('Đã tích hợp vào Chiến dịch tập luyện. Chuyên gia có thể xem và chỉnh sửa trước khi duyệt.');
+    } catch (e) {
+      setIntegrateMsg(e instanceof Error ? e.message : 'Không tích hợp được');
+    } finally {
+      setIntegrating(false);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-10">
+      <div>
+        <h1 className="text-3xl font-bold" style={{ color: '#1A202C' }}>
+          Kế hoạch dinh dưỡng &amp; tập luyện
+        </h1>
+        <p className="mt-2 opacity-70" style={{ color: '#1A202C' }}>
+          {token ? (
+            'Đã đăng nhập: kế hoạch do Gemini soạn qua server Tezca. Nếu API lỗi hoặc chưa cấu hình key, hệ thống dùng bản gợi ý cố định.'
+          ) : (
+            <>
+              Chưa đăng nhập: chỉ có bản gợi ý cố định trên máy.{' '}
+              <Link to={ROUTES.app.login} style={{ color: '#0F766E', fontWeight: 600 }}>
+                Đăng nhập khách hàng
+              </Link>{' '}
+              để sinh kế hoạch bằng AI.
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="rounded-2xl p-6 md:p-8 border space-y-5" style={{ backgroundColor: 'white', borderColor: 'rgba(26, 32, 44, 0.08)' }}>
+        <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+          Tuổi
+          <input
+            type="number"
+            min={14}
+            max={100}
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            className="mt-1 w-full max-w-xs rounded-xl px-4 py-3 border text-sm"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Cân nặng (kg)
+            <input
+              type="number"
+              min={30}
+              max={300}
+              value={weightKg}
+              onChange={(e) => setWeightKg(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+              placeholder="Ví dụ: 65"
+            />
+          </label>
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Chiều cao (cm)
+            <input
+              type="number"
+              min={100}
+              max={250}
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+              placeholder="Ví dụ: 170"
+            />
+          </label>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2" style={{ color: '#1A202C' }}>
+            Mục tiêu
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ['lose', 'Giảm cân'],
+                ['maintain', 'Duy trì'],
+                ['gain', 'Tăng cân/nạc'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setGoal(v)}
+                className="rounded-full px-4 py-2 text-sm font-medium border"
+                style={{
+                  borderColor: goal === v ? '#14B8A6' : 'rgba(26, 32, 44, 0.12)',
+                  backgroundColor: goal === v ? 'rgba(45, 212, 191, 0.15)' : 'transparent',
+                  color: '#1A202C',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2" style={{ color: '#1A202C' }}>
+            Mức vận động
+          </p>
+          <select
+            value={activity}
+            onChange={(e) => setActivity(e.target.value as PlanInput['activity'])}
+            className="w-full max-w-md rounded-xl px-4 py-3 border text-sm"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+          >
+            <option value="low">Thấp (văn phòng, ít đi lại)</option>
+            <option value="medium">Trung bình</option>
+            <option value="high">Cao (tập thường xuyên)</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Số buổi tập/tuần
+            <select
+              value={sessionsPerWeek}
+              onChange={(e) => setSessionsPerWeek(e.target.value)}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            >
+              <option value="2">2 buổi</option>
+              <option value="3">3 buổi</option>
+              <option value="4">4 buổi</option>
+              <option value="5">5 buổi</option>
+              <option value="6">6 buổi</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+            Thiết bị
+            <select
+              value={equipment}
+              onChange={(e) => setEquipment(e.target.value as 'gym' | 'home' | 'both')}
+              className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+              style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            >
+              <option value="gym">Phòng gym</option>
+              <option value="home">Tập tại nhà</option>
+              <option value="both">Cả hai</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+          Vùng cơ thể muốn tập trung (tuỳ chọn)
+          <input
+            value={focusArea}
+            onChange={(e) => setFocusArea(e.target.value)}
+            className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            placeholder="Ví dụ: bụng, chân, vai, toàn thân…"
+          />
+        </label>
+
+        <label className="block text-sm font-medium" style={{ color: '#1A202C' }}>
+          Ghi chú ăn uống / dị ứng / chế độ đặc biệt
+          <textarea
+            value={dietNote}
+            onChange={(e) => setDietNote(e.target.value)}
+            rows={2}
+            className="mt-1 w-full rounded-xl px-4 py-3 border text-sm"
+            style={{ borderColor: 'rgba(26, 32, 44, 0.12)' }}
+            placeholder="Ví dụ: không lactose, ăn chay, tiểu đường…"
+          />
+        </label>
+
+        {formError && <FormAlert>{formError}</FormAlert>}
+        <button
+          type="button"
+          onClick={() => void generate()}
+          disabled={pending}
+          className="rounded-full px-8 py-3 font-semibold text-white disabled:opacity-60 border-0 cursor-pointer disabled:cursor-not-allowed"
+          style={{ background: 'linear-gradient(135deg, #2DD4BF 0%, #14B8A6 100%)' }}
+        >
+          {pending ? 'Đang sinh…' : token ? 'Sinh kế hoạch (AI)' : 'Sinh kế hoạch (gợi ý nhanh)'}
+        </button>
+      </div>
+
+      {plan && (
+        <div
+          className="rounded-2xl p-6 md:p-8 border text-sm leading-relaxed"
+          style={{
+            backgroundColor: 'rgba(26, 32, 44, 0.03)',
+            borderColor: 'rgba(26, 32, 44, 0.08)',
+            color: '#1A202C',
+          }}
+        >
+          {planSource && (
+            <p className="text-xs opacity-60 mb-4 m-0">
+              Nguồn: {planSource === 'ai' ? 'Gemini qua API' : 'Gợi ý cố định trên máy'}
+            </p>
+          )}
+          <pre className="whitespace-pre-wrap font-sans m-0">{plan}</pre>
+          {token ? (
+            <div className="mt-6 pt-6 border-t space-y-3" style={{ borderColor: 'rgba(26, 32, 44, 0.08)' }}>
+              <p className="text-sm m-0 opacity-80">
+                {previewExercises.length > 0
+                  ? `Sẽ thêm ${previewExercises.length} mục vận động vào Trung tâm kỷ luật (Chiến dịch tập luyện). Chuyên gia được gán có thể kiểm tra và chỉnh sửa.`
+                  : 'Không trích được mục vận động rõ — hệ thống vẫn tạo một buổi tổng hợp để chuyên gia chỉnh.'}
+              </p>
+              {integrateMsg && (
+                <p className="text-sm m-0" style={{ color: '#0F766E' }}>
+                  {integrateMsg}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void integrateToTraining()}
+                  disabled={integrating}
+                  className="rounded-full px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                  style={{ backgroundColor: '#0F766E' }}
+                >
+                  {integrating ? 'Đang tích hợp…' : 'Tích hợp vào tập luyện'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.app.dashboard)}
+                  className="rounded-full px-6 py-2.5 text-sm font-medium border"
+                  style={{ borderColor: 'rgba(26, 32, 44, 0.15)', color: '#1A202C' }}
+                >
+                  Mở Chiến dịch tập luyện
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm mt-6 m-0 opacity-70">
+              <Link to={ROUTES.app.login} style={{ color: '#0F766E', fontWeight: 600 }}>
+                Đăng nhập
+              </Link>{' '}
+              để tích hợp kế hoạch vào phần tập luyện và gửi cho chuyên gia duyệt.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
