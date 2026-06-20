@@ -18,7 +18,8 @@
     "chat:scenarios:build": "node scripts/build-chat-scenarios.mjs",
     "chat:scenarios:validate": "node scripts/validate-chat-scenarios.mjs",
     "chat:scenarios:test": "node scripts/test-chat-intent.mjs",
-    "chat:scenarios:quality": "node scripts/test-chat-scenarios-quality.mjs"
+    "chat:scenarios:quality": "node scripts/test-chat-scenarios-quality.mjs",
+    "seed:bulk": "node scripts/seed-bulk-data.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
